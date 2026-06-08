@@ -1,0 +1,36 @@
+package controller;
+
+import dal.StaffDAO;
+import java.io.IOException;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import model.Staff;
+
+@WebServlet(name = "LoginServlet", urlPatterns = {"/login"})
+public class LoginServlet extends HttpServlet {
+
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+
+        String username = request.getParameter("username");
+        String password = request.getParameter("password");
+
+        StaffDAO staffDAO = new StaffDAO();
+        Staff staff = staffDAO.loginByUsernamePassword(username, password);
+
+        if (staff != null) {
+            HttpSession session = request.getSession();
+            session.setAttribute("staff", staff);
+
+            response.sendRedirect("dashboard.jsp");
+        } else {
+            request.setAttribute("error", "Invalid username or password!");
+            request.getRequestDispatcher("login.jsp").forward(request, response);
+        }
+    }
+}

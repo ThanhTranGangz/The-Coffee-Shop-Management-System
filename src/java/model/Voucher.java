@@ -3,45 +3,68 @@ package model;
 import java.sql.Timestamp;
 
 public class Voucher {
-    private int voucherId;
+
+    private int voucherID;
     private String voucherCode;
     private Integer discountAmount;
     private Integer discountPercent;
     private Integer minTierRequired;
     private Timestamp expiryDate;
-    private boolean isActive;
+    private boolean active;
 
-    public Voucher() {
+    public int getVoucherID() {
+        return voucherID;
     }
 
-    public Voucher(int voucherId, String voucherCode, Integer discountAmount, Integer discountPercent, Integer minTierRequired, Timestamp expiryDate, boolean isActive) {
-        this.voucherId = voucherId;
+    public void setVoucherID(int voucherID) {
+        this.voucherID = voucherID;
+    }
+
+    public String getVoucherCode() {
+        return voucherCode;
+    }
+
+    public void setVoucherCode(String voucherCode) {
         this.voucherCode = voucherCode;
-        this.discountAmount = discountAmount;
-        this.discountPercent = discountPercent;
-        this.minTierRequired = minTierRequired;
-        this.expiryDate = expiryDate;
-        this.isActive = isActive;
     }
 
-    public int getVoucherId() { return voucherId; }
-    public void setVoucherId(int voucherId) { this.voucherId = voucherId; }
+    public Integer getDiscountAmount() {
+        return discountAmount;
+    }
 
-    public String getVoucherCode() { return voucherCode; }
-    public void setVoucherCode(String voucherCode) { this.voucherCode = voucherCode; }
+    public void setDiscountAmount(Integer discountAmount) {
+        this.discountAmount = discountAmount;
+    }
 
-    public Integer getDiscountAmount() { return discountAmount; }
-    public void setDiscountAmount(Integer discountAmount) { this.discountAmount = discountAmount; }
+    public Integer getDiscountPercent() {
+        return discountPercent;
+    }
 
-    public Integer getDiscountPercent() { return discountPercent; }
-    public void setDiscountPercent(Integer discountPercent) { this.discountPercent = discountPercent; }
+    public void setDiscountPercent(Integer discountPercent) {
+        this.discountPercent = discountPercent;
+    }
 
-    public Integer getMinTierRequired() { return minTierRequired; }
-    public void setMinTierRequired(Integer minTierRequired) { this.minTierRequired = minTierRequired; }
+    public Integer getMinTierRequired() {
+        return minTierRequired;
+    }
 
-    public Timestamp getExpiryDate() { return expiryDate; }
-    public void setExpiryDate(Timestamp expiryDate) { this.expiryDate = expiryDate; }
+    public void setMinTierRequired(Integer minTierRequired) {
+        this.minTierRequired = minTierRequired;
+    }
 
-    public boolean isActive() { return isActive; }
-    public void setActive(boolean active) { isActive = active; }
+    public Timestamp getExpiryDate() {
+        return expiryDate;
+    }
+
+    public void setExpiryDate(Timestamp expiryDate) {
+        this.expiryDate = expiryDate;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 }

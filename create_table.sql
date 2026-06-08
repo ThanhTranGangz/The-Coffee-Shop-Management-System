@@ -284,3 +284,8 @@ INSERT INTO [Tier] (TierName, MinPoints, DiscountPercent) VALUES
 INSERT INTO [Staff] (Username, [Password], PIN_Code, FullName, RoleID, IsActive)
 VALUES ('admin', 'hashed_password_here', 'hashed_pin_here', 'Manager Admin', 1, 1);
 GO
+
+UPDATE [Staff]
+SET [Password] = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
+    PIN_Code = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'
+WHERE Username = 'admin';

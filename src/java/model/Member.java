@@ -1,31 +1,35 @@
 package model;
 
 public class Member {
-    private int memberId;
+
+    private int memberID;
     private String fullName;
     private String phone;
     private int rewardPoints;
-    private int tierId;
-    private boolean isActive;
+    private int tierID;
+    private String tierName;
+    private boolean active;
 
     public Member() {
     }
 
-    public Member(int memberId, String fullName, String phone, int rewardPoints, int tierId, boolean isActive) {
-        this.memberId = memberId;
+    public Member(int memberID, String fullName, String phone, int rewardPoints,
+                  int tierID, String tierName, boolean active) {
+        this.memberID = memberID;
         this.fullName = fullName;
         this.phone = phone;
         this.rewardPoints = rewardPoints;
-        this.tierId = tierId;
-        this.isActive = isActive;
+        this.tierID = tierID;
+        this.tierName = tierName;
+        this.active = active;
     }
 
-    public int getMemberId() {
-        return memberId;
+    public int getMemberID() {
+        return memberID;
     }
 
-    public void setMemberId(int memberId) {
-        this.memberId = memberId;
+    public void setMemberID(int memberID) {
+        this.memberID = memberID;
     }
 
     public String getFullName() {
@@ -52,31 +56,27 @@ public class Member {
         this.rewardPoints = rewardPoints;
     }
 
-    public int getTierId() {
-        return tierId;
+    public int getTierID() {
+        return tierID;
     }
 
-    public void setTierId(int tierId) {
-        this.tierId = tierId;
+    public void setTierID(int tierID) {
+        this.tierID = tierID;
+    }
+
+    public String getTierName() {
+        return tierName;
+    }
+
+    public void setTierName(String tierName) {
+        this.tierName = tierName;
     }
 
     public boolean isActive() {
-        return isActive;
+        return active;
     }
 
     public void setActive(boolean active) {
-        isActive = active;
-    }
-
-    @Override
-    public String toString() {
-        return "Member{" +
-                "memberId=" + memberId +
-                ", fullName='" + fullName + '\'' +
-                ", phone='" + phone + '\'' +
-                ", rewardPoints=" + rewardPoints +
-                ", tierId=" + tierId +
-                ", isActive=" + isActive +
-                '}';
+        this.active = active;
     }
 }

@@ -1,33 +1,32 @@
 package model;
 
 public class Staff {
-    private int staffId;
+
+    private int staffID;
     private String username;
-    private String password;
-    private String pinCode;
     private String fullName;
-    private int roleId;
-    private boolean isActive;
+    private int roleID;
+    private String roleName;
+    private boolean active;
 
     public Staff() {
     }
 
-    public Staff(int staffId, String username, String password, String pinCode, String fullName, int roleId, boolean isActive) {
-        this.staffId = staffId;
+    public Staff(int staffID, String username, String fullName, int roleID, String roleName, boolean active) {
+        this.staffID = staffID;
         this.username = username;
-        this.password = password;
-        this.pinCode = pinCode;
         this.fullName = fullName;
-        this.roleId = roleId;
-        this.isActive = isActive;
+        this.roleID = roleID;
+        this.roleName = roleName;
+        this.active = active;
     }
 
-    public int getStaffId() {
-        return staffId;
+    public int getStaffID() {
+        return staffID;
     }
 
-    public void setStaffId(int staffId) {
-        this.staffId = staffId;
+    public void setStaffID(int staffID) {
+        this.staffID = staffID;
     }
 
     public String getUsername() {
@@ -38,22 +37,6 @@ public class Staff {
         this.username = username;
     }
 
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public String getPinCode() {
-        return pinCode;
-    }
-
-    public void setPinCode(String pinCode) {
-        this.pinCode = pinCode;
-    }
-
     public String getFullName() {
         return fullName;
     }
@@ -62,30 +45,27 @@ public class Staff {
         this.fullName = fullName;
     }
 
-    public int getRoleId() {
-        return roleId;
+    public int getRoleID() {
+        return roleID;
     }
 
-    public void setRoleId(int roleId) {
-        this.roleId = roleId;
+    public void setRoleID(int roleID) {
+        this.roleID = roleID;
+    }
+
+    public String getRoleName() {
+        return roleName;
+    }
+
+    public void setRoleName(String roleName) {
+        this.roleName = roleName;
     }
 
     public boolean isActive() {
-        return isActive;
+        return active;
     }
 
     public void setActive(boolean active) {
-        isActive = active;
-    }
-
-    @Override
-    public String toString() {
-        return "Staff{" +
-                "staffId=" + staffId +
-                ", username='" + username + '\'' +
-                ", fullName='" + fullName + '\'' +
-                ", roleId=" + roleId +
-                ", isActive=" + isActive +
-                '}';
+        this.active = active;
     }
 }
