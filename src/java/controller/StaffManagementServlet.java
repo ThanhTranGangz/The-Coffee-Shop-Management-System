@@ -20,21 +20,8 @@ public class StaffManagementServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        
-        HttpSession session = request.getSession(false);
-        Staff currentStaff = null;
 
-        if (session != null) {
-            currentStaff = (Staff) session.getAttribute("staff");
-        }
-
-        if (currentStaff == null) {
-            response.sendRedirect("login.jsp");
-            return;
-        }
-
-        if (!canManageStaff(currentStaff)) {
-            response.sendRedirect("dashboard.jsp");
+        if (!checkStaffManagementAccess(request, response)) {
             return;
         }
 
@@ -50,21 +37,8 @@ public class StaffManagementServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        
-        HttpSession session = request.getSession(false);
-        Staff currentStaff = null;
 
-        if (session != null) {
-            currentStaff = (Staff) session.getAttribute("staff");
-        }
-
-        if (currentStaff == null) {
-            response.sendRedirect("login.jsp");
-            return;
-        }
-
-        if (!canManageStaff(currentStaff)) {
-            response.sendRedirect("dashboard.jsp");
+        if (!checkStaffManagementAccess(request, response)) {
             return;
         }
 
@@ -78,7 +52,7 @@ public class StaffManagementServlet extends HttpServlet {
             activateStaff(request);
         }
 
-        response.sendRedirect("staff-management");
+        response.sendRedirect(request.getContextPath() + "/staff-management");
     }
 
     private void createStaff(HttpServletRequest request) {
@@ -140,5 +114,30 @@ public class StaffManagementServlet extends HttpServlet {
         }
 
         return staffDAO.hasPermission(staff.getStaffID(), "MANAGE_STAFF");
+    }
+
+    private boolean checkStaffManagementAccess(HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
+
+        HttpSession session = request.getSession(false);
+
+        if (session == null) {
+            response.sendRedirect(request.getContextPath() + "/login.jsp");
+            return false;
+        }
+
+        Staff currentStaff = (Staff) session.getAttribute("staff");
+
+        if (currentStaff == null) {
+            response.sendRedirect(request.getContextPath() + "/login.jsp");
+            return false;
+        }
+
+        if (!canManageStaff(currentStaff)) {
+            response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
+            return false;
+        }
+
+        return true;
     }
 }

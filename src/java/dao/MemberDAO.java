@@ -53,43 +53,52 @@ public class MemberDAO extends DBContext {
         try {
             connection.setAutoCommit(false);
 
-            PreparedStatement ps1 = connection.prepareStatement(updatePointSql);
-            ps1.setInt(1, points);
-            ps1.setInt(2, memberID);
-            ps1.executeUpdate();
+            try (PreparedStatement ps1 = connection.prepareStatement(updatePointSql); PreparedStatement ps2 = connection.prepareStatement(insertHistorySql); PreparedStatement ps3 = connection.prepareStatement(updateTierSql)) {
 
-            PreparedStatement ps2 = connection.prepareStatement(insertHistorySql);
-            ps2.setInt(1, memberID);
+                ps1.setInt(1, points);
+                ps1.setInt(2, memberID);
 
-            if (orderID == null) {
-                ps2.setNull(2, java.sql.Types.INTEGER);
-            } else {
-                ps2.setInt(2, orderID);
+                int updatedRows = ps1.executeUpdate();
+
+                if (updatedRows == 0) {
+                    connection.rollback();
+                    return false;
+                }
+
+                ps2.setInt(1, memberID);
+
+                if (orderID == null) {
+                    ps2.setNull(2, java.sql.Types.INTEGER);
+                } else {
+                    ps2.setInt(2, orderID);
+                }
+
+                ps2.setInt(3, points);
+                ps2.setString(4, reason);
+                ps2.executeUpdate();
+
+                ps3.setInt(1, memberID);
+                ps3.setInt(2, memberID);
+                ps3.executeUpdate();
+
+                connection.commit();
+                return true;
             }
-
-            ps2.setInt(3, points);
-            ps2.setString(4, reason);
-            ps2.executeUpdate();
-
-            PreparedStatement ps3 = connection.prepareStatement(updateTierSql);
-            ps3.setInt(1, memberID);
-            ps3.setInt(2, memberID);
-            ps3.executeUpdate();
-
-            connection.commit();
-            connection.setAutoCommit(true);
-
-            return true;
 
         } catch (SQLException e) {
             try {
                 connection.rollback();
-                connection.setAutoCommit(true);
             } catch (SQLException ex) {
                 ex.printStackTrace();
             }
 
             e.printStackTrace();
+        } finally {
+            try {
+                connection.setAutoCommit(true);
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
 
         return false;

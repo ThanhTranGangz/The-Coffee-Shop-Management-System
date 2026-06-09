@@ -3,7 +3,7 @@
 <html>
     <head>
         <meta charset="UTF-8">
-        <title>Staff PIN Login</title>
+        <title>Staff Login</title>
 
         <style>
             * {
@@ -24,7 +24,7 @@
 
             .login-wrapper {
                 width: 100%;
-                max-width: 900px;
+                max-width: 980px;
                 padding: 30px;
             }
 
@@ -60,6 +60,7 @@
 
             .left-panel h1 {
                 font-size: 36px;
+                line-height: 1.2;
                 margin-bottom: 18px;
             }
 
@@ -67,6 +68,17 @@
                 color: #f4dccb;
                 font-size: 16px;
                 line-height: 1.7;
+            }
+
+            .tag {
+                margin-top: 28px;
+                display: inline-block;
+                width: fit-content;
+                padding: 10px 16px;
+                border-radius: 20px;
+                background: rgba(255, 255, 255, 0.16);
+                color: #fff3e8;
+                font-size: 14px;
             }
 
             .right-panel {
@@ -119,20 +131,13 @@
                 font-size: 15px;
                 outline: none;
                 background: #fffaf6;
+                transition: 0.2s;
             }
 
             input:focus {
                 border-color: #6f4e37;
                 box-shadow: 0 0 0 3px rgba(111, 78, 55, 0.15);
                 background: white;
-            }
-
-            .pin-input {
-                letter-spacing: 10px;
-                font-size: 22px;
-                font-weight: bold;
-                text-align: center;
-                padding-left: 48px;
             }
 
             .login-btn {
@@ -146,15 +151,19 @@
                 font-size: 16px;
                 font-weight: bold;
                 cursor: pointer;
+                transition: 0.25s;
             }
 
             .login-btn:hover {
                 background: #4f3424;
+                transform: translateY(-2px);
+                box-shadow: 0 10px 20px rgba(111, 78, 55, 0.25);
             }
 
             .extra-links {
                 display: flex;
                 justify-content: space-between;
+                align-items: center;
                 margin-top: 22px;
                 font-size: 14px;
             }
@@ -163,6 +172,10 @@
                 color: #6f4e37;
                 text-decoration: none;
                 font-weight: bold;
+            }
+
+            .extra-links a:hover {
+                text-decoration: underline;
             }
 
             .error {
@@ -184,11 +197,24 @@
                 color: #6b4b37;
                 font-size: 14px;
                 text-align: center;
+                line-height: 1.5;
             }
 
             @media (max-width: 850px) {
                 .login-card {
                     grid-template-columns: 1fr;
+                }
+
+                .left-panel {
+                    padding: 35px 30px;
+                }
+
+                .left-panel h1 {
+                    font-size: 30px;
+                }
+
+                .right-panel {
+                    padding: 38px 28px;
                 }
             }
         </style>
@@ -199,19 +225,26 @@
             <div class="login-card">
 
                 <div class="left-panel">
-                    <div class="logo">🔢</div>
-                    <h1>Staff PIN Login</h1>
+                    <div class="logo">☕</div>
+
+                    <h1>Staff Login</h1>
+
                     <p>
-                        Quick login for shared POS, kiosk, kitchen display,
-                        or waiter station devices using a 4-digit staff PIN.
+                        Sign in to access the Coffee Shop Management System.
+                        This module supports staff authentication, role-based security,
+                        admin reports, and CRM management.
                     </p>
+
+                    <div class="tag">
+                        Admin, Security & CRM
+                    </div>
                 </div>
 
                 <div class="right-panel">
-                    <h2>Enter PIN</h2>
-                    <p class="subtitle">Use your staff username and 4-digit PIN.</p>
+                    <h2>Welcome Back</h2>
+                    <p class="subtitle">Please enter your staff account to continue.</p>
 
-                    <form action="${pageContext.request.contextPath}/pin-login" method="post">
+                    <form action="login" method="post">
                         <div class="form-group">
                             <label>Username</label>
                             <div class="input-box">
@@ -221,34 +254,32 @@
                         </div>
 
                         <div class="form-group">
-                            <label>PIN Code</label>
+                            <label>Password</label>
                             <div class="input-box">
-                                <span>🔐</span>
-                                <input class="pin-input" type="password" name="pin"
-                                       placeholder="1234" maxlength="4"
-                                       pattern="[0-9]{4}" required>
+                                <span>🔒</span>
+                                <input type="password" name="password" placeholder="Enter password" required>
                             </div>
                         </div>
 
-                        <button class="login-btn" type="submit">Login with PIN</button>
+                        <button class="login-btn" type="submit">Login</button>
                     </form>
 
                     <%
                         String error = (String) request.getAttribute("error");
                         if (error != null) {
                     %>
-                        <div class="error"><%= error %></div>
+                    <div class="error"><%= error %></div>
                     <%
                         }
                     %>
 
                     <div class="extra-links">
                         <a href="${pageContext.request.contextPath}/index.html">← Back to Home</a>
-                        <a href="${pageContext.request.contextPath}/login.jsp">Use Password Login</a>
+                        <a href="pin-login.jsp">Use PIN Login</a>
                     </div>
 
                     <div class="demo-note">
-                        Demo PIN account: <b>admin</b> / <b>1234</b>
+                        Demo account: <b>admin</b> / <b>123456</b>
                     </div>
                 </div>
 

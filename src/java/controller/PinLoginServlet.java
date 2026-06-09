@@ -20,18 +20,45 @@ public class PinLoginServlet extends HttpServlet {
         String username = request.getParameter("username");
         String pin = request.getParameter("pin");
 
-        StaffDAO staffDAO = new StaffDAO();
+        if (username != null) {
+            username = username.trim();
+        }
 
+        if (pin != null) {
+            pin = pin.trim();
+        }
+
+        if (username == null || username.isEmpty()
+                || pin == null || pin.isEmpty()) {
+
+            request.setAttribute("error", "Username and PIN must not be empty!");
+            request.getRequestDispatcher("/pin-login.jsp").forward(request, response);
+            return;
+        }
+
+        if (!pin.matches("\\d{4}")) {
+            request.setAttribute("error", "PIN must be exactly 4 digits!");
+            request.getRequestDispatcher("/pin-login.jsp").forward(request, response);
+            return;
+        }
+
+        StaffDAO staffDAO = new StaffDAO();
         Staff staff = staffDAO.loginByPIN(username, pin, "WEB_BROWSER");
 
         if (staff != null) {
-            HttpSession session = request.getSession();
-            session.setAttribute("staff", staff);
+            HttpSession oldSession = request.getSession(false);
 
-            response.sendRedirect("dashboard.jsp");
+            if (oldSession != null) {
+                oldSession.invalidate();
+            }
+
+            HttpSession newSession = request.getSession(true);
+            newSession.setAttribute("staff", staff);
+
+            response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
         } else {
             request.setAttribute("error", "Invalid username or PIN, or account is locked!");
-            request.getRequestDispatcher("pin-login.jsp").forward(request, response);
+            request.getRequestDispatcher("/pin-login.jsp").forward(request, response);
         }
     }
 }

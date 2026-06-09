@@ -20,17 +20,39 @@ public class LoginServlet extends HttpServlet {
         String username = request.getParameter("username");
         String password = request.getParameter("password");
 
+        if (username != null) {
+            username = username.trim();
+        }
+
+        if (password != null) {
+            password = password.trim();
+        }
+
+        if (username == null || username.isEmpty()
+                || password == null || password.isEmpty()) {
+
+            request.setAttribute("error", "Username and password must not be empty!");
+            request.getRequestDispatcher("/login.jsp").forward(request, response);
+            return;
+        }
+
         StaffDAO staffDAO = new StaffDAO();
         Staff staff = staffDAO.loginByUsernamePassword(username, password);
 
         if (staff != null) {
-            HttpSession session = request.getSession();
-            session.setAttribute("staff", staff);
+            HttpSession oldSession = request.getSession(false);
 
-            response.sendRedirect("dashboard.jsp");
+            if (oldSession != null) {
+                oldSession.invalidate();
+            }
+
+            HttpSession newSession = request.getSession(true);
+            newSession.setAttribute("staff", staff);
+
+            response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
         } else {
             request.setAttribute("error", "Invalid username or password!");
-            request.getRequestDispatcher("login.jsp").forward(request, response);
+            request.getRequestDispatcher("/login.jsp").forward(request, response);
         }
     }
 }

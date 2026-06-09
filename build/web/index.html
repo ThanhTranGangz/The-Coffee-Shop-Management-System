@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>The Coffee Shop Management System</title>
+
+        <style>
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+
+            body {
+                font-family: Arial, Helvetica, sans-serif;
+                min-height: 100vh;
+                background: linear-gradient(135deg, #f8ede3, #dfc3a5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: #2d1b12;
+            }
+
+            .page-wrapper {
+                width: 100%;
+                max-width: 1100px;
+                padding: 30px;
+            }
+
+            .main-card {
+                display: grid;
+                grid-template-columns: 1.1fr 0.9fr;
+                background: rgba(255, 255, 255, 0.92);
+                border-radius: 24px;
+                overflow: hidden;
+                box-shadow: 0 20px 45px rgba(80, 45, 20, 0.25);
+            }
+
+            .left-panel {
+                padding: 55px 50px;
+                background: linear-gradient(160deg, #6f4e37, #3d2417);
+                color: white;
+                position: relative;
+            }
+
+            .logo {
+                width: 70px;
+                height: 70px;
+                border-radius: 50%;
+                background: rgba(255, 255, 255, 0.18);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-size: 36px;
+                margin-bottom: 25px;
+            }
+
+            .left-panel h1 {
+                font-size: 42px;
+                line-height: 1.2;
+                margin-bottom: 18px;
+            }
+
+            .left-panel p {
+                font-size: 17px;
+                line-height: 1.7;
+                color: #f5dfcf;
+                max-width: 480px;
+            }
+
+            .tag-list {
+                margin-top: 35px;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+
+            .tag {
+                padding: 9px 14px;
+                border-radius: 20px;
+                background: rgba(255, 255, 255, 0.16);
+                font-size: 14px;
+                color: #fff4ea;
+            }
+
+            .right-panel {
+                padding: 50px 42px;
+            }
+
+            .right-panel h2 {
+                font-size: 30px;
+                color: #4a2d1d;
+                margin-bottom: 10px;
+            }
+
+            .subtitle {
+                color: #7a6253;
+                font-size: 15px;
+                margin-bottom: 32px;
+                line-height: 1.5;
+            }
+
+            .menu-card {
+                display: block;
+                text-decoration: none;
+                color: inherit;
+                padding: 20px;
+                border-radius: 18px;
+                background: #fffaf6;
+                border: 1px solid #ead8c8;
+                margin-bottom: 18px;
+                transition: 0.25s;
+            }
+
+            .menu-card:hover {
+                transform: translateY(-4px);
+                box-shadow: 0 12px 25px rgba(111, 78, 55, 0.18);
+                border-color: #b9855d;
+            }
+
+            .menu-row {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+            }
+
+            .icon-box {
+                min-width: 52px;
+                height: 52px;
+                border-radius: 15px;
+                background: #6f4e37;
+                color: white;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-size: 24px;
+            }
+
+            .menu-content h3 {
+                font-size: 18px;
+                margin-bottom: 6px;
+                color: #4a2d1d;
+            }
+
+            .menu-content p {
+                color: #7a6253;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+
+            .footer-note {
+                margin-top: 26px;
+                padding: 14px;
+                border-radius: 14px;
+                background: #f4e7dc;
+                color: #6b4b37;
+                font-size: 14px;
+                text-align: center;
+            }
+
+            @media (max-width: 850px) {
+                .main-card {
+                    grid-template-columns: 1fr;
+                }
+
+                .left-panel {
+                    padding: 40px 30px;
+                }
+
+                .left-panel h1 {
+                    font-size: 34px;
+                }
+
+                .right-panel {
+                    padding: 35px 28px;
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="page-wrapper">
+            <div class="main-card">
+
+                <div class="left-panel">
+                    <div class="logo">☕</div>
+
+                    <h1>Coffee Shop<br>Management</h1>
+
+                    <p>
+                        Admin, Security & CRM module for managing staff accounts,
+                        role-based permissions, customer loyalty points, vouchers,
+                        and end-of-day reports.
+                    </p>
+
+                    <div class="tag-list">
+                        <span class="tag">Role-based Security</span>
+                        <span class="tag">Staff PIN Login</span>
+                        <span class="tag">CRM</span>
+                        <span class="tag">Reports</span>
+                    </div>
+                </div>
+
+                <div class="right-panel">
+                    <h2>Welcome Back</h2>
+                    <p class="subtitle">
+                        Choose a function below to continue working with the coffee shop system.
+                    </p>
+
+                    <a class="menu-card" href="login.jsp">
+                        <div class="menu-row">
+                            <div class="icon-box">🔐</div>
+                            <div class="menu-content">
+                                <h3>Staff Login</h3>
+                                <p>Login by username and password for manager or staff accounts.</p>
+                            </div>
+                        </div>
+                    </a>
+
+                    <a class="menu-card" href="pin-login.jsp">
+                        <div class="menu-row">
+                            <div class="icon-box">🔢</div>
+                            <div class="menu-content">
+                                <h3>Staff PIN Login</h3>
+                                <p>Quick login using 4-digit PIN for shared POS or kiosk devices.</p>
+                            </div>
+                        </div>
+                    </a>
+
+                    <a class="menu-card" href="dashboard.jsp">
+                        <div class="menu-row">
+                            <div class="icon-box">📊</div>
+                            <div class="menu-content">
+                                <h3>Admin Dashboard</h3>
+                                <p>View reports, manage staff, vouchers, members, and reward points.</p>
+                            </div>
+                        </div>
+                    </a>
+
+                    <div class="footer-note">
+                        The Coffee Shop Management System © 2026
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </body>
+</html>
