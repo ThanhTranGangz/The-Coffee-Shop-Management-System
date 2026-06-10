@@ -20,6 +20,10 @@ public class DBContext {
         try {
             Properties properties = new Properties();
             InputStream inputStream = getClass().getClassLoader().getResourceAsStream("../ConnectDB.properties");
+            if (inputStream == null) {
+                // Du phong: tim ngay tai goc classpath (khi chay ngoai Tomcat)
+                inputStream = getClass().getClassLoader().getResourceAsStream("ConnectDB.properties");
+            }
             try {
                 properties.load(inputStream);
             } catch (IOException ex) {

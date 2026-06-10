@@ -8,12 +8,14 @@ import java.sql.SQLException;
 
 public class MemberDAO extends DBContext {
 
+    private static final String BASE_SELECT =
+            "SELECT m.MemberID, m.FullName, m.Phone, m.RewardPoints, "
+            + "m.TierID, t.TierName, t.DiscountPercent, m.IsActive "
+            + "FROM Member m "
+            + "JOIN Tier t ON m.TierID = t.TierID ";
+
     public Member findByPhone(String phone) {
-        String sql = "SELECT m.MemberID, m.FullName, m.Phone, m.RewardPoints, "
-                + "m.TierID, t.TierName, m.IsActive "
-                + "FROM Member m "
-                + "JOIN Tier t ON m.TierID = t.TierID "
-                + "WHERE m.Phone = ? AND m.IsActive = 1";
+        String sql = BASE_SELECT + "WHERE m.Phone = ? AND m.IsActive = 1";
 
         try {
             PreparedStatement ps = connection.prepareStatement(sql);
@@ -30,6 +32,71 @@ public class MemberDAO extends DBContext {
             e.printStackTrace();
         }
 
+        return null;
+    }
+
+    /** Dang nhap thanh vien bang so dien thoai + mat khau (da hash SHA-256). */
+    public Member loginByPhonePassword(String phone, String passwordHash) {
+        String sql = BASE_SELECT
+                + "WHERE m.Phone = ? AND m.PasswordHash = ? AND m.IsActive = 1";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, phone);
+            ps.setString(2, passwordHash);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapMember(rs);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /** Lay lai thong tin moi nhat (diem, hang) cua thanh vien. */
+    public Member findById(int memberId) {
+        String sql = BASE_SELECT + "WHERE m.MemberID = ? AND m.IsActive = 1";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, memberId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return mapMember(rs);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    /**
+     * Dang ky thanh vien moi (hang Bronze).
+     *
+     * @return Member vua tao, hoac null neu so dien thoai da ton tai / loi
+     */
+    public Member register(String fullName, String phone, String passwordHash) {
+        String checkSql = "SELECT 1 FROM Member WHERE Phone = ?";
+        String insertSql = "INSERT INTO Member (FullName, Phone, RewardPoints, TierID, IsActive, PasswordHash) "
+                + "VALUES (?, ?, 0, 1, 1, ?)";
+        try {
+            try (PreparedStatement ps = connection.prepareStatement(checkSql)) {
+                ps.setString(1, phone);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        return null; // da co tai khoan voi SDT nay
+                    }
+                }
+            }
+            try (PreparedStatement ps = connection.prepareStatement(insertSql)) {
+                ps.setNString(1, fullName);
+                ps.setString(2, phone);
+                ps.setString(3, passwordHash);
+                ps.executeUpdate();
+            }
+            return findByPhone(phone);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
@@ -113,6 +180,7 @@ public class MemberDAO extends DBContext {
         member.setRewardPoints(rs.getInt("RewardPoints"));
         member.setTierID(rs.getInt("TierID"));
         member.setTierName(rs.getString("TierName"));
+        member.setTierDiscountPercent(rs.getInt("DiscountPercent"));
         member.setActive(rs.getBoolean("IsActive"));
 
         return member;

@@ -8,6 +8,7 @@ public class Member {
     private int rewardPoints;
     private int tierID;
     private String tierName;
+    private int tierDiscountPercent;
     private boolean active;
 
     public Member() {
@@ -70,6 +71,14 @@ public class Member {
 
     public void setTierName(String tierName) {
         this.tierName = tierName;
+    }
+
+    public int getTierDiscountPercent() {
+        return tierDiscountPercent;
+    }
+
+    public void setTierDiscountPercent(int tierDiscountPercent) {
+        this.tierDiscountPercent = tierDiscountPercent;
     }
 
     public boolean isActive() {

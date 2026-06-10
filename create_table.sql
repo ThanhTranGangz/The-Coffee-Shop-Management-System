@@ -1,6 +1,8 @@
 -- =======================================================
 -- 1. Create Database
 -- =======================================================
+SET QUOTED_IDENTIFIER ON;
+GO
 USE master;
 GO
 
@@ -140,7 +142,7 @@ CREATE TABLE [Orders] (
     FinalAmount AS (TotalAmount - DiscountAmount),
 
     PaymentMethod VARCHAR(20) NULL,
-    TransactionID VARCHAR(100) UNIQUE NULL,
+    TransactionID VARCHAR(100) NULL,
 
     OrderSource VARCHAR(20) NOT NULL DEFAULT 'POS',
     OrderStatus VARCHAR(20) NOT NULL DEFAULT 'PENDING',
@@ -178,6 +180,10 @@ CREATE TABLE [Orders] (
     CONSTRAINT CHK_Order_Discount 
         CHECK (DiscountAmount >= 0 AND DiscountAmount <= TotalAmount)
 );
+
+-- TransactionID chi can duy nhat khi co gia tri (cho phep nhieu don NULL)
+CREATE UNIQUE NONCLUSTERED INDEX UQ_Orders_TransactionID
+    ON [Orders](TransactionID) WHERE TransactionID IS NOT NULL;
 
 -- 2.12 OrderDetail Table
 CREATE TABLE [OrderDetail] (
