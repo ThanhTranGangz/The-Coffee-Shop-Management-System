@@ -82,6 +82,7 @@ CREATE TABLE [Member] (
     RewardPoints INT NOT NULL DEFAULT 0,
     TierID INT NOT NULL,
     IsActive BIT NOT NULL DEFAULT 1,
+    PasswordHash VARCHAR(255) NULL,
     CONSTRAINT FK_Member_Tier 
         FOREIGN KEY (TierID) REFERENCES [Tier](TierID)
 );
@@ -109,6 +110,7 @@ CREATE TABLE [Tables] (
     TableID INT IDENTITY(1,1) PRIMARY KEY,
     TableName NVARCHAR(50) NOT NULL UNIQUE,
     [Status] VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE',
+    QRToken VARCHAR(64) NULL,
     CONSTRAINT CHK_Table_Status 
         CHECK ([Status] IN ('AVAILABLE', 'OCCUPIED', 'CLEANING'))
 );
@@ -295,3 +297,108 @@ UPDATE [Staff]
 SET [Password] = '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92',
     PIN_Code = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'
 WHERE Username = 'admin';
+GO
+
+-- 3.1 Categories
+INSERT INTO [Category] (CategoryName) VALUES
+(N'Cà phê'),
+(N'Trà & Trà sữa'),
+(N'Đá xay & Sữa chua'),
+(N'Bánh & Ăn vặt');
+GO
+
+-- 3.2 Products
+INSERT INTO [Product] (ProductName, Price, ImageURL, [Status], CategoryID) VALUES
+(N'Cà phê đen đá',          25000, NULL, 1, 1),
+(N'Cà phê sữa đá',          29000, NULL, 1, 1),
+(N'Bạc xỉu',                32000, NULL, 1, 1),
+(N'Cà phê muối',            35000, NULL, 1, 1),
+(N'Espresso',               40000, NULL, 1, 1),
+(N'Latte nóng',             45000, NULL, 1, 1),
+(N'Cappuccino',             45000, NULL, 1, 1),
+(N'Trà đào cam sả',         45000, NULL, 1, 2),
+(N'Trà vải',                42000, NULL, 1, 2),
+(N'Trà tắc mật ong',        35000, NULL, 1, 2),
+(N'Trà sữa trân châu',      38000, NULL, 1, 2),
+(N'Ô long sữa trân châu',   40000, NULL, 1, 2),
+(N'Matcha đá xay',          50000, NULL, 1, 3),
+(N'Cacao đá xay',           48000, NULL, 1, 3),
+(N'Sữa chua việt quất',     42000, NULL, 1, 3),
+(N'Tiramisu',               35000, NULL, 0, 4),
+(N'Bông lan trứng muối',    30000, NULL, 1, 4),
+(N'Croissant bơ',           29000, NULL, 1, 4);
+GO
+
+-- 3.3 Inventory
+INSERT INTO [Inventory] (IngredientName, StockQuantity, MinStockLevel, Unit) VALUES
+(N'Cà phê bột',              5000, 500, N'g'),
+(N'Sữa đặc',                 4000, 400, N'ml'),
+(N'Sữa tươi',                6000, 500, N'ml'),
+(N'Đường',                   3000, 300, N'g'),
+(N'Muối hồng',                500,  50, N'g'),
+(N'Đào ngâm',                2000, 200, N'g'),
+(N'Vải ngâm',                   0, 200, N'g'),
+(N'Tắc tươi',                1000, 100, N'g'),
+(N'Mật ong',                  800, 100, N'ml'),
+(N'Trà đen',                 1500, 150, N'g'),
+(N'Trà ô long',              1200, 150, N'g'),
+(N'Trân châu',               2500, 250, N'g'),
+(N'Bột matcha',               600, 100, N'g'),
+(N'Bột cacao',                700, 100, N'g'),
+(N'Sữa chua',                  40,   5, N'hộp'),
+(N'Việt quất',                900, 100, N'g'),
+(N'Bánh bông lan trứng muối',  12,   2, N'cái'),
+(N'Bánh croissant',            10,   2, N'cái'),
+(N'Bánh tiramisu',              8,   2, N'cái'),
+(N'Cam vàng',                1500, 200, N'g'),
+(N'Sả',                       800, 100, N'g');
+GO
+
+-- 3.4 Recipes
+INSERT INTO [Recipe] (ProductID, IngredientID, QuantityNeeded) VALUES
+(1, 1, 20),
+(2, 1, 20), (2, 2, 30),
+(3, 1, 10), (3, 2, 40), (3, 3, 60),
+(4, 1, 20), (4, 2, 30), (4, 5, 3),
+(5, 1, 18),
+(6, 1, 18), (6, 3, 150),
+(7, 1, 18), (7, 3, 120),
+(8, 10, 8), (8, 6, 40), (8, 20, 30), (8, 21, 10),
+(9, 10, 8), (9, 7, 40),
+(10, 10, 8), (10, 8, 30), (10, 9, 15),
+(11, 10, 8), (11, 3, 100), (11, 12, 40),
+(12, 11, 8), (12, 3, 100), (12, 12, 40),
+(13, 13, 15), (13, 3, 100), (13, 4, 20),
+(14, 14, 20), (14, 3, 100), (14, 4, 20),
+(15, 15, 1), (15, 16, 30),
+(16, 19, 1),
+(17, 17, 1),
+(18, 18, 1);
+GO
+
+-- 3.5 Tables + QR token rieng cho tung ban
+INSERT INTO [Tables] (TableName, [Status], QRToken) VALUES
+(N'Bàn 01',      'AVAILABLE', 'tb01-k3f7a9d2'),
+(N'Bàn 02',      'AVAILABLE', 'tb02-m8x2q5w1'),
+(N'Bàn 03',      'AVAILABLE', 'tb03-p4j9c6t8'),
+(N'Bàn 04',      'AVAILABLE', 'tb04-r7v1z3n6'),
+(N'Bàn 05',      'AVAILABLE', 'tb05-s2h8b4y7'),
+(N'Bàn 06',      'AVAILABLE', 'tb06-d9g5e1u3'),
+(N'Sân vườn 01', 'AVAILABLE', 'gd01-w6t3k8f2'),
+(N'Sân vườn 02', 'AVAILABLE', 'gd02-q1n7m4x9');
+GO
+
+-- 3.6 Vouchers
+INSERT INTO [Voucher] (VoucherCode, DiscountAmount, DiscountPercent, MinTierRequired, ExpiryDate, IsActive) VALUES
+('CHAOBAN',     5000, NULL, NULL, '2027-12-31', 1),
+('THANHVIEN15', NULL, 15,   1,    '2027-12-31', 1),
+('GOLD20',      NULL, 20,   3,    '2027-12-31', 1);
+GO
+
+-- 3.7 Demo member
+INSERT INTO [Member] (FullName, Phone, RewardPoints, TierID, IsActive, PasswordHash)
+VALUES (N'Nguyễn Minh Anh', '0901234567', 120, 2,  1, '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92');
+GO
+
+PRINT 'create_table.sql DONE';
+GO
