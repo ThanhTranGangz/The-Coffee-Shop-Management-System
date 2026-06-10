@@ -1,5 +1,6 @@
-package dal;
+package dao;
 
+import dal.DBContext;
 import model.ReportSummary;
 import model.DailyRevenue;
 import model.ProductSales;
