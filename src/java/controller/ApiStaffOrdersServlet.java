@@ -10,6 +10,8 @@ import java.util.List;
 import model.OrderInfo;
 import util.ApiJson;
 import util.AppConfig;
+import util.AuthUtil;
+import util.Permission;
 
 /**
  * API bang don cho nhan vien (pha che + thu ngan):
@@ -26,6 +28,10 @@ public class ApiStaffOrdersServlet extends ApiServlet {
             throws IOException {
         if (currentStaff(request) == null) {
             writeError(response, 401, "UNAUTHORIZED", "Vui lòng đăng nhập nhân viên.");
+            return;
+        }
+        if (!AuthUtil.hasAnyPermission(request, Permission.VIEW_STAFF_ORDERS, Permission.VIEW_KITCHEN_ORDER)) {
+            writeError(response, 403, "FORBIDDEN", "Bạn không có quyền xem bảng đơn.");
             return;
         }
         List<OrderInfo> orders = new OrderDAO().getBoardOrders();
@@ -57,6 +63,10 @@ public class ApiStaffOrdersServlet extends ApiServlet {
         OrderDAO dao = new OrderDAO();
         switch (action) {
             case "advance": {
+                if (!AuthUtil.hasPermission(request, Permission.UPDATE_ORDER_STATUS)) {
+                    writeError(response, 403, "FORBIDDEN", "Bạn không có quyền cập nhật trạng thái đơn.");
+                    return;
+                }
                 String next = dao.advanceStatus(orderId);
                 if (next == null) {
                     writeError(response, 409, "CANNOT_ADVANCE", "Đơn không thể chuyển trạng thái.");
@@ -66,6 +76,10 @@ public class ApiStaffOrdersServlet extends ApiServlet {
                 return;
             }
             case "markPaid": {
+                if (!AuthUtil.hasPermission(request, Permission.CONFIRM_PAYMENT)) {
+                    writeError(response, 403, "FORBIDDEN", "Bạn không có quyền xác nhận thanh toán.");
+                    return;
+                }
                 OrderDAO.PaidResult result = dao.markPaid(orderId);
                 if (!result.updated) {
                     writeError(response, 409, "ALREADY_PAID", "Đơn đã được thanh toán trước đó.");
@@ -83,6 +97,10 @@ public class ApiStaffOrdersServlet extends ApiServlet {
                 return;
             }
             case "cancel": {
+                if (!AuthUtil.hasPermission(request, Permission.CANCEL_ORDER)) {
+                    writeError(response, 403, "FORBIDDEN", "Bạn không có quyền hủy đơn.");
+                    return;
+                }
                 boolean ok = dao.cancelOrder(orderId);
                 if (ok) {
                     writeJson(response, 200, "{\"ok\":true}");

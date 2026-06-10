@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import model.Role;
 import model.Staff;
+import util.AuthUtil;
+import util.Permission;
 
 @WebServlet(name = "StaffManagementServlet", urlPatterns = {"/staff-management"})
 public class StaffManagementServlet extends HttpServlet {
@@ -104,16 +106,8 @@ public class StaffManagementServlet extends HttpServlet {
         }
     }
 
-    private boolean canManageStaff(Staff staff) {
-        if (staff == null) {
-            return false;
-        }
-
-        if ("MANAGER".equalsIgnoreCase(staff.getRoleName())) {
-            return true;
-        }
-
-        return staffDAO.hasPermission(staff.getStaffID(), "MANAGE_STAFF");
+    private boolean canManageStaff(HttpServletRequest request) {
+        return AuthUtil.hasPermission(request, Permission.MANAGE_STAFF);
     }
 
     private boolean checkStaffManagementAccess(HttpServletRequest request, HttpServletResponse response)
@@ -121,20 +115,13 @@ public class StaffManagementServlet extends HttpServlet {
 
         HttpSession session = request.getSession(false);
 
-        if (session == null) {
+        if (session == null || session.getAttribute("staff") == null) {
             response.sendRedirect(request.getContextPath() + "/login.jsp");
             return false;
         }
 
-        Staff currentStaff = (Staff) session.getAttribute("staff");
-
-        if (currentStaff == null) {
-            response.sendRedirect(request.getContextPath() + "/login.jsp");
-            return false;
-        }
-
-        if (!canManageStaff(currentStaff)) {
-            response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
+        if (!canManageStaff(request)) {
+            response.sendRedirect(request.getContextPath() + "/dashboard.jsp?denied=1");
             return false;
         }
 

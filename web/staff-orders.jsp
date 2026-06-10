@@ -1,4 +1,6 @@
 <%@page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@page import="util.AuthUtil"%>
+<%@page import="util.Permission"%>
 <%
     model.Staff staff = (model.Staff) session.getAttribute("staff");
     if (staff == null) {
@@ -6,6 +8,13 @@
         return;
     }
     String ctx = request.getContextPath();
+    if (!AuthUtil.hasAnyPermission(request, Permission.VIEW_STAFF_ORDERS, Permission.VIEW_KITCHEN_ORDER)) {
+        response.sendRedirect(ctx + "/dashboard.jsp?denied=1");
+        return;
+    }
+    boolean canAdvance = AuthUtil.hasPermission(request, Permission.UPDATE_ORDER_STATUS);
+    boolean canMarkPaid = AuthUtil.hasPermission(request, Permission.CONFIRM_PAYMENT);
+    boolean canCancel = AuthUtil.hasPermission(request, Permission.CANCEL_ORDER);
     String pageTitle = "Bảng đơn — nhà cà phê";
 %>
 <!DOCTYPE html>
@@ -35,6 +44,11 @@
     (function () {
         var C = window.CSMS;
         var timer = null;
+        var PERMS = {
+            advance: <%= canAdvance %>,
+            markPaid: <%= canMarkPaid %>,
+            cancel: <%= canCancel %>
+        };
 
         var COLS = [
             { title: 'Chờ pha chế',   match: function (o) { return o.orderStatus === 'PENDING'; } },
@@ -50,15 +64,19 @@
 
         function actions(o) {
             var html = '';
-            if (o.orderStatus === 'PENDING') {
-                html += '<button class="btn btn-primary btn-sm" data-act="advance" data-id="' + o.orderId + '">Bắt đầu pha</button>';
-                html += '<button class="btn btn-ghost btn-sm" data-act="cancel" data-id="' + o.orderId + '">Hủy</button>';
-            } else if (o.orderStatus === 'PREPARING') {
-                html += '<button class="btn btn-primary btn-sm" data-act="advance" data-id="' + o.orderId + '">Pha xong</button>';
-            } else if (o.orderStatus === 'READY') {
-                html += '<button class="btn btn-primary btn-sm" data-act="advance" data-id="' + o.orderId + '">Đã phục vụ</button>';
+            if (PERMS.advance) {
+                if (o.orderStatus === 'PENDING') {
+                    html += '<button class="btn btn-primary btn-sm" data-act="advance" data-id="' + o.orderId + '">Bắt đầu pha</button>';
+                } else if (o.orderStatus === 'PREPARING') {
+                    html += '<button class="btn btn-primary btn-sm" data-act="advance" data-id="' + o.orderId + '">Pha xong</button>';
+                } else if (o.orderStatus === 'READY') {
+                    html += '<button class="btn btn-primary btn-sm" data-act="advance" data-id="' + o.orderId + '">Đã phục vụ</button>';
+                }
             }
-            if (o.paymentStatus !== 'PAID') {
+            if (PERMS.cancel && o.orderStatus === 'PENDING') {
+                html += '<button class="btn btn-ghost btn-sm" data-act="cancel" data-id="' + o.orderId + '">Hủy</button>';
+            }
+            if (PERMS.markPaid && o.paymentStatus !== 'PAID') {
                 html += '<button class="btn btn-sm" data-act="markPaid" data-id="' + o.orderId + '">✓ Đã thu tiền</button>';
             }
             return html;

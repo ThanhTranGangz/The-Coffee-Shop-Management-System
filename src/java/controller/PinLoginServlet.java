@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import model.Staff;
+import util.AuthUtil;
 
 @WebServlet(name = "PinLoginServlet", urlPatterns = {"/pin-login"})
 public class PinLoginServlet extends HttpServlet {
@@ -53,7 +54,7 @@ public class PinLoginServlet extends HttpServlet {
             }
 
             HttpSession newSession = request.getSession(true);
-            newSession.setAttribute("staff", staff);
+            AuthUtil.bindStaffSession(newSession, staff);
 
             response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
         } else {
