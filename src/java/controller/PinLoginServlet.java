@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import model.Staff;
-import util.AuthUtil;
 
 @WebServlet(name = "PinLoginServlet", urlPatterns = {"/pin-login"})
 public class PinLoginServlet extends HttpServlet {
@@ -48,18 +47,30 @@ public class PinLoginServlet extends HttpServlet {
 
         if (staff != null) {
             HttpSession oldSession = request.getSession(false);
-
             if (oldSession != null) {
                 oldSession.invalidate();
             }
 
             HttpSession newSession = request.getSession(true);
-            AuthUtil.bindStaffSession(newSession, staff);
+            newSession.setAttribute("staff", staff);
 
-            response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
+            String role = staff.getRoleName().toUpperCase(); // giả sử Staff có getter roleName
+
+            switch (role) {
+                case "BARISTA":
+                    response.sendRedirect(request.getContextPath() + "/kds.jsp");
+                    break;
+                case "WAITER":
+                    response.sendRedirect(request.getContextPath() + "/waitstation.jsp");
+                    break;
+                default:
+                    response.sendRedirect(request.getContextPath() + "/dashboard.jsp");
+                    break;
+            }
         } else {
             request.setAttribute("error", "Invalid username or PIN, or account is locked!");
             request.getRequestDispatcher("/pin-login.jsp").forward(request, response);
         }
+
     }
 }
