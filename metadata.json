@@ -1,0 +1,6 @@
+{
+  "name": "Coffee Shop KDS and Wait Station",
+  "description": "An interactive, real-time kitchen display and waitstaff table management system featuring order routing, transfer, merge operations, and kitchen status tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
