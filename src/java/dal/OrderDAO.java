@@ -397,4 +397,31 @@ public class OrderDAO extends DBContext {
         item.setItemStatus(rs.getString("ItemStatus"));
         o.getItems().add(item);
     }
+    // Cập nhật trạng thái từng item
+    public boolean updateItemStatus(int orderId, int detailId, String newStatus) {
+        String sql = "UPDATE OrderDetail SET ItemStatus=? WHERE OrderID=? AND DetailID=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, orderId);
+            ps.setInt(3, detailId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    // Cập nhật trạng thái toàn bộ order
+    public boolean updateOrderStatus(int orderId, String newStatus) {
+        String sql = "UPDATE Orders SET OrderStatus=? WHERE OrderID=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
+            ps.setInt(2, orderId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
 }

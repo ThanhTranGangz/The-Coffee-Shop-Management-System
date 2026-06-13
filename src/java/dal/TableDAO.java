@@ -75,4 +75,36 @@ public class TableDAO extends DBContext {
         public String getQrToken() { return qrToken; }
         public void setQrToken(String qrToken) { this.qrToken = qrToken; }
     }
+    
+    // Chuyển order từ bàn nguồn sang bàn đích
+    public boolean moveTable(String sourceTableId, String targetTableId) {
+        String sql = "UPDATE Orders SET TableID=? WHERE TableID=? AND OrderStatus IN ('PENDING','PREPARING','READY')";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, Integer.parseInt(targetTableId.replace("t","")));
+            ps.setInt(2, Integer.parseInt(sourceTableId.replace("t","")));
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    // Gộp order từ bàn nguồn sang bàn đích
+    public boolean mergeTables(String sourceTableId, String targetTableId) {
+        // TODO: viết logic gộp order chi tiết hơn
+        return true;
+    }
+
+    // Checkout bàn: trả bàn về AVAILABLE
+    public boolean checkoutTable(int tableId) {
+        String sql = "UPDATE Tables SET Status='AVAILABLE', ActiveOrderID=NULL WHERE TableID=?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, tableId);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
 }
