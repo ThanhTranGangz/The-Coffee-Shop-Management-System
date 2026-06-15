@@ -4,7 +4,9 @@ import model.Staff;
 import util.PasswordUtil;
 import model.Role;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -73,6 +75,31 @@ public class StaffDAO extends DBContext {
         }
 
         return null;
+    }
+
+    public Set<String> getPermissionsByStaffID(int staffID) {
+        Set<String> permissions = new HashSet<>();
+
+        String sql = "SELECT p.PermissionName "
+                + "FROM Staff s "
+                + "JOIN RolePermission rp ON s.RoleID = rp.RoleID "
+                + "JOIN Permission p ON rp.PermissionID = p.PermissionID "
+                + "WHERE s.StaffID = ? AND s.IsActive = 1";
+
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setInt(1, staffID);
+
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                permissions.add(rs.getString("PermissionName"));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return permissions;
     }
 
     public boolean hasPermission(int staffID, String permissionName) {
