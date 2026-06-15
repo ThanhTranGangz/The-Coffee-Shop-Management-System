@@ -7,8 +7,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
-import java.util.List;
-import model.DailyRevenue;
 
 public class ReportDAO extends DBContext {
 
@@ -49,9 +47,5 @@ public class ReportDAO extends DBContext {
         }
 
         return new ReportSummary(0, 0, 0, 0);
-    }
-
-    public List<DailyRevenue> getDailyRevenueReport(LocalDate start, LocalDate end) {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 }
