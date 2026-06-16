@@ -26,7 +26,7 @@
 
     function cartLoad() {
         try {
-            var raw = localStorage.getItem(CART_KEY);
+            var raw = sessionStorage.getItem(CART_KEY);
             var items = raw ? JSON.parse(raw) : [];
             return Array.isArray(items) ? items : [];
         } catch (e) {
@@ -35,7 +35,7 @@
     }
 
     function cartSave(items) {
-        localStorage.setItem(CART_KEY, JSON.stringify(items));
+        sessionStorage.setItem(CART_KEY, JSON.stringify(items));
         document.dispatchEvent(new CustomEvent('cart:change'));
     }
 

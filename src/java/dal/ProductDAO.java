@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import model.Category;
 import model.MenuItem;
+import model.Product;
 
 public class ProductDAO extends DBContext {
 
@@ -107,5 +108,147 @@ public class ProductDAO extends DBContext {
         m.setCategoryName(rs.getString("CategoryName"));
         m.setAvailable(rs.getInt("Available") == 1);
         return m;
+    }
+
+    public List<Product> getAllProducts() {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT ProductID, ProductName, Price, ImageURL, [Status], CategoryID FROM Product ORDER BY CategoryID, ProductName";
+        try (PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(new Product(
+                        rs.getInt("ProductID"),
+                        rs.getString("ProductName"),
+                        rs.getInt("Price"),
+                        rs.getString("ImageURL"),
+                        rs.getBoolean("Status"),
+                        rs.getInt("CategoryID")));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public List<Product> searchProducts(String keyword, int categoryId) {
+        List<Product> list = new ArrayList<>();
+        String sql = "SELECT ProductID, ProductName, Price, ImageURL, [Status], CategoryID FROM Product WHERE 1=1";
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            sql += " AND ProductName LIKE ?";
+        }
+        if (categoryId > 0) {
+            sql += " AND CategoryID = ?";
+        }
+        sql += " ORDER BY CategoryID, ProductName";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            int paramIndex = 1;
+            if (keyword != null && !keyword.trim().isEmpty()) {
+                ps.setString(paramIndex++, "%" + keyword.trim() + "%");
+            }
+            if (categoryId > 0) {
+                ps.setInt(paramIndex++, categoryId);
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new Product(
+                            rs.getInt("ProductID"),
+                            rs.getString("ProductName"),
+                            rs.getInt("Price"),
+                            rs.getString("ImageURL"),
+                            rs.getBoolean("Status"),
+                            rs.getInt("CategoryID")));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public Product getProductById(int id) {
+        String sql = "SELECT ProductID, ProductName, Price, ImageURL, [Status], CategoryID FROM Product WHERE ProductID = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new Product(
+                            rs.getInt("ProductID"),
+                            rs.getString("ProductName"),
+                            rs.getInt("Price"),
+                            rs.getString("ImageURL"),
+                            rs.getBoolean("Status"),
+                            rs.getInt("CategoryID"));
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public boolean createProduct(Product p) {
+        String sql = "INSERT INTO Product (ProductName, Price, ImageURL, [Status], CategoryID) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, p.getProductName());
+            ps.setInt(2, p.getPrice());
+            ps.setString(3, p.getImageUrl());
+            ps.setBoolean(4, p.isStatus());
+            ps.setInt(5, p.getCategoryId());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean updateProduct(Product p) {
+        String sql = "UPDATE Product SET ProductName = ?, Price = ?, ImageURL = ?, [Status] = ?, CategoryID = ? WHERE ProductID = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, p.getProductName());
+            ps.setInt(2, p.getPrice());
+            ps.setString(3, p.getImageUrl());
+            ps.setBoolean(4, p.isStatus());
+            ps.setInt(5, p.getCategoryId());
+            ps.setInt(6, p.getProductId());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean toggleProductStatus(int id) {
+        String sql = "UPDATE Product SET [Status] = CASE WHEN [Status] = 1 THEN 0 ELSE 1 END WHERE ProductID = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean hasOrderDetails(int id) {
+        String sql = "SELECT TOP 1 1 FROM OrderDetail WHERE ProductID = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public boolean deleteProduct(int id) {
+        String sql = "DELETE FROM Product WHERE ProductID = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 }
