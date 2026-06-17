@@ -1,0 +1,6 @@
+[MANUAL DEP INFORMATION]
+File: sqljdbc42.jar
+Purpose: Microsoft JDBC Driver for SQL Server.
+Required to enable Java connection handshakes to Microsoft SQL Server databases.
+Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+Please replace with authentic binary if importing manually outside NetBeans.

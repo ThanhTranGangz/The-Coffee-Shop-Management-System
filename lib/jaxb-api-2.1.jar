@@ -1,0 +1,5 @@
+[MANUAL DEP INFORMATION]
+File: jaxb-api-2.1.jar
+Purpose: Java Architecture for XML Binding.
+Required for XML schema validation and serialization configurations.
+Please replace with authentic binary if importing manually outside NetBeans.

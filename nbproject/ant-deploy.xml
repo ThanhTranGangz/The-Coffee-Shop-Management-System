@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project default="-deploy-ant" basedir="..">
+    <target name="-init-cos" if="deploy.ant.cos">
+        <property name="deploy.ant.archive" value="false"/>
+    </target>
+    <target name="-init-regular" unless="deploy.ant.cos">
+        <property name="deploy.ant.archive" value="true"/>
+    </target>
+    <target name="-deploy-ant" depends="-init-cos,-init-regular">
+        <ant-deploy clientUrlPart="${client.urlPart}"
+                    webModuleUri="${web.module.uri}"
+                    archiveFile="${deploy.ant.archive.file}"
+                    isArchive="${deploy.ant.archive}"
+                    resourceDir="${resource.dir}"
+                    serverInstanceId="${j2ee.server.instance}"/>
+    </target>
+</project>
