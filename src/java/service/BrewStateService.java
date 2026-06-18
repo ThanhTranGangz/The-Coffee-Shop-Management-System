@@ -1,163 +1,637 @@
 package service;
 
-import dal.MenuDAO;
-import dal.TableDAO;
-import dal.OrderDAO;
+import dao.MenuDAO;
+import dao.TableDAO;
+import dao.OrderDAO;
 import model.*;
 import websocket.BrewWebSocketHandler;
 
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class BrewStateService {
+    public static class RecipeRequirement {
+        private String ingredientId;
+        private int quantityPerUnit;
+
+        public RecipeRequirement(String ingredientId, int quantityPerUnit) {
+            this.ingredientId = ingredientId;
+            this.quantityPerUnit = quantityPerUnit;
+        }
+
+        public String getIngredientId() { return ingredientId; }
+        public int getQuantityPerUnit() { return quantityPerUnit; }
+    }
+
     private final MenuDAO menuDAO;
     private final TableDAO tableDAO;
     private final OrderDAO orderDAO;
+    private final dao.StaffDAO staffDAO;
+    private final dao.MemberDAO memberDAO;
     private final BrewWebSocketHandler webSocketHandler;
+    private final AtomicInteger orderCounter = new AtomicInteger(100);
+    private boolean shopClosed = false;
 
-    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, BrewWebSocketHandler webSocketHandler) {
+    public synchronized boolean isShopClosed() { return shopClosed; }
+    public synchronized void setShopClosed(boolean closed) {
+        this.shopClosed = closed;
+        notifyStateChange();
+    }
+
+    private final List<Ingredient> inventory = new ArrayList<>();
+    private final List<Expense> expenses = new ArrayList<>();
+    private final Map<String, List<RecipeRequirement>> recipes = new HashMap<>();
+
+    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, BrewWebSocketHandler webSocketHandler) {
         this.menuDAO = menuDAO;
         this.tableDAO = tableDAO;
         this.orderDAO = orderDAO;
+        this.staffDAO = staffDAO;
+        this.memberDAO = memberDAO;
         this.webSocketHandler = webSocketHandler;
+        
+        // Initialize Inventory and Recipe models
+        initInventoryAndRecipes();
+
+        // Seed initial order for Table 3 to make the app look dynamic out of the box
+        seedInitialOrder();
     }
 
-    // ------------------- Menu & Tables -------------------
+    private void initInventoryAndRecipes() {
+        // Init recipes
+        recipes.put("m1", Arrays.asList(new RecipeRequirement("i1", 20)));
+        recipes.put("m2", Arrays.asList(new RecipeRequirement("i1", 20), new RecipeRequirement("i2", 30)));
+        recipes.put("m3", Arrays.asList(new RecipeRequirement("i1", 20), new RecipeRequirement("i2", 20), new RecipeRequirement("i4", 50)));
+        recipes.put("m4", Arrays.asList(new RecipeRequirement("i1", 15), new RecipeRequirement("i3", 100)));
+        recipes.put("m5", Arrays.asList(new RecipeRequirement("i5", 30), new RecipeRequirement("i6", 1)));
+        recipes.put("m6", Arrays.asList(new RecipeRequirement("i7", 10), new RecipeRequirement("i3", 150)));
+        recipes.put("m7", Arrays.asList(new RecipeRequirement("i8", 15), new RecipeRequirement("i3", 100)));
+        recipes.put("m8", Arrays.asList(new RecipeRequirement("i9", 1)));
+        recipes.put("m9", Arrays.asList(new RecipeRequirement("i10", 1)));
 
-    /** Lấy toàn bộ menu hiển thị cho khách */
-    public List<MenuItem> getMenu() {
-        return menuDAO.getAllMenuItems();
+        // Init initial stock values
+        inventory.add(new Ingredient("i1", "Hạt cà phê nguyên chất", "g", 1500, 300, 50));
+        inventory.add(new Ingredient("i2", "Sữa đặc đặc sánh", "g", 1000, 200, 40));
+        inventory.add(new Ingredient("i3", "Sữa tươi tiệt trùng", "ml", 2000, 500, 20));
+        inventory.add(new Ingredient("i4", "Kem béo muối biển", "ml", 80, 150, 80));
+        inventory.add(new Ingredient("i5", "Siro đào thơm mát", "ml", 600, 100, 60));
+        inventory.add(new Ingredient("i6", "Sả tươi thơm nồng", "nhánh", 20, 5, 1000));
+        inventory.add(new Ingredient("i7", "Bột Trà xanh Matcha Uji", "g", 0, 100, 200));
+        inventory.add(new Ingredient("i8", "Lá trà Ô long khô", "g", 500, 100, 100));
+        inventory.add(new Ingredient("i9", "Vỏ bánh sừng bò sấy", "cái", 15, 4, 15000));
+        inventory.add(new Ingredient("i10", "Bánh Tiramisu cắt sẵn", "lát", 1, 3, 25000));
     }
 
-    /** Lấy danh sách bàn kèm QR token */
-    public List<TableDAO.TableWithToken> getTables() {
-        return tableDAO.getAllWithToken();
+    private void seedInitialOrder() {
+        try {
+            Table table = tableDAO.getById("t3");
+            if (table != null) {
+                List<Map<String, Object>> seedItems = new ArrayList<>();
+                
+                Map<String, Object> item1 = new HashMap<>();
+                item1.put("menuItemId", "m2");
+                item1.put("quantity", 2L);
+                item1.put("notes", "Less ice, please.");
+                Map<String, Object> cust1 = new HashMap<>();
+                cust1.put("size", "L");
+                cust1.put("sugar", "100%");
+                cust1.put("ice", "50%");
+                item1.put("customization", cust1);
+                
+                Map<String, Object> item2 = new HashMap<>();
+                item2.put("menuItemId", "m8");
+                item2.put("quantity", 1L);
+                item2.put("notes", "Warm it up.");
+                Map<String, Object> cust2 = new HashMap<>();
+                cust2.put("size", "S");
+                cust2.put("sugar", "100%");
+                cust2.put("ice", "100%");
+                item2.put("customization", cust2);
+
+                seedItems.add(item1);
+                seedItems.add(item2);
+
+                placeOrder("t3", seedItems, "Welcome guests");
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to seed initial order: " + e.getMessage());
+        }
     }
 
-    // ------------------- Orders -------------------
-
-    /** Lấy danh sách đơn cho bảng điều phối (KDS/Wait Station) */
-    public List<OrderInfo> getBoardOrders() {
-        return orderDAO.getBoardOrders();
+    public boolean checkIngredientsSufficient(String menuItemId, int quantity) {
+        List<RecipeRequirement> recipe = recipes.get(menuItemId);
+        if (recipe == null) return true;
+        for (RecipeRequirement req : recipe) {
+            Ingredient ing = getIngredientById(req.getIngredientId());
+            if (ing == null) continue;
+            if (ing.getStock() < req.getQuantityPerUnit() * quantity) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    /** Lấy chi tiết một đơn hàng */
-    public OrderInfo getOrderInfo(int orderId) {
-        return orderDAO.getOrderInfo(orderId);
+    private Ingredient getIngredientById(String ingredientId) {
+        for (Ingredient ing : inventory) {
+            if (ing.getId().equals(ingredientId)) {
+                return ing;
+            }
+        }
+        return null;
     }
 
-    /** Đặt order mới cho một bàn */
-    public OrderInfo placeOrder(String tableId, List<Map<String,Object>> rawItems, String notes) throws SQLException {
-        int tid = Integer.parseInt(tableId.replace("t",""));
-        Tables table = tableDAO.findById(tid);
-        if (table == null) throw new IllegalArgumentException("Table not found: " + tableId);
+    public List<Ingredient> getInventory() {
+        return inventory;
+    }
 
-        // Chuyển rawItems thành CartLine
-        List<CartLine> lines = new ArrayList<>();
-        Map<Integer, MenuItem> products = new HashMap<>();
-        for (Map<String,Object> raw : rawItems) {
-            int productId = Integer.parseInt((String) raw.get("menuItemId"));
-            int quantity = ((Number) raw.getOrDefault("quantity",1)).intValue();
-            String note = (String) raw.getOrDefault("notes","");
-            CartLine line = new CartLine(productId, quantity, note);
-            lines.add(line);
+    public List<Expense> getExpenses() {
+        return expenses;
+    }
 
-            MenuItem item = menuDAO.getMenuByCategory(productId).stream().findFirst().orElse(null);
-            if (item != null) {
-                products.put(productId, item);
+    public synchronized Map<String, Object> importInventory(List<Map<String, Object>> imports) {
+        int totalCost = 0;
+        List<String> summaryDetails = new ArrayList<>();
+
+        for (Map<String, Object> imp : imports) {
+            String id = (String) imp.get("id");
+            int quantity = 0;
+            if (imp.get("quantity") instanceof Number) {
+                quantity = ((Number) imp.get("quantity")).intValue();
+            }
+
+            Ingredient ing = getIngredientById(id);
+            if (ing != null && quantity > 0) {
+                int lineCost = ing.getImportCost() * quantity;
+                totalCost += lineCost;
+                ing.setStock(ing.getStock() + quantity);
+                summaryDetails.add("+" + quantity + " " + ing.getUnit() + " " + ing.getName());
             }
         }
 
-        int totalAmount = lines.stream().mapToInt(l -> products.get(l.getProductId()).getPrice() * l.getQuantity()).sum();
+        if (totalCost > 0) {
+            String expId = "exp_" + System.currentTimeMillis();
+            String timestamp = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX").format(new Date());
+            String details = String.join(", ", summaryDetails);
+            expenses.add(new Expense(expId, totalCost, details, timestamp));
+        }
 
-        int orderId = orderDAO.createOrder(tid, null, null, totalAmount, 0, "CASH", lines, products);
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Thanh toán và nhập kho thành công!");
+        response.put("inventory", inventory);
+        response.put("expenses", expenses);
+        response.put("totalCost", totalCost);
+
         notifyStateChange();
-        return orderDAO.getOrderInfo(orderId);
+
+        return response;
     }
 
-    public void updateItemStatus(String orderId, String itemId, String newStatus) {
-        orderDAO.updateItemStatus(Integer.parseInt(orderId), Integer.parseInt(itemId), newStatus);
+    public List<MenuItem> getMenu() {
+        List<MenuItem> items = menuDAO.getAll();
+        for (MenuItem item : items) {
+            item.setInStock(checkIngredientsSufficient(item.getId(), 1));
+        }
+        return items;
+    }
+
+    public List<Table> getTables() {
+        return tableDAO.getAll();
+    }
+
+    public List<Order> getOrders() {
+        return orderDAO.getAll();
+    }
+
+    /**
+     * Places a new order for a table
+     */
+    public synchronized Order placeOrder(String tableId, List<Map<String, Object>> rawItems, String notes) {
+        Table table = tableDAO.getById(tableId);
+        if (table == null) {
+            throw new IllegalArgumentException("Table " + tableId + " not found.");
+        }
+
+        // 1. Verify if ingredients are sufficient for ALL items in this order
+        for (Map<String, Object> rawItem : rawItems) {
+            String menuItemId = (String) rawItem.get("menuItemId");
+            MenuItem menuItem = menuDAO.getById(menuItemId);
+            if (menuItem == null) continue;
+
+            int quantity = 1;
+            if (rawItem.get("quantity") instanceof Number) {
+                quantity = ((Number) rawItem.get("quantity")).intValue();
+            }
+
+            if (!checkIngredientsSufficient(menuItemId, quantity)) {
+                throw new IllegalStateException("Không đủ nguyên liệu pha chế cho món: " + menuItem.getName() + ". Vui lòng bỏ món này khỏi giỏ hàng!");
+            }
+        }
+
+        // 2. Perform the deduction of ingredients
+        for (Map<String, Object> rawItem : rawItems) {
+            String menuItemId = (String) rawItem.get("menuItemId");
+            int quantity = 1;
+            if (rawItem.get("quantity") instanceof Number) {
+                quantity = ((Number) rawItem.get("quantity")).intValue();
+            }
+
+            List<RecipeRequirement> recipe = recipes.get(menuItemId);
+            if (recipe != null) {
+                for (RecipeRequirement req : recipe) {
+                    Ingredient ing = getIngredientById(req.getIngredientId());
+                    if (ing != null) {
+                        ing.setStock(Math.max(0, ing.getStock() - req.getQuantityPerUnit() * quantity));
+                    }
+                }
+            }
+        }
+
+        String orderId = "ord-" + UUID.randomUUID().toString().substring(0, 8);
+        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+
+        List<OrderItem> orderItems = new ArrayList<>();
+        int totalAmount = 0;
+
+        for (Map<String, Object> rawItem : rawItems) {
+            String menuItemId = (String) rawItem.get("menuItemId");
+            MenuItem menuItem = menuDAO.getById(menuItemId);
+            if (menuItem == null) continue;
+
+            int quantity = 1;
+            if (rawItem.get("quantity") instanceof Number) {
+                quantity = ((Number) rawItem.get("quantity")).intValue();
+            }
+
+            // Parse optional customizations
+            CustomizationOptions custom = new CustomizationOptions();
+            if (rawItem.get("customization") instanceof Map) {
+                Map<String, Object> rawCust = (Map<String, Object>) rawItem.get("customization");
+                custom.setSize((String) rawCust.getOrDefault("size", "M"));
+                custom.setSugar((String) rawCust.getOrDefault("sugar", "100%"));
+                custom.setIce((String) rawCust.getOrDefault("ice", "100%"));
+            }
+
+            String itemNotes = (String) rawItem.getOrDefault("notes", "");
+            int itemPrice = menuItem.getPrice();
+            
+            // Adjust price slightly based on size premium
+            if ("L".equalsIgnoreCase(custom.getSize())) {
+                itemPrice += 6000;
+            } else if ("S".equalsIgnoreCase(custom.getSize())) {
+                itemPrice = Math.max(10000, itemPrice - 4000);
+            }
+
+            int subtotal = itemPrice * quantity;
+            totalAmount += subtotal;
+
+            String sItemId = "item-" + UUID.randomUUID().toString().substring(0, 8);
+            orderItems.add(new OrderItem(
+                sItemId, menuItemId, menuItem.getName(), itemPrice, quantity, custom, itemNotes, "Pending"
+            ));
+        }
+
+        Order order = new Order(
+            orderId, tableId, table.getName(), orderCounter.incrementAndGet(),
+            orderItems, "Pending", timestamp, timestamp, notes, totalAmount
+        );
+
+        orderDAO.create(order);
+
+        // Link table to order
+        table.setStatus("serving");
+        table.setActiveOrderId(orderId);
+        tableDAO.update(table);
+
+        // Notify client side
+        notifyStateChange();
+
+        return order;
+    }
+
+    /**
+     * Updates individual item status in the kitchen display
+     */
+    public synchronized void updateItemStatus(String orderId, String itemId, String newStatus) {
+        Order order = orderDAO.getById(orderId);
+        if (order == null) return;
+
+        boolean itemUpdated = false;
+        for (OrderItem item : order.getItems()) {
+            if (item.getId().equals(itemId)) {
+                item.setStatus(newStatus);
+                itemUpdated = true;
+                break;
+            }
+        }
+
+        if (itemUpdated) {
+            recalculateAggregatedOrderStatus(order);
+            order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+            orderDAO.update(order);
+            
+            // Update table status sync if needed
+            Table table = tableDAO.getById(order.getTableId());
+            if (table != null) {
+                if ("Ready".equalsIgnoreCase(order.getStatus())) {
+                    table.setStatus("ready_to_serve");
+                } else if ("Served".equalsIgnoreCase(order.getStatus())) {
+                    table.setStatus("serving");
+                }
+                tableDAO.update(table);
+            }
+
+            notifyStateChange();
+        }
+    }
+
+    /**
+     * Updates entire order status (cascades status to items)
+     */
+    public synchronized void updateOrderStatus(String orderId, String newStatus) {
+        Order order = orderDAO.getById(orderId);
+        if (order == null) return;
+
+        order.setStatus(newStatus);
+        order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+
+        // Cascade to children order items
+        for (OrderItem item : order.getItems()) {
+            item.setStatus(newStatus);
+        }
+        orderDAO.update(order);
+
+        Table table = tableDAO.getById(order.getTableId());
+        if (table != null) {
+            if ("Ready".equalsIgnoreCase(newStatus)) {
+                table.setStatus("ready_to_serve");
+            } else {
+                table.setStatus("serving");
+            }
+            tableDAO.update(table);
+        }
+
         notifyStateChange();
     }
 
-    public void updateOrderStatus(String orderId, String newStatus) {
-        orderDAO.updateOrderStatus(Integer.parseInt(orderId), newStatus);
+    /**
+     * Helper to compute order's aggregate status based on children items
+     */
+    private void recalculateAggregatedOrderStatus(Order order) {
+        if (order.getItems().isEmpty()) return;
+
+        int pendingCount = 0;
+        int preparingCount = 0;
+        int readyCount = 0;
+        int servedCount = 0;
+
+        for (OrderItem item : order.getItems()) {
+            switch (item.getStatus()) {
+                case "Pending": pendingCount++; break;
+                case "Preparing": preparingCount++; break;
+                case "Ready": readyCount++; break;
+                case "Served": servedCount++; break;
+            }
+        }
+
+        int total = order.getItems().size();
+        if (servedCount == total) {
+            order.setStatus("Served");
+        } else if (readyCount + servedCount == total) {
+            order.setStatus("Ready");
+        } else if (preparingCount > 0 || readyCount > 0 || servedCount > 0) {
+            order.setStatus("Preparing");
+        } else {
+            order.setStatus("Pending");
+        }
+    }
+
+    /**
+     * Moves an active dining table billing sequence of an order to an empty table
+     */
+    public synchronized void moveTable(String sourceId, String targetId) {
+        Table source = tableDAO.getById(sourceId);
+        Table target = tableDAO.getById(targetId);
+
+        if (source == null || target == null) return;
+        if (source.getActiveOrderId() == null) return;
+
+        // Ensure target is empty, otherwise we merge instead
+        if (target.getActiveOrderId() != null) {
+            mergeTables(sourceId, targetId);
+            return;
+        }
+
+        String orderId = source.getActiveOrderId();
+        Order order = orderDAO.getById(orderId);
+        if (order != null) {
+            order.setTableId(targetId);
+            order.setTableName(target.getName());
+            orderDAO.update(order);
+        }
+
+        target.setStatus(source.getStatus());
+        target.setActiveOrderId(orderId);
+        tableDAO.update(target);
+
+        source.setStatus("empty");
+        source.setActiveOrderId(null);
+        tableDAO.update(source);
+
         notifyStateChange();
     }
 
+    /**
+     * Merges items from a source table into a destination table's active order
+     */
+    public synchronized void mergeTables(String sourceId, String targetId) {
+        Table source = tableDAO.getById(sourceId);
+        Table target = tableDAO.getById(targetId);
 
-    /** Chuyển order từ bàn nguồn sang bàn đích */
-    public void moveTable(String sourceTableId, String targetTableId) {
-        tableDAO.moveTable(sourceTableId, targetTableId);
+        if (source == null || target == null) return;
+        if (source.getActiveOrderId() == null) return;
+
+        String sourceOrderId = source.getActiveOrderId();
+        String targetOrderId = target.getActiveOrderId();
+
+        if (targetOrderId == null) {
+            // Target is empty - just perform regular move
+            moveTable(sourceId, targetId);
+            return;
+        }
+
+        Order sourceOrder = orderDAO.getById(sourceOrderId);
+        Order targetOrder = orderDAO.getById(targetOrderId);
+
+        if (sourceOrder != null && targetOrder != null) {
+            // Merging order items list
+            for (OrderItem sItem : sourceOrder.getItems()) {
+                // Look for an identical item in target to merge quantities
+                boolean merged = false;
+                for (OrderItem tItem : targetOrder.getItems()) {
+                    if (tItem.getMenuItemId().equals(sItem.getMenuItemId()) &&
+                        tItem.getCustomization().getSize().equals(sItem.getCustomization().getSize()) &&
+                        tItem.getCustomization().getSugar().equals(sItem.getCustomization().getSugar()) &&
+                        tItem.getCustomization().getIce().equals(sItem.getCustomization().getIce()) &&
+                        tItem.getStatus().equals(sItem.getStatus())) {
+                        
+                        tItem.setQuantity(tItem.getQuantity() + sItem.getQuantity());
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) {
+                    // Unique item, generate a new id and append
+                    sItem.setId("item-" + UUID.randomUUID().toString().substring(0, 8));
+                    targetOrder.getItems().add(sItem);
+                }
+            }
+
+            // Append order notes
+            String combinedNotes = targetOrder.getNotes();
+            if (combinedNotes == null) combinedNotes = "";
+            if (sourceOrder.getNotes() != null && !sourceOrder.getNotes().trim().isEmpty()) {
+                if (!combinedNotes.isEmpty()) combinedNotes += " | ";
+                combinedNotes += "Merged from " + source.getName() + ": " + sourceOrder.getNotes();
+            }
+            targetOrder.setNotes(combinedNotes);
+
+            // Recalculate billing amount
+            int total = 0;
+            for (OrderItem item : targetOrder.getItems()) {
+                total += item.getPrice() * item.getQuantity();
+            }
+            targetOrder.setTotalAmount(total);
+            targetOrder.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+
+            // Recalculate status
+            recalculateAggregatedOrderStatus(targetOrder);
+            orderDAO.update(targetOrder);
+
+            // Remove source order
+            sourceOrder.setStatus("Served"); // close source
+            orderDAO.update(sourceOrder);
+        }
+
+        // Reset Source Table
+        source.setStatus("empty");
+        source.setActiveOrderId(null);
+        tableDAO.update(source);
+
+        // Update Target Table Status
+        if (targetOrder != null) {
+            if ("Ready".equalsIgnoreCase(targetOrder.getStatus())) {
+                target.setStatus("ready_to_serve");
+            } else {
+                target.setStatus("serving");
+            }
+        }
+        tableDAO.update(target);
+
         notifyStateChange();
     }
 
-    /** Gộp order từ bàn nguồn sang bàn đích */
-    public void mergeTables(String sourceTableId, String targetTableId) {
-        tableDAO.mergeTables(sourceTableId, targetTableId);
+    /**
+     * Processes table billing checkout and clears seating states
+     */
+    public synchronized Order checkoutTable(String tableId) {
+        Table table = tableDAO.getById(tableId);
+        if (table == null || table.getActiveOrderId() == null) return null;
+
+        String orderId = table.getActiveOrderId();
+        Order order = orderDAO.getById(orderId);
+        if (order != null) {
+            order.setStatus("Served");
+            // Set all items as served
+            for (OrderItem item : order.getItems()) {
+                item.setStatus("Served");
+            }
+            order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+            orderDAO.update(order);
+        }
+
+        // Empty table
+        table.setStatus("empty");
+        table.setActiveOrderId(null);
+        tableDAO.update(table);
+
         notifyStateChange();
+        return order;
     }
-
-    /** Checkout bàn: hoàn tất order và trả bàn về AVAILABLE */
-    public OrderInfo checkoutTable(String tableId) {
-        int tid = Integer.parseInt(tableId.replace("t",""));
-        boolean ok = tableDAO.checkoutTable(tid);
-        notifyStateChange();
-        return ok ? orderDAO.getOrderInfo(tid) : null;
-    }
-
-    // ------------------- Các hàm bổ sung -------------------
-
-    public String advanceOrderStatus(int orderId) {
-        String next = orderDAO.advanceStatus(orderId);
-        notifyStateChange();
-        return next;
-    }
-
-    public OrderDAO.PaidResult markPaid(int orderId) {
-        OrderDAO.PaidResult result = orderDAO.markPaid(orderId);
-        notifyStateChange();
-        return result;
-    }
-
-    public boolean cancelOrder(int orderId) {
-        boolean ok = orderDAO.cancelOrder(orderId);
-        if (ok) notifyStateChange();
-        return ok;
-    }
-
-    // ------------------- Helper -------------------
 
     private void notifyStateChange() {
         if (webSocketHandler != null) {
+            // Simple robust JSON broadcast payload
             webSocketHandler.broadcast("{\"type\":\"STATE_UPDATED\"}");
         }
     }
-    private CustomizationOptions parseCustomization(Object rawCustObj) {
-        CustomizationOptions custom = new CustomizationOptions();
-        if (rawCustObj instanceof Map) {
-            Map<String, Object> rawCust = (Map<String, Object>) rawCustObj;
-            custom.setSize((String) rawCust.getOrDefault("size", "M"));
-            custom.setSugar((String) rawCust.getOrDefault("sugar", "100%"));
-            custom.setIce((String) rawCust.getOrDefault("ice", "100%"));
-        } else {
-            custom.setSize("M");
-            custom.setSugar("100%");
-            custom.setIce("100%");
-        }
-        return custom;
-    }
-    private int adjustPrice(int basePrice, String size, String sugar, String ice) {
-        int price = basePrice;
-        if ("L".equalsIgnoreCase(size)) price += 6000;
-        if ("S".equalsIgnoreCase(size)) price = Math.max(10000, price - 4000);
 
-        // Ví dụ: thêm 1000đ nếu yêu cầu "extra ice"
-        if ("extra".equalsIgnoreCase(ice)) price += 1000;
-        // Không tính thêm tiền cho sugar, nhưng bạn có thể mở rộng
-
-        return price;
+    // ==================== STAFF MANAGEMENT METHODS ====================
+    public synchronized List<Staff> getStaff() {
+        return staffDAO.getAll();
     }
 
+    public synchronized void saveStaff(Staff s) {
+        staffDAO.save(s);
+        notifyStateChange();
+    }
+
+    public synchronized void deleteStaff(int id) {
+        staffDAO.delete(id);
+        notifyStateChange();
+    }
+
+    // ==================== MEMBER LOGIC METHODS ====================
+    public synchronized List<Member> getMembers() {
+        return memberDAO.getAll();
+    }
+
+    public synchronized Member getMemberByPhone(String phone) {
+        return memberDAO.getByPhone(phone);
+    }
+
+    public synchronized void saveMember(Member m) {
+        memberDAO.save(m);
+        notifyStateChange();
+    }
+
+    public synchronized void deleteMember(String phone) {
+        memberDAO.delete(phone);
+        notifyStateChange();
+    }
+
+    // ==================== HISTORICAL FINANCIAL DATA ====================
+    public synchronized List<HistoricalReport> getHistoricalReports() {
+        List<HistoricalReport> list = new ArrayList<>();
+        
+        // 2024 Month-by-month
+        list.add(new HistoricalReport(2024, 1, 85000000L, 65000000L, 20000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 2, 120000000L, 75000000L, 45000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 3, 70000000L, 70000000L, 0L, "Break-even"));
+        list.add(new HistoricalReport(2024, 4, 65000000L, 72000000L, -7000000L, "Loss"));
+        list.add(new HistoricalReport(2024, 5, 80000000L, 68000000L, 12000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 6, 95000000L, 70000000L, 25000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 7, 55000000L, 68000000L, -13000000L, "Loss"));
+        list.add(new HistoricalReport(2024, 8, 60000000L, 60000000L, 0L, "Break-even"));
+        list.add(new HistoricalReport(2024, 9, 75000000L, 65000000L, 10000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 10, 82000000L, 66000000L, 16000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 11, 90000000L, 67000000L, 23000000L, "Profit"));
+        list.add(new HistoricalReport(2024, 12, 110000000L, 70000000L, 40000000L, "Profit"));
+
+        // 2025 Month-by-month
+        list.add(new HistoricalReport(2025, 1, 95000000L, 70000000L, 25000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 2, 130000000L, 80000000L, 50000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 3, 75000000L, 78000000L, -3000050L, "Loss"));
+        list.add(new HistoricalReport(2025, 4, 50000000L, 95000000L, -45000000L, "Loss"));
+        list.add(new HistoricalReport(2025, 5, 85000000L, 85000000L, 0L, "Break-even"));
+        list.add(new HistoricalReport(2025, 6, 100000000L, 75000000L, 25000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 7, 72000000L, 72000000L, 0L, "Break-even"));
+        list.add(new HistoricalReport(2025, 8, 80000000L, 74000000L, 6000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 9, 92000000L, 76000000L, 16000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 10, 98000000L, 75000000L, 23000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 11, 105000000L, 78000000L, 27000000L, "Profit"));
+        list.add(new HistoricalReport(2025, 12, 140000000L, 85000000L, 55000000L, "Profit"));
+
+        return list;
+    }
 }

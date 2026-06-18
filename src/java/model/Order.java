@@ -1,84 +1,62 @@
 package model;
 
-import java.sql.Timestamp;
+import java.util.List;
 
 public class Order {
-    private int orderId;
-    private Timestamp orderDate;
+    private String id;
+    private String tableId;
+    private String tableName;
+    private int orderNumber;
+    private List<OrderItem> items;
+    private String status; // Pending, Preparing, Ready, Served
+    private String createdAt;
+    private String updatedAt;
+    private String notes;
     private int totalAmount;
-    private int discountAmount;
-    private int finalAmount;
-    private String paymentMethod;
-    private String transactionId;
-    private String orderSource;
-    private String orderStatus;
-    private String paymentStatus;
-    private Integer tableId;
-    private Integer cashierId;
-    private Integer memberId;
-    private Integer voucherId;
 
-    public Order() {
-    }
+    public Order() {}
 
-    public Order(int orderId, Timestamp orderDate, int totalAmount, int discountAmount, int finalAmount, 
-                 String paymentMethod, String transactionId, String orderSource, String orderStatus, 
-                 String paymentStatus, Integer tableId, Integer cashierId, Integer memberId, Integer voucherId) {
-        this.orderId = orderId;
-        this.orderDate = orderDate;
-        this.totalAmount = totalAmount;
-        this.discountAmount = discountAmount;
-        this.finalAmount = finalAmount;
-        this.paymentMethod = paymentMethod;
-        this.transactionId = transactionId;
-        this.orderSource = orderSource;
-        this.orderStatus = orderStatus;
-        this.paymentStatus = paymentStatus;
+    public Order(String id, String tableId, String tableName, int orderNumber, List<OrderItem> items, String status, String createdAt, String updatedAt, String notes, int totalAmount) {
+        this.id = id;
         this.tableId = tableId;
-        this.cashierId = cashierId;
-        this.memberId = memberId;
-        this.voucherId = voucherId;
+        this.tableName = tableName;
+        this.orderNumber = orderNumber;
+        this.items = items;
+        this.status = status;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.notes = notes;
+        this.totalAmount = totalAmount;
     }
 
-    public int getOrderId() { return orderId; }
-    public void setOrderId(int orderId) { this.orderId = orderId; }
+    // Getters and Setters
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public Timestamp getOrderDate() { return orderDate; }
-    public void setOrderDate(Timestamp orderDate) { this.orderDate = orderDate; }
+    public String getTableId() { return tableId; }
+    public void setTableId(String tableId) { this.tableId = tableId; }
+
+    public String getTableName() { return tableName; }
+    public void setTableName(String tableName) { this.tableName = tableName; }
+
+    public int getOrderNumber() { return orderNumber; }
+    public void setOrderNumber(int orderNumber) { this.orderNumber = orderNumber; }
+
+    public List<OrderItem> getItems() { return items; }
+    public void setItems(List<OrderItem> items) { this.items = items; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
+
+    public String getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(String updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
 
     public int getTotalAmount() { return totalAmount; }
     public void setTotalAmount(int totalAmount) { this.totalAmount = totalAmount; }
-
-    public int getDiscountAmount() { return discountAmount; }
-    public void setDiscountAmount(int discountAmount) { this.discountAmount = discountAmount; }
-
-    public int getFinalAmount() { return finalAmount; }
-    public void setFinalAmount(int finalAmount) { this.finalAmount = finalAmount; }
-
-    public String getPaymentMethod() { return paymentMethod; }
-    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
-
-    public String getTransactionId() { return transactionId; }
-    public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
-
-    public String getOrderSource() { return orderSource; }
-    public void setOrderSource(String orderSource) { this.orderSource = orderSource; }
-
-    public String getOrderStatus() { return orderStatus; }
-    public void setOrderStatus(String orderStatus) { this.orderStatus = orderStatus; }
-
-    public String getPaymentStatus() { return paymentStatus; }
-    public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
-
-    public Integer getTableId() { return tableId; }
-    public void setTableId(Integer tableId) { this.tableId = tableId; }
-
-    public Integer getCashierId() { return cashierId; }
-    public void setCashierId(Integer cashierId) { this.cashierId = cashierId; }
-
-    public Integer getMemberId() { return memberId; }
-    public void setMemberId(Integer memberId) { this.memberId = memberId; }
-
-    public Integer getVoucherId() { return voucherId; }
-    public void setVoucherId(Integer voucherId) { this.voucherId = voucherId; }
 }

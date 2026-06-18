@@ -1,91 +1,44 @@
 package model;
 
 public class Member {
-
-    private int memberID;
-    private String fullName;
     private String phone;
-    private int rewardPoints;
-    private int tierID;
-    private String tierName;
-    private int tierDiscountPercent;
-    private boolean active;
+    private String name;
+    private String rank;
+    private int points;
+    private String email;
+    private String pref;
+    private String discount;
 
-    public Member() {
-    }
+    public Member() {}
 
-    public Member(int memberID, String fullName, String phone, int rewardPoints,
-                  int tierID, String tierName, boolean active) {
-        this.memberID = memberID;
-        this.fullName = fullName;
+    public Member(String phone, String name, String rank, int points, String email, String pref, String discount) {
         this.phone = phone;
-        this.rewardPoints = rewardPoints;
-        this.tierID = tierID;
-        this.tierName = tierName;
-        this.active = active;
+        this.name = name;
+        this.rank = rank;
+        this.points = points;
+        this.email = email;
+        this.pref = pref;
+        this.discount = discount;
     }
 
-    public int getMemberID() {
-        return memberID;
-    }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
 
-    public void setMemberID(int memberID) {
-        this.memberID = memberID;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public String getFullName() {
-        return fullName;
-    }
+    public String getRank() { return rank; }
+    public void setRank(String rank) { this.rank = rank; }
 
-    public void setFullName(String fullName) {
-        this.fullName = fullName;
-    }
+    public int getPoints() { return points; }
+    public void setPoints(int points) { this.points = points; }
 
-    public String getPhone() {
-        return phone;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
-    }
+    public String getPref() { return pref; }
+    public void setPref(String pref) { this.pref = pref; }
 
-    public int getRewardPoints() {
-        return rewardPoints;
-    }
-
-    public void setRewardPoints(int rewardPoints) {
-        this.rewardPoints = rewardPoints;
-    }
-
-    public int getTierID() {
-        return tierID;
-    }
-
-    public void setTierID(int tierID) {
-        this.tierID = tierID;
-    }
-
-    public String getTierName() {
-        return tierName;
-    }
-
-    public void setTierName(String tierName) {
-        this.tierName = tierName;
-    }
-
-    public int getTierDiscountPercent() {
-        return tierDiscountPercent;
-    }
-
-    public void setTierDiscountPercent(int tierDiscountPercent) {
-        this.tierDiscountPercent = tierDiscountPercent;
-    }
-
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
-    }
+    public String getDiscount() { return discount; }
+    public void setDiscount(String discount) { this.discount = discount; }
 }
