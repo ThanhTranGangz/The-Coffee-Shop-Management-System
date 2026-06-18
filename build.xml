@@ -27,8 +27,8 @@
     </target>
 
     <target name="compile" depends="init">
-        <echo message="Compiling Java Source Files for JDK 1.8..."/>
-        <javac srcdir="${src.dir}" destdir="${build.classes.dir}" includeantruntime="false" source="1.8" target="1.8">
+        <echo message="Compiling Java Source Files for JDK 17..."/>
+        <javac srcdir="${src.dir}" destdir="${build.classes.dir}" includeantruntime="false" source="17" target="17">
             <classpath refid="compile.classpath"/>
         </javac>
     </target>
