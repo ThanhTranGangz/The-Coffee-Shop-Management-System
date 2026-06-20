@@ -64,11 +64,7 @@
         (function() {
             var role = localStorage.getItem('auth_role') || '';
             var user = localStorage.getItem('auth_user') || '';
-            if (role !== 'manager') {
-                try { alert('Cảnh báo bảo mật: Bạn không có quyền quản lý để truy cập khu vực Kho nguyên liệu!'); } catch(e) { console.warn(e); }
-                window.location.href = 'login.jsp';
-                return;
-            }
+            // Security guard removed, now handled by SecurityFilter
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -114,11 +110,12 @@
             });
         })();
 
-        function handleLocalLogout() {
+        async function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
+            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS!');
-            window.location.href = 'index.html';
+            window.location.href = 'staff.html';
         }
     </script>
 </head>
