@@ -12,7 +12,7 @@
                 extend: {
                     colors: {
                         coffee: {
-                            bg: '#F6F2E9',       /* Warm Ivory Eggshell */
+                            bg: '#FAF8F3',       /* Warm Ivory Eggshell */
                             dark: '#2B1B17',     /* Deep Roasted Espresso */
                             rust: '#A04423',     /* Premium Terracotta Red-Brown */
                             sand: '#E5DEC9',     /* Soft Muted Border */
@@ -28,7 +28,7 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             color: #2B1B17;
         }
         .font-serif {
@@ -39,7 +39,7 @@
         }
         /* Grid background matching screenshot */
         .dot-grid-bg {
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             background-image: radial-gradient(#d3cbb6 1.2px, transparent 1.2px);
             background-size: 24px 24px;
         }
@@ -74,7 +74,21 @@
             var baristaPages = ['kds.jsp'];
             var managerPages = ['dashboard.jsp', 'reports.jsp', 'staff-management.jsp', 'inventory.jsp'];
 
-            // Security guard removed, now handled by SecurityFilter
+            if (waiterPages.indexOf(page) !== -1 && role !== 'waiter' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Phục vụ / Wait Station!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (baristaPages.indexOf(page) !== -1 && role !== 'barista' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Quầy pha chế (KDS)!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (managerPages.indexOf(page) !== -1 && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Bảng điều khiển Quản lý!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -193,12 +207,11 @@
             });
         })();
 
-        async function handleLocalLogout() {
+        function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS! Chuyển hướng về cổng portal.');
-            window.location.href = 'staff.html';
+            window.location.href = 'index.html';
         }
     </script>
 </head>
@@ -315,6 +328,9 @@
                     <button onclick="setManagementTab('crm')" id="tab-btn-crm" class="px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer">
                         🎯 Hồ sơ Khách hàng CRM
                     </button>
+                    <button onclick="setManagementTab('shifts')" id="tab-btn-shifts" class="px-3 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer">
+                        📅 Phân ca trực Shift
+                    </button>
                 </div>
                 <div class="hidden sm:block">
                     <input type="text" id="management-search-input" oninput="handleDirectorySearch()" placeholder="Tìm kiếm nhanh..." class="text-xs px-3 py-1.5 bg-coffee-light border border-coffee-sand rounded-xl focus:outline-none focus:border-coffee-rust">
@@ -366,6 +382,54 @@
                         </thead>
                         <tbody id="crm-table-body" class="divide-y divide-coffee-sand/20 font-medium">
                             <!-- Loaded dynamically from localStorage/MemberDb -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Content Panel 3: Shifts Management (Initially hidden) -->
+            <div id="panel-shifts" class="hidden space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div>
+                         <h3 class="font-serif italic font-bold text-base text-coffee-dark">Bảng phân lịch ca trực (Shift Management)</h3>
+                         <p class="text-[10px] text-coffee-milk">Quản lý và lập lịch làm việc cho các nhân viên phục vụ & pha chế trong ngày.</p>
+                    </div>
+                    <button onclick="openAddShiftModal()" class="px-3.5 py-1.5 text-xs font-bold bg-coffee-rust text-white rounded-xl hover:bg-coffee-rust/95 cursor-pointer">
+                        + Tạo ca trực mới 📅
+                    </button>
+                </div>
+
+                <!-- Shift Statistics Cards -->
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-coffee-light/60 p-3 rounded-2xl border border-coffee-sand/40">
+                         <span class="text-[9.5px] uppercase font-mono font-bold text-coffee-milk block">Ca Sáng (06:00 - 12:00)</span>
+                         <span id="shift-count-morning" class="text-sm font-serif italic font-bold text-coffee-dark">0 nhân sự</span>
+                    </div>
+                    <div class="bg-coffee-light/60 p-3 rounded-2xl border border-coffee-sand/40">
+                         <span class="text-[9.5px] uppercase font-mono font-bold text-coffee-milk block">Ca Chiều (12:00 - 18:00)</span>
+                         <span id="shift-count-afternoon" class="text-sm font-serif italic font-bold text-coffee-dark">0 nhân sự</span>
+                    </div>
+                    <div class="bg-coffee-light/60 p-3 rounded-2xl border border-coffee-sand/40">
+                         <span class="text-[9.5px] uppercase font-mono font-bold text-coffee-milk block">Ca Tối (18:00 - 24:00)</span>
+                         <span id="shift-count-evening" class="text-sm font-serif italic font-bold text-coffee-dark">0 nhân sự</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-coffee-sand font-bold text-coffee-milk text-[10px] uppercase font-mono bg-coffee-light/50">
+                                <th class="py-3 px-4">Nhân viên trực</th>
+                                <th class="py-3 px-4">Ngày trực</th>
+                                <th class="py-3 px-4">Ca làm việc</th>
+                                <th class="py-3 px-4">Khung giờ</th>
+                                <th class="py-3 px-4">Trạng thái</th>
+                                <th class="py-3 px-4">Ghi chú</th>
+                                <th class="py-3 px-4 text-center">Tác vụ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shifts-table-body" class="divide-y divide-coffee-sand/20 font-medium animate-fade-in">
+                            <!-- Loaded dynamically from /api/shifts -->
                         </tbody>
                     </table>
                 </div>
@@ -467,13 +531,15 @@
 
     let staffRoster = [];
     let crmCustomers = [];
+    let shiftsList = [];
 
     // Load data from Java API endpoints
     async function loadAllData() {
         try {
-            const [staffRes, crmRes] = await Promise.all([
+            const [staffRes, crmRes, shiftsRes] = await Promise.all([
                 fetch('/api/staff'),
-                fetch('/api/members')
+                fetch('/api/members'),
+                fetch('/api/shifts')
             ]);
             
             if (staffRes.ok) {
@@ -482,39 +548,56 @@
             if (crmRes.ok) {
                 crmCustomers = await crmRes.json();
             }
+            if (shiftsRes.ok) {
+                shiftsList = await shiftsRes.json();
+            }
         } catch (e) {
             console.warn('API error, falling back to local cookies or storage', e);
             // Fallback loads
             staffRoster = JSON.parse(localStorage.getItem('staff_roster')) || [];
             crmCustomers = JSON.parse(localStorage.getItem('local_member_db')) || [];
+            shiftsList = JSON.parse(localStorage.getItem('shifts_list')) || [];
         }
 
         // Cache inside localStorage as fallback index
         localStorage.setItem('staff_roster', JSON.stringify(staffRoster));
         localStorage.setItem('local_member_db', JSON.stringify(crmCustomers));
+        localStorage.setItem('shifts_list', JSON.stringify(shiftsList));
+
+        // Re-populate modal select
+        populateStaffSelector();
 
         // Re-draw panels
         handleDirectorySearch();
     }
 
-    // Switch CRM / Staff tabs
+    // Switch CRM / Staff / Shifts tabs
     function setManagementTab(tab) {
         activeManagementTab = tab;
         const btnStaff = document.getElementById('tab-btn-staff');
         const btnCrm = document.getElementById('tab-btn-crm');
+        const btnShifts = document.getElementById('tab-btn-shifts');
         const pStaff = document.getElementById('panel-staff');
         const pCrm = document.getElementById('panel-crm');
+        const pShifts = document.getElementById('panel-shifts');
+
+        btnStaff.className = "px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer";
+        btnCrm.className = "px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer";
+        btnShifts.className = "px-3 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer";
+
+        pStaff.classList.add('hidden');
+        pCrm.classList.add('hidden');
+        pShifts.classList.add('hidden');
 
         if (tab === 'staff') {
             btnStaff.className = "px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-rust bg-coffee-rust text-white shadow-3xs cursor-pointer";
-            btnCrm.className = "px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer";
             pStaff.classList.remove('hidden');
-            pCrm.classList.add('hidden');
-        } else {
+        } else if (tab === 'crm') {
             btnCrm.className = "px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-rust bg-coffee-rust text-white shadow-3xs cursor-pointer";
-            btnStaff.className = "px-4 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-sand text-coffee-milk hover:text-coffee-dark bg-white hover:bg-coffee-light/40 cursor-pointer";
-            pStaff.classList.add('hidden');
             pCrm.classList.remove('hidden');
+        } else if (tab === 'shifts') {
+            btnShifts.className = "px-3 py-2 text-xs font-bold rounded-xl transition-all border border-coffee-rust bg-coffee-rust text-white shadow-3xs cursor-pointer";
+            pShifts.classList.remove('hidden');
         }
         handleDirectorySearch();
     }
@@ -523,8 +606,196 @@
         searchQuery = document.getElementById('management-search-input').value.toLowerCase().trim();
         if (activeManagementTab === 'staff') {
             drawStaffRoster();
-        } else {
+        } else if (activeManagementTab === 'crm') {
             drawCrmDirectory();
+        } else if (activeManagementTab === 'shifts') {
+            drawShiftsPanel();
+        }
+    }
+
+    function populateStaffSelector() {
+        const select = document.getElementById('shift-staff-id');
+        if (!select) return;
+        select.innerHTML = '<option value="">-- Chọn nhân sự --</option>';
+        staffRoster.forEach(s => {
+            if (s.role !== 'manager') {
+                const roleText = s.role === 'barista' ? 'Pha chế' : 'Phục vụ';
+                select.innerHTML += `<option value="${s.id}">${s.name} (${roleText})</option>`;
+            }
+        });
+    }
+
+    function suggestShiftHours() {
+        const val = document.getElementById('shift-name-sel').value;
+        const input = document.getElementById('shift-hours');
+        if (!input) return;
+        if (val === 'Ca sáng') {
+            input.value = '06:00 - 12:00';
+        } else if (val === 'Ca chiều') {
+            input.value = '12:00 - 18:00';
+        } else if (val === 'Ca tối') {
+            input.value = '18:00 - 24:00';
+        } else {
+            input.value = '08:00 - 17:00';
+        }
+    }
+
+    function drawShiftsPanel() {
+        const tbody = document.getElementById('shifts-table-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        // Calculate counts
+        let morningCount = 0;
+        let afternoonCount = 0;
+        let eveningCount = 0;
+
+        shiftsList.forEach(s => {
+            if (s.shiftName === 'Ca sáng') morningCount++;
+            else if (s.shiftName === 'Ca chiều') afternoonCount++;
+            else if (s.shiftName === 'Ca tối') eveningCount++;
+        });
+
+        const morningText = document.getElementById('shift-count-morning');
+        const afternoonText = document.getElementById('shift-count-afternoon');
+        const eveningText = document.getElementById('shift-count-evening');
+        if (morningText) morningText.innerText = `${morningCount} nhân sự`;
+        if (afternoonText) afternoonText.innerText = `${afternoonCount} nhân sự`;
+        if (eveningText) eveningText.innerText = `${eveningCount} nhân sự`;
+
+        // Filter and display
+        const list = shiftsList.filter(s => {
+            return searchQuery === '' ||
+                s.staffName.toLowerCase().includes(searchQuery) ||
+                s.shiftName.toLowerCase().includes(searchQuery) ||
+                s.shiftDate.includes(searchQuery) ||
+                (s.notes && s.notes.toLowerCase().includes(searchQuery));
+        });
+
+        if (list.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-coffee-milk italic">Không tìm thấy ca trực nào!</td></tr>`;
+            return;
+        }
+
+        list.forEach(s => {
+            const statusClr = s.status === 'Tăng ca'
+                ? 'bg-orange-50 text-orange-800 border-orange-200'
+                : s.status === 'Tan ca'
+                    ? 'bg-gray-100 text-gray-700 border-gray-200'
+                    : s.status === 'Vắng mặt'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : 'bg-emerald-50 text-emerald-800 border-emerald-200';
+
+            tbody.innerHTML += `
+                <tr class="hover:bg-coffee-light/25 transition-colors">
+                    <td class="py-3 px-4 font-bold text-coffee-dark">${s.staffName}</td>
+                    <td class="py-3 px-4 font-mono font-bold text-coffee-milk">${s.shiftDate}</td>
+                    <td class="py-3 px-4">
+                        <span class="text-[9.5px] font-bold px-2 py-0.5 border border-coffee-sand/70 rounded-full bg-coffee-light text-coffee-dark font-mono">
+                            ${s.shiftName}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 font-mono text-coffee-dark">${s.hours}</td>
+                    <td class="py-3 px-4">
+                        <span class="text-[9.5px] font-bold px-2 py-0.5 border rounded-full ${statusClr}">
+                            ${s.status}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4 text-coffee-milk italic text-[11px]">${s.notes || '-'}</td>
+                    <td class="py-3 px-4 text-center">
+                        <div class="flex items-center justify-center gap-1.5">
+                            <button onclick="openEditShiftModal('${s.id}')" class="text-coffee-dark hover:text-coffee-rust font-bold cursor-pointer">Sửa</button>
+                            <span class="text-coffee-sand">|</span>
+                            <button onclick="deleteShiftItem('${s.id}')" class="text-coffee-milk hover:text-red-650 cursor-pointer">Xoá</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function openAddShiftModal() {
+        document.getElementById('shift-id').value = '';
+        document.getElementById('shift-staff-id').value = '';
+        document.getElementById('shift-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('shift-name-sel').value = 'Ca sáng';
+        document.getElementById('shift-hours').value = '06:00 - 12:00';
+        document.getElementById('shift-status-sel').value = 'Hoạt động';
+        document.getElementById('shift-notes').value = '';
+
+        document.getElementById('shift-modal-title').innerText = 'Lên ca trực mới';
+        document.getElementById('shift-modal').classList.remove('hidden');
+    }
+
+    function closeShiftModal() {
+        document.getElementById('shift-modal').classList.add('hidden');
+    }
+
+    function openEditShiftModal(id) {
+        const s = shiftsList.find(x => x.id === id);
+        if (!s) return;
+
+        document.getElementById('shift-id').value = s.id;
+        document.getElementById('shift-staff-id').value = s.staffId || '';
+        document.getElementById('shift-date').value = s.shiftDate || '';
+        document.getElementById('shift-name-sel').value = s.shiftName || 'Ca sáng';
+        document.getElementById('shift-hours').value = s.hours || '06:00 - 12:00';
+        document.getElementById('shift-status-sel').value = s.status || 'Hoạt động';
+        document.getElementById('shift-notes').value = s.notes || '';
+
+        document.getElementById('shift-modal-title').innerText = 'Chỉnh sửa ca trực';
+        document.getElementById('shift-modal').classList.remove('hidden');
+    }
+
+    async function handleSaveShift(e) {
+        e.preventDefault();
+        const id = document.getElementById('shift-id').value;
+        const staffId = document.getElementById('shift-staff-id').value;
+        const shiftDate = document.getElementById('shift-date').value;
+        const shiftName = document.getElementById('shift-name-sel').value;
+        const hours = document.getElementById('shift-hours').value;
+        const status = document.getElementById('shift-status-sel').value;
+        const notes = document.getElementById('shift-notes').value;
+
+        if (!staffId) {
+            alert('Vui lòng chọn nhân viên làm việc!');
+            return;
+        }
+
+        const payload = { id, staffId, shiftDate, shiftName, hours, status, notes };
+
+        try {
+            const res = await fetch('/api/shifts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok) {
+                flashNotify('📅 Đã cập nhật thành công ca trực nhân viên!');
+                closeShiftModal();
+                loadAllData();
+            } else {
+                alert('Khởi tạo ca trực thất bại!');
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function deleteShiftItem(id) {
+        if (!confirm('Xóa ca trực này khỏi ca làm ngày hôm nay?')) return;
+        try {
+            const res = await fetch('/api/shifts/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) {
+                flashNotify('🗑️ Đã xoá bỏ nhiệm vụ ca trực.');
+                loadAllData();
+            }
+        } catch (err) {
+            console.error(err);
         }
     }
 
@@ -837,6 +1108,72 @@
 </script>
 
     </main>
+
+    <!-- REAL-TIME SHIFT WORK DIALOG MODAL -->
+    <div id="shift-modal" class="hidden fixed inset-0 bg-coffee-dark/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-fade-in">
+        <div class="bg-white border border-coffee-sand rounded-3xl p-6 shadow-2xl max-w-md w-full space-y-4">
+            <h4 class="font-serif italic font-bold text-lg text-coffee-dark border-b border-coffee-light pb-2 flex items-center justify-between">
+                <span id="shift-modal-title">Lên ca trực mới</span>
+                <button onclick="closeShiftModal()" class="text-sm text-coffee-milk hover:text-coffee-rust cursor-pointer">✕</button>
+            </h4>
+            <form onsubmit="handleSaveShift(event)" class="space-y-4">
+                <input type="hidden" id="shift-id">
+                
+                <div class="space-y-1">
+                    <label class="text-[10px] font-bold uppercase text-coffee-milk block">Chọn Nhân viên trực</label>
+                    <select id="shift-staff-id" required class="w-full text-xs px-3 py-2 bg-coffee-light border border-coffee-sand rounded-xl text-coffee-dark focus:outline-none focus:border-coffee-rust cursor-pointer">
+                        <!-- Loaded dynamically based on staffRoster -->
+                    </select>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-[10px] font-bold uppercase text-coffee-milk block">Ngày phân ca</label>
+                    <input type="date" id="shift-date" required class="w-full text-xs px-3 py-2 bg-coffee-light border border-coffee-sand rounded-xl focus:outline-none focus:border-coffee-rust">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold uppercase text-coffee-milk block font-mono">Tên ca trực</label>
+                        <select id="shift-name-sel" onchange="suggestShiftHours()" class="w-full text-xs px-3 py-2 bg-coffee-light border border-coffee-sand rounded-xl text-coffee-dark focus:outline-none focus:border-coffee-rust cursor-pointer">
+                            <option value="Ca sáng">Ca sáng</option>
+                            <option value="Ca chiều">Ca chiều</option>
+                            <option value="Ca tối">Ca tối</option>
+                            <option value="Toàn thời gian">Toàn thời gian</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold uppercase text-coffee-milk block">Khung giờ trực</label>
+                        <input type="text" id="shift-hours" required placeholder="06:00 - 12:00" class="w-full text-xs px-3 py-2 bg-coffee-light border border-coffee-sand rounded-xl focus:outline-none focus:border-coffee-rust">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold uppercase text-coffee-milk block">Trạng thái</label>
+                        <select id="shift-status-sel" class="w-full text-xs px-3 py-2 bg-coffee-light border border-coffee-sand rounded-xl text-coffee-dark focus:outline-none focus:border-coffee-rust cursor-pointer font-semibold text-emerald-800">
+                            <option value="Hoạt động" class="text-emerald-800">🟢 Hoạt động</option>
+                            <option value="Tăng ca" class="text-amber-800">🕒 Tăng ca</option>
+                            <option value="Tan ca" class="text-gray-800">🕊️ Đã tan ca</option>
+                            <option value="Vắng mặt" class="text-red-800">❌ Vắng mặt</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-[10px] font-bold uppercase text-coffee-milk block">Ghi chú công việc</label>
+                        <input type="text" id="shift-notes" placeholder="Trực quầy bar trà sữa" class="w-full text-xs px-3 py-2 bg-coffee-light border border-coffee-sand rounded-xl focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="flex gap-2.5 pt-2">
+                    <button type="button" onclick="closeShiftModal()" class="flex-1 bg-coffee-light border border-coffee-sand/70 text-coffee-dark font-bold py-2.5 rounded-xl text-xs uppercase hover:bg-coffee-sand/20 cursor-pointer text-center">
+                        Hủy bỏ
+                    </button>
+                    <button type="submit" class="flex-1 bg-coffee-rust text-white font-bold py-2.5 rounded-xl text-xs uppercase hover:bg-coffee-rust/95 cursor-pointer text-center">
+                        Lưu ca trực 💾
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <!-- ==================== FOOTER SYSTEM INFORMATION ==================== -->
     <footer class="mt-auto py-6 border-t border-coffee-sand/70 bg-white/70 backdrop-blur-xs text-xs text-coffee-milk">

@@ -12,7 +12,7 @@
                 extend: {
                     colors: {
                         coffee: {
-                            bg: '#F6F2E9',       /* Warm Ivory Eggshell */
+                            bg: '#FAF8F3',       /* Warm Ivory Eggshell */
                             dark: '#2B1B17',     /* Deep Roasted Espresso */
                             rust: '#A04423',     /* Premium Terracotta Red-Brown */
                             sand: '#E5DEC9',     /* Soft Muted Border */
@@ -28,7 +28,7 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             color: #2B1B17;
         }
         .font-serif {
@@ -39,7 +39,7 @@
         }
         /* Grid background matching screenshot */
         .dot-grid-bg {
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             background-image: radial-gradient(#d3cbb6 1.2px, transparent 1.2px);
             background-size: 24px 24px;
         }
@@ -74,7 +74,21 @@
             var baristaPages = ['kds.jsp'];
             var managerPages = ['dashboard.jsp', 'reports.jsp', 'staff-management.jsp', 'inventory.jsp'];
 
-            // Security guard removed, now handled by SecurityFilter
+            if (waiterPages.indexOf(page) !== -1 && role !== 'waiter' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Phục vụ / Wait Station!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (baristaPages.indexOf(page) !== -1 && role !== 'barista' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Quầy pha chế (KDS)!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (managerPages.indexOf(page) !== -1 && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Bảng điều khiển Quản lý!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -193,12 +207,11 @@
             });
         })();
 
-        async function handleLocalLogout() {
+        function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS! Chuyển hướng về cổng portal.');
-            window.location.href = 'staff.html';
+            window.location.href = 'index.html';
         }
     </script>
 </head>

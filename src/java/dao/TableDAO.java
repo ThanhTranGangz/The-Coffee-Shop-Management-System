@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TableDAO {
-    private List<Table> fallbackTables;
+    private List<Table> fallbackTables = new ArrayList<>();
 
     public List<Table> getAll() {
         List<Table> tables = new ArrayList<>();
@@ -30,8 +30,10 @@ public class TableDAO {
                 
                 tables.add(new Table(id, name, zone, status, capacity, activeOrderId));
             }
+            // Sync fallback to the database contents
+            fallbackTables = new ArrayList<>(tables);
         } catch (Exception e) {
-            System.err.println("Database fetch failed in TableDAO.getAll(), falling back to mocked list: " + e.getMessage());
+            System.err.println("Database fetch failed in TableDAO.getAll(), falling back to synced list: " + e.getMessage());
             return getFallbackTables();
         }
         
@@ -60,7 +62,7 @@ public class TableDAO {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Database fetch failed in TableDAO.getById(), searching fallback context...");
+            System.err.println("Database fetch failed in TableDAO.getById(), searching cached fallback context...");
         }
         
         return getFallbackTables().stream()
@@ -72,7 +74,6 @@ public class TableDAO {
     public void update(Table table) {
         String sql = "UPDATE dbo.Tables SET name = ?, zone = ?, status = ?, capacity = ?, activeOrderId = ? WHERE id = ?";
         DBContext db = new DBContext();
-        boolean dbSuccess = false;
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
             
@@ -82,13 +83,9 @@ public class TableDAO {
             st.setInt(4, table.getCapacity());
             st.setString(5, table.getActiveOrderId());
             st.setString(6, table.getId());
-            
-            int affected = st.executeUpdate();
-            if (affected > 0) {
-                dbSuccess = true;
-            }
+            st.executeUpdate();
         } catch (Exception e) {
-            System.err.println("Database update failed in TableDAO.update(), applying memory update to fallback lists: " + e.getMessage());
+            System.err.println("Database update failed in TableDAO.update(), applying memory update to cached list: " + e.getMessage());
         }
         
         // Ensure memory fallback stays updated in real-time
@@ -102,31 +99,12 @@ public class TableDAO {
             existing.setStatus(table.getStatus());
             existing.setCapacity(table.getCapacity());
             existing.setActiveOrderId(table.getActiveOrderId());
+        } else {
+            fallbackTables.add(table);
         }
     }
 
     private List<Table> getFallbackTables() {
-        if (fallbackTables == null) {
-            fallbackTables = new ArrayList<>();
-            // Ground Floor
-            fallbackTables.add(new Table("t1", "Table 1", "Ground Floor", "empty", 2, null));
-            fallbackTables.add(new Table("t2", "Table 2", "Ground Floor", "empty", 2, null));
-            fallbackTables.add(new Table("t3", "Table 3", "Ground Floor", "empty", 4, null));
-            fallbackTables.add(new Table("t4", "Table 4", "Ground Floor", "empty", 6, null));
-
-            // Terrace
-            fallbackTables.add(new Table("t5", "Terrace A", "Terrace", "empty", 2, null));
-            fallbackTables.add(new Table("t6", "Terrace B", "Terrace", "empty", 2, null));
-            fallbackTables.add(new Table("t7", "Terrace C", "Terrace", "empty", 4, null));
-            fallbackTables.add(new Table("t8", "Terrace Custom", "Terrace", "empty", 4, null));
-
-            // Upper Floor
-            fallbackTables.add(new Table("t9", "Upper Room 1", "Upper Floor", "empty", 4, null));
-            fallbackTables.add(new Table("t10", "Upper Room 2", "Upper Floor", "empty", 4, null));
-            fallbackTables.add(new Table("t11", "Upper Balcony", "Upper Floor", "empty", 2, null));
-            fallbackTables.add(new Table("t12", "Upper Lounge", "Upper Floor", "empty", 8, null));
-        }
         return fallbackTables;
     }
 }
-

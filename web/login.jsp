@@ -74,7 +74,21 @@
             var baristaPages = ['kds.jsp'];
             var managerPages = ['dashboard.jsp', 'reports.jsp', 'staff-management.jsp', 'inventory.jsp'];
 
-            // Security guard removed, now handled by SecurityFilter
+            if (waiterPages.indexOf(page) !== -1 && role !== 'waiter' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Phục vụ / Wait Station!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (baristaPages.indexOf(page) !== -1 && role !== 'barista' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Quầy pha chế (KDS)!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (managerPages.indexOf(page) !== -1 && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Bảng điều khiển Quản lý!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -193,12 +207,11 @@
             });
         })();
 
-        async function handleLocalLogout() {
+        function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS! Chuyển hướng về cổng portal.');
-            window.location.href = 'staff.html';
+            window.location.href = 'index.html';
         }
     </script>
 </head>
@@ -350,37 +363,122 @@
 <script>
     async function handleMockLogin(e) {
         e.preventDefault();
-        const username = document.getElementById('username').value.trim();
-        const password = document.getElementById('password').value;
+        const typedUser = document.getElementById('username').value.trim();
+        const typedPass = document.getElementById('password').value;
 
+        let roster = [];
         try {
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
+            const res = await fetch('/api/staff');
+            if (res.ok) roster = await res.json();
+        } catch (err) {
+            console.warn('API error fetching staff, using local storage.');
+        }
 
-            const data = await res.json();
+        if (roster.length === 0) {
+            roster = JSON.parse(localStorage.getItem('staff_roster')) || [];
+        }
+
+        if (roster.length === 0 || !roster.some(s => s.username === 'waiter1')) {
+            roster = [
+                { id: 1, name: 'Quản lý Hệ Thống', role: 'manager', pin: '8888', shift: 'Toàn thời gian', active: true, username: 'admin', password: '123456', status: 'Active', overtime: false },
+                { id: 2, name: 'Nhân viên Phục vụ (waiter1)', role: 'waiter', pin: '1234', shift: 'Ca sáng (06:00 - 12:00)', active: true, username: 'waiter1', password: '123456', status: 'Active', overtime: false },
+                { id: 3, name: 'Nhân viên Pha chế (barista1)', role: 'barista', pin: '3333', shift: 'Ca chiều (12:00 - 18:00)', active: true, username: 'barista1', password: '123456', status: 'Active', overtime: false }
+            ];
+            localStorage.setItem('staff_roster', JSON.stringify(roster));
+        }
+
+        let matched = roster.find(s => s.username === typedUser);
+
+        if (!matched) {
+            alert('Tài khoản nhân viên này không tồn tại trên hệ thống!');
+            return false;
+        }
+
+        if (matched.password !== typedPass) {
+            alert('Mật khẩu đăng nhập không chính xác! Vui lòng thử lại.');
+            return false;
+        }
+
+        // Perform Gating hours & deactivation check
+        if (matched.role !== 'manager') {
+            const currentHour = new Date().getHours();
             
-            if (res.ok) {
-                localStorage.setItem('auth_role', data.role);
-                localStorage.setItem('auth_user', data.user);
-                
-                alert(`🔑 ${data.message}! Chào mừng ${data.user}.`);
-                
-                if (data.role === 'barista') {
-                    window.location.href = 'kds.jsp';
-                } else if (data.role === 'manager') {
-                    window.location.href = 'dashboard.jsp';
-                } else {
-                    window.location.href = 'waitstation.jsp';
+            // Auto restore Temp_Inactive and Off_Duty if day advanced
+            const todayStr = new Date().toDateString();
+            const lastSessionDay = localStorage.getItem('last_deactivation_check_day');
+            if (lastSessionDay && lastSessionDay !== todayStr) {
+                if (matched.status === 'Temp_Inactive' || matched.status === 'Off_Duty') {
+                    matched.status = 'Active';
+                    matched.active = true;
+                    try {
+                        await fetch('/api/staff', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(matched)
+                        });
+                    } catch (e) {}
+                }
+                localStorage.setItem('last_deactivation_check_day', todayStr);
+            } else {
+                localStorage.setItem('last_deactivation_check_day', todayStr);
+            }
+
+            const status = matched.status || 'Active';
+            if (status === 'Temp_Inactive') {
+                alert('⏸️ Tài khoản của bạn hiện đang bị VÔ HIỆU HÓA TẠM THỜI bởi quản lý cho ngày hôm nay. Vui lòng quay lại vào ngày mai khi tài khoản được kích hoạt lại tự động!');
+                return false;
+            }
+            if (status === 'Perm_Inactive') {
+                alert('🔒 Tài khoản của bạn đã bị KHÓA VĨNH VIỄN trên hệ thống. Vui lòng liên hệ Người quản lý trực tiếp để được mở khóa thủ công.');
+                return false;
+            }
+            if (status === 'Off_Duty') {
+                alert('🕊️ Bạn đã được Quản trị viên thông báo tan làm sớm hôm nay! Trạng thái trực tạm ngưng hiệu lực.');
+                return false;
+            }
+
+            // Check shift boundaries unless they have approved overtime
+            if (!matched.overtime) {
+                const shiftStr = matched.shift || '';
+                if (shiftStr.includes('Ca sáng') || shiftStr.includes('sáng')) {
+                    if (currentHour < 6 || currentHour >= 12) {
+                        alert('⏰ Tài khoản của bạn thuộc Ca Sáng (06:00 - 12:00) đã hết giờ trực ca hoặc chưa đến múi trực! Vui lòng chờ đến ngày mai hoặc yêu cầu quản lý cho phép Tăng ca (Overtime).');
+                        return false;
+                    }
+                } else if (shiftStr.includes('Ca chiều') || shiftStr.includes('chiều')) {
+                    if (currentHour < 12 || currentHour >= 18) {
+                        alert('⏰ Tài khoản của bạn thuộc Ca Chiều (12:00 - 18:00) hiện tại không thuộc múi trực ca hoặc chưa đến giờ! Vui lòng xin cấp tăng ca hoặc chờ đến ca chiều.');
+                        return false;
+                    }
+                } else if (shiftStr.includes('Ca tối') || shiftStr.includes('tối')) {
+                    if (currentHour < 18 || currentHour >= 24) {
+                        alert('⏰ Tài khoản của bạn thuộc Ca Tối (18:00 - 24:00) không thuộc múi giờ ca tối hiện hành!');
+                        return false;
+                    }
                 }
             } else {
-                alert(data.error || 'Lỗi đăng nhập!');
+                // Past 24:00 (midnight), overtime concludes
+                if (currentHour >= 24 || currentHour < 6) {
+                    alert('⏰ Ca tăng ca phụ vụ trong ngày chỉ kéo dài đến 24:00 đêm! Giao dịch POS đã khép ca.');
+                    return false;
+                }
             }
-        } catch (err) {
-            alert('Lỗi kết nối đến máy chủ xác thực!');
-            console.error(err);
+        }
+
+        const finalRole = matched.role;
+        const finalUser = matched.name;
+
+        localStorage.setItem('auth_role', finalRole);
+        localStorage.setItem('auth_user', finalUser);
+
+        alert(`🔑 Đăng nhập thành công với vai trò: ${finalRole === 'manager' ? 'Quản lý (Manager)' : finalRole === 'barista' ? 'Pha chế (Barista)' : 'Phục vụ (Waiter)'}! Chào mừng ${finalUser}.`);
+
+        if (finalRole === 'barista') {
+            window.location.href = 'kds.jsp';
+        } else if (finalRole === 'manager') {
+            window.location.href = 'dashboard.jsp';
+        } else {
+            window.location.href = 'waitstation.jsp';
         }
         return false;
     }

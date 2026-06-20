@@ -12,7 +12,7 @@
                 extend: {
                     colors: {
                         coffee: {
-                            bg: '#F6F2E9',       /* Warm Ivory Eggshell */
+                            bg: '#FAF8F3',       /* Warm Ivory Eggshell */
                             dark: '#2B1B17',     /* Deep Roasted Espresso */
                             rust: '#A04423',     /* Premium Terracotta Red-Brown */
                             sand: '#E5DEC9',     /* Soft Muted Border */
@@ -28,7 +28,7 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             color: #2B1B17;
         }
         .font-serif {
@@ -39,7 +39,7 @@
         }
         /* Grid background matching screenshot */
         .dot-grid-bg {
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             background-image: radial-gradient(#d3cbb6 1.2px, transparent 1.2px);
             background-size: 24px 24px;
         }
@@ -74,7 +74,21 @@
             var baristaPages = ['kds.jsp'];
             var managerPages = ['dashboard.jsp', 'reports.jsp', 'staff-management.jsp', 'inventory.jsp'];
 
-            // Security guard removed, now handled by SecurityFilter
+            if (waiterPages.indexOf(page) !== -1 && role !== 'waiter' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Phục vụ / Wait Station!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (baristaPages.indexOf(page) !== -1 && role !== 'barista' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Quầy pha chế (KDS)!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (managerPages.indexOf(page) !== -1 && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Bảng điều khiển Quản lý!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -195,16 +209,15 @@
             });
         })();
 
-        async function handleLocalLogout() {
+        function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS! Chuyển hướng về cổng portal.');
-            window.location.href = 'staff.html';
+            window.location.href = 'index.html';
         }
     </script>
 </head>
-<body class="min-h-screen bg-[#F6F2E9] selection:bg-coffee-rust/10 selection:text-coffee-rust">
+<body class="min-h-screen bg-[#FAF8F3] selection:bg-coffee-rust/10 selection:text-coffee-rust">
     <div class="flex min-h-screen">
         <!-- LEFT SIDEBAR -->
         <aside class="w-64 bg-white text-coffee-dark flex flex-col border-r border-coffee-sand/70 shrink-0 sticky top-0 h-screen hidden md:flex" id="aside-sidebar">
@@ -214,7 +227,7 @@
                     ☕
                 </div>
                 <div>
-                    <h1 class="text-base font-serif italic font-bold text-coffee-dark tracking-tight leading-none">Family Cafe</h1>
+                    <h1 class="text-base font-serif italic font-bold text-coffee-dark tracking-tight leading-none">Nhà cà phê</h1>
                     <span class="text-[9.5px] text-[#8E7D6F] font-semibold tracking-wide uppercase">Quản lý quán cafe</span>
                 </div>
             </div>
@@ -268,7 +281,7 @@
         </aside>
 
         <!-- RIGHT MAIN PANELS -->
-        <main class="flex-1 flex flex-col h-screen overflow-y-auto bg-[#F6F2E9]" id="main-scroll-panel">
+        <main class="flex-1 flex flex-col h-screen overflow-y-auto bg-[#FAF8F3]" id="main-scroll-panel">
             
             <!-- HEADER / welcome bar -->
             <header class="bg-white/90 backdrop-blur border-b border-[#E5DEC9]/70 sticky top-0 z-30 px-6 py-4 flex items-center justify-between shadow-xs">
@@ -293,17 +306,44 @@
                     </div>
 
                     <!-- Live separate clock -->
-                    <div class="bg-coffee-light border border-coffee-sand/70 px-3.5 py-1.5 rounded-xl flex items-center gap-2 font-mono text-[11px] text-coffee-rust shadow-xs select-none">
+                    <div id="nav-clock-container" class="bg-coffee-light border border-coffee-sand/70 px-3.5 py-1.5 rounded-xl flex items-center gap-2 font-mono text-[11px] text-coffee-rust shadow-xs select-none">
                         <span>⏰</span>
                         <span id="nav-clock-separate" class="font-bold">--:--:--</span>
                     </div>
 
                     <!-- Date display mimicking screenshot calendar box -->
-                    <div class="relative bg-white border border-[#E5DEC9] px-3.5 py-1.5 rounded-xl flex items-center gap-2 font-mono text-[11px] text-coffee-dark shadow-xs hover:border-[#A04423]/60 transition-all cursor-pointer select-none" title="Nhấp vào để chọn ngày xem lịch sử">
-                        <span>🗓️</span>
-                        <span id="date-picker-visual">18/06/2026</span>
-                        <span class="text-[9px] text-[#8E7D6F]">↕</span>
-                        <input type="date" id="calendar-date-input" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full" onchange="onDateChanged(this.value)">
+                    <div class="relative">
+                        <div onclick="toggleCalendarDropdown(event)" class="relative bg-white border border-[#E5DEC9] px-3.5 py-1.5 rounded-xl flex items-center gap-2 font-mono text-[11px] text-coffee-dark shadow-xs hover:border-[#A04423]/60 transition-all cursor-pointer select-none" title="Nhấp vào để chọn ngày xem lịch sử">
+                            <span>🗓️</span>
+                            <span id="date-picker-visual">20/06/2026</span>
+                            <span class="text-[9px] text-[#8E7D6F]">↕</span>
+                        </div>
+                        
+                        <!-- CALENDAR CUSTOM DROPDOWN -->
+                        <div id="calendar-dropdown" class="absolute right-0 mt-2 bg-white border border-[#E5DEC9] rounded-2xl shadow-xl p-4 hidden z-50 w-72">
+                            <!-- Header with Month/Year Navigation -->
+                            <div class="flex items-center justify-between mb-3 border-b border-coffee-light pb-2">
+                                <button onclick="changeCalendarMonth(-1, event)" class="p-1 hover:bg-coffee-light rounded text-coffee-dark font-bold cursor-pointer select-none">&lt;</button>
+                                <span id="calendar-month-year-label" class="font-serif italic font-bold text-xs text-coffee-dark">Tháng 06, 2026</span>
+                                <button onclick="changeCalendarMonth(1, event)" class="p-1 hover:bg-coffee-light rounded text-coffee-dark font-bold cursor-pointer select-none">&gt;</button>
+                            </div>
+                            <!-- Days of Week labels -->
+                            <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-[#8E7D6F] mb-1">
+                                <span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span>
+                            </div>
+                            <!-- Days grid -->
+                            <div id="calendar-days-grid" class="grid grid-cols-7 gap-1 text-center text-[10px]">
+                                <!-- dynamically generated days -->
+                            </div>
+                            <!-- Footer actions -->
+                            <div class="border-t border-coffee-light mt-3 pt-2.5 flex justify-between gap-2">
+                                <button onclick="selectQuickDate('today', event)" class="flex-1 text-[9px] py-1.5 bg-coffee-light hover:bg-[#E5DEC9]/40 border border-[#E5DEC9] rounded-xl text-coffee-dark font-bold cursor-pointer">Hôm nay</button>
+                                <button onclick="selectQuickDate('yesterday', event)" class="flex-1 text-[9px] py-1.5 bg-coffee-light hover:bg-[#E5DEC9]/40 border border-[#E5DEC9] rounded-xl text-coffee-dark font-bold cursor-pointer">Hôm qua</button>
+                            </div>
+                        </div>
+
+                        <!-- Keep hidden input as backing store if needed -->
+                        <input type="date" id="calendar-date-input" class="hidden" onchange="onDateChanged(this.value)">
                     </div>
 
                     <!-- NOTIFICATION BELL WITH DROPDOWN -->
@@ -364,7 +404,7 @@
                         <div class="p-6 border-b border-[#E5DEC9]/15 flex items-center gap-3">
                             <div class="w-10 h-10 rounded-full bg-[#A04423] flex items-center justify-center text-lg shadow-md">☕</div>
                             <div>
-                                <h1 class="text-base font-serif italic font-bold text-[#FAF7EE]">Family Cafe</h1>
+                                <h1 class="text-base font-serif italic font-bold text-[#FAF7EE]">Nhà cà phê</h1>
                                 <span class="text-[9.5px] text-[#8E7D6F] font-semibold tracking-wide uppercase">Quản lý quán</span>
                             </div>
                         </div>
@@ -597,55 +637,11 @@
                     <h3 class="font-serif italic font-bold text-base text-coffee-dark">Top nước uống bán chạy nhất</h3>
                     <p class="text-[10px] text-coffee-milk">Cơ cấu tiêu dùng tại quầy POS Family</p>
                 </div>
-                <span class="text-[10px] font-bold text-[#A04423] font-mono select-none bg-orange-50 px-2 py-0.5 rounded">Hôm nay</span>
+                <span id="top-beverages-badge" class="text-[10px] font-bold text-[#A04423] font-mono select-none bg-orange-50 px-2 py-0.5 rounded">Hôm nay</span>
             </div>
 
-            <div class="space-y-3.5">
-                <!-- Item 1 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-xs font-mono font-bold text-[#A04423] w-4">1</span>
-                    <div class="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center text-md shrink-0">☕</div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-xs font-bold text-coffee-dark truncate">Cà phê đen đá</p>
-                        <div class="w-full bg-[#FAF7EE] border border-coffee-sand/70 h-1.5 rounded-full mt-1 overflow-hidden">
-                            <div class="bg-[#A04423] h-full" style="width: 82%"></div>
-                        </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                        <span class="text-[11px] font-bold text-coffee-dark block">45 ly</span>
-                        <span class="text-[9px] text-coffee-milk font-mono">1.350.000 ₫</span>
-                    </div>
-                </div>
-                <!-- Item 2 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-xs font-mono font-bold text-[#A04423] w-4">2</span>
-                    <div class="w-9 h-9 rounded-xl bg-blend-soft-light bg-coffee-light flex items-center justify-center text-md shrink-0">🥛</div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-xs font-bold text-coffee-dark truncate">Cà phê sữa đá</p>
-                        <div class="w-full bg-[#FAF7EE] border border-coffee-sand/70 h-1.5 rounded-full mt-1 overflow-hidden">
-                            <div class="bg-[#A04423] h-full" style="width: 68%"></div>
-                        </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                        <span class="text-[11px] font-bold text-coffee-dark block">38 ly</span>
-                        <span class="text-[9px] text-coffee-milk font-mono">1.140.000 ₫</span>
-                    </div>
-                </div>
-                <!-- Item 3 -->
-                <div class="flex items-center gap-3">
-                    <span class="text-xs font-mono font-bold text-[#A04423] w-4">3</span>
-                    <div class="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-md shrink-0">🍯</div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-xs font-bold text-coffee-dark truncate">Bạc xỉu đặc biệt</p>
-                        <div class="w-full bg-[#FAF7EE] border border-coffee-sand/70 h-1.5 rounded-full mt-1 overflow-hidden">
-                            <div class="bg-[#A04423] h-full" style="width: 53%"></div>
-                        </div>
-                    </div>
-                    <div class="text-right shrink-0">
-                        <span class="text-[11px] font-bold text-coffee-dark block">29 ly</span>
-                        <span class="text-[9px] text-coffee-milk font-mono">870.000 ₫</span>
-                    </div>
-                </div>
+            <div id="top-beverages-container" class="space-y-3.5">
+                <!-- Dynamically generated via JS based on selected date seed -->
             </div>
         </div>
 
@@ -764,7 +760,7 @@
 
     <!-- FOOTER -->
     <footer class="pt-6 pb-2 text-center text-[10px] text-coffee-milk font-mono">
-        <p class="font-serif italic font-bold text-xs text-coffee-dark">Family Cafe Dashboard © 2026</p>
+        <p class="font-serif italic font-bold text-xs text-coffee-dark">Nhà cà phê Dashboard © 2026</p>
         <p class="mt-1">Dẫn đầu giải pháp chuỗi bán nước thông minh</p>
     </footer>
 
@@ -831,6 +827,7 @@
     let tables = [];
     let orders = [];
     let shopClosed = false;
+    let currentWorkingDate = "";
 
     // Faked financial datasets desde 2025 (incorporates Profit, Loss, and Breakeven status)
     const financialHistory = {
@@ -912,20 +909,21 @@
                     barColor = 'bg-[#EA9D3A]';
                 }
 
-                const barHeightPct = Math.round((r.revenue / maxRev) * 105);
+                // Calculate height in absolute pixels relative to a max of 80px out of ~128px (h-32)
+                const barHeightPx = Math.round((r.revenue / maxRev) * 80);
 
                 // Add to histogram visual
                 barContainer.innerHTML += `
-                    <div class="flex-1 flex flex-col items-center group relative cursor-pointer px-1">
+                    <div class="flex-1 h-full flex flex-col justify-end items-center group relative cursor-pointer px-1">
                         <!-- Tooltip indicator on hover block -->
                         <div class="absolute bottom-full mb-1.5 hidden group-hover:flex flex-col items-center z-10 w-24">
-                            <span class="bg-[#2B1B17] text-white text-[9px] py-1 px-1.5 rounded-lg shadow-lg text-center font-mono">
-                                Doanh thu: ${Math.round(r.revenue / 1000000)}Tr
+                            <span class="bg-[#2B1B17] text-white text-[9px] py-1 px-1.5 rounded-lg shadow-lg text-center font-mono font-bold leading-normal">
+                                Doanh thu:<br>${Math.round(r.revenue / 1000000)}Tr đ
                             </span>
                             <span class="w-1.5 h-1.5 bg-[#2B1B17] rotate-45 -mt-1"></span>
                         </div>
-                        <div class="${barColor} w-6 sm:w-8 rounded-t-md transition-all duration-300 hover:opacity-85 shadow-sm" style="height: ${Math.max(barHeightPct, 15)}%"></div>
-                        <span class="text-[8.5px] font-bold text-coffee-milk mt-1 font-mono">${r.month.split('/')[0]}</span>
+                        <div class="${barColor} w-6 sm:w-8 rounded-t-md transition-all duration-300 hover:opacity-85 shadow-sm" style="height: ${Math.max(barHeightPx, 10)}px;"></div>
+                        <span class="text-[8.5px] font-bold text-coffee-milk mt-1.5 font-mono">${r.month.split('/')[0]}</span>
                     </div>
                 `;
 
@@ -946,12 +944,40 @@
     // Interactive calendar date change function
     function onDateChanged(val) {
         if (!val) return;
+        
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        
+        if (val > todayStr) {
+            alert("Dữ liệu chưa có");
+            const inputEl = document.getElementById('calendar-date-input');
+            if (inputEl) {
+                inputEl.value = currentWorkingDate;
+            }
+            return;
+        }
+        
+        currentWorkingDate = val;
+        
         const parts = val.split('-');
         if (parts.length === 3) {
             const formatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
             const labelEl = document.getElementById('date-picker-visual');
             if (labelEl) {
                 labelEl.innerText = formatted;
+            }
+            
+            // Hide clock if past date, show if today's date
+            const clockCont = document.getElementById('nav-clock-container');
+            if (clockCont) {
+                if (val < todayStr) {
+                    clockCont.classList.add('hidden');
+                } else {
+                    clockCont.classList.remove('hidden');
+                }
             }
             
             // Generate some nice, dynamic, consistent fake updates to represent "viewing stats of that day"!
@@ -978,9 +1004,305 @@
                 tableRatioEl.innerText = `${Math.round((simTables/20)*100)}%`;
             }
             
+            // Update Top Beverages dynamically
+            updateTopBeverages(val);
+            
             flashNotify(`📅 Sơ đồ hoạt động nước: Đã tải dữ liệu lịch sử ngày ${formatted}`);
         }
     }
+
+    // Dynamic Top Selling Beverages updates based on Date
+    function updateTopBeverages(dateVal) {
+        const topContainer = document.getElementById('top-beverages-container');
+        const badge = document.getElementById('top-beverages-badge');
+        if (!topContainer) return;
+
+        // Determine if it is today
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        
+        if (badge) {
+            if (dateVal === todayStr) {
+                badge.innerText = "Hôm nay";
+                badge.className = "text-[10px] font-bold text-[#A04423] font-mono select-none bg-orange-50 px-2 py-0.5 rounded";
+            } else {
+                const parts = dateVal.split('-');
+                badge.innerText = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                badge.className = "text-[10px] font-bold text-coffee-milk font-mono select-none bg-coffee-light/50 px-2 py-0.5 rounded";
+            }
+        }
+
+        const beveragePoolTemplates = {
+            "Cà phê đen đá": { icon: "☕", color: "bg-orange-100", price: 30000 },
+            "Cà phê sữa đá": { icon: "🥛", color: "bg-blend-soft-light bg-coffee-light", price: 30000 },
+            "Bạc xỉu đặc biệt": { icon: "🍯", color: "bg-amber-50", price: 30000 },
+            "Trà đào sả hồng": { icon: "🍑", color: "bg-orange-50", price: 40000 },
+            "Matcha Latte": { icon: "🍵", color: "bg-green-50", price: 45000 },
+            "Nước ép dâu tây": { icon: "🍓", color: "bg-red-50", price: 35000 }
+        };
+
+        // Check if we have active orders matching this dateVal
+        let matchedItems = {};
+        orders.forEach(o => {
+            const orderDate = o.createdAt ? o.createdAt.split('T')[0] : '';
+            if (orderDate === dateVal && o.items && Array.isArray(o.items)) {
+                o.items.forEach(it => {
+                    matchedItems[it.name] = (matchedItems[it.name] || 0) + it.quantity;
+                });
+            }
+        });
+
+        let displayBeverages = [];
+        if (Object.keys(matchedItems).length > 0) {
+            // Aggregate from real orders
+            for (const [name, qty] of Object.entries(matchedItems)) {
+                const template = beveragePoolTemplates[name] || { icon: "🥤", color: "bg-coffee-light", price: 35000 };
+                displayBeverages.push({
+                    name: name,
+                    icon: template.icon,
+                    color: template.color,
+                    price: template.price,
+                    quantity: qty
+                });
+            }
+            displayBeverages.sort((a, b) => b.quantity - a.quantity);
+        } else {
+            // Fallback: list of all items, in default top selling order shuffled deterministically by date seed
+            const beveragePool = [
+                { name: "Cà phê đen đá", icon: "☕", price: 30000, color: "bg-orange-100" },
+                { name: "Cà phê sữa đá", icon: "🥛", price: 30000, color: "bg-blend-soft-light bg-coffee-light" },
+                { name: "Bạc xỉu đặc biệt", icon: "🍯", price: 30000, color: "bg-amber-50" },
+                { name: "Trà đào sả hồng", icon: "🍑", price: 40000, color: "bg-orange-50" },
+                { name: "Matcha Latte", icon: "🍵", price: 45000, color: "bg-green-50" },
+                { name: "Nước ép dâu tây", icon: "🍓", price: 35000, color: "bg-red-50" }
+            ];
+
+            const parts = dateVal.split('-');
+            const seedValue = (parseInt(parts[0]) || 2026) * 31 + (parseInt(parts[1]) || 6) * 12 + (parseInt(parts[2]) || 20);
+
+            let poolCopy = [...beveragePool];
+            for (let i = poolCopy.length - 1; i > 0; i--) {
+                const j = (seedValue + i * 3) % (i + 1);
+                const temp = poolCopy[i];
+                poolCopy[i] = poolCopy[j];
+                poolCopy[j] = temp;
+            }
+
+            // Get top 3
+            const top3 = poolCopy.slice(0, 3);
+            const baseQty = 15 + (seedValue % 20); // 15 to 34
+            displayBeverages = [
+                { ...top3[0], quantity: baseQty + 12 },
+                { ...top3[1], quantity: baseQty + 5 },
+                { ...top3[2], quantity: baseQty - 2 }
+            ];
+        }
+
+        const finalTop3 = displayBeverages.slice(0, 3);
+        const maxQty = finalTop3[0] ? finalTop3[0].quantity : 1;
+
+        topContainer.innerHTML = "";
+
+        finalTop3.forEach((bev, index) => {
+            const qty = bev.quantity;
+            const rev = qty * bev.price;
+            const pct = Math.round((qty / maxQty) * 85); // up to 85% width
+
+            topContainer.innerHTML += `
+                <div class="flex items-center gap-3 animate-fade-in">
+                    <span class="text-xs font-mono font-bold text-[#A04423] w-4">${index + 1}</span>
+                    <div class="w-9 h-9 rounded-xl ${bev.color} flex items-center justify-center text-md shrink-0">${bev.icon}</div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs font-bold text-coffee-dark truncate">${bev.name}</p>
+                        <div class="w-full bg-[#FAF7EE] border border-coffee-sand/70 h-1.5 rounded-full mt-1 overflow-hidden">
+                            <div class="bg-[#A04423] h-full transition-all duration-500" style="width: ${pct}%"></div>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <span class="text-[11px] font-bold text-coffee-dark block">${qty} ly</span>
+                        <span class="text-[9px] text-coffee-milk font-mono">${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(rev)}</span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    // Calendar custom dropdown state & functions
+    let viewYear = 2026;
+    let viewMonth = 5; // 0-indexed (June)
+
+    function toggleCalendarDropdown(event) {
+        if (event) event.stopPropagation();
+        const dd = document.getElementById('calendar-dropdown');
+        if (dd) {
+            dd.classList.toggle('hidden');
+            if (!dd.classList.contains('hidden')) {
+                // Close notifications dropdown
+                const notifDd = document.getElementById('notif-dropdown');
+                if (notifDd) notifDd.classList.add('hidden');
+                
+                // Set initial view month/year to selected working date
+                if (currentWorkingDate) {
+                    const parts = currentWorkingDate.split('-');
+                    if (parts.length === 3) {
+                        viewYear = parseInt(parts[0]);
+                        viewMonth = parseInt(parts[1]) - 1;
+                    }
+                }
+                renderCalendarGrid();
+            }
+        }
+    }
+
+    function changeCalendarMonth(offset, event) {
+        if (event) event.stopPropagation();
+        viewMonth += offset;
+        if (viewMonth < 0) {
+            viewMonth = 11;
+            viewYear--;
+        } else if (viewMonth > 11) {
+            viewMonth = 0;
+            viewYear++;
+        }
+        renderCalendarGrid();
+    }
+
+    function renderCalendarGrid() {
+        const grid = document.getElementById('calendar-days-grid');
+        const label = document.getElementById('calendar-month-year-label');
+        if (!grid || !label) return;
+
+        const VietnameseMonths = [
+            "Tháng 01", "Tháng 02", "Tháng 03", "Tháng 04", "Tháng 05", "Tháng 06",
+            "Tháng 07", "Tháng 08", "Tháng 09", "Tháng 10", "Tháng 11", "Tháng 12"
+        ];
+        label.innerText = `${VietnameseMonths[viewMonth]}, ${viewYear}`;
+        grid.innerHTML = "";
+
+        // First day of target view Month
+        const firstDayDate = new Date(viewYear, viewMonth, 1);
+        let firstDayIndex = firstDayDate.getDay(); 
+        // Sunday = 0, convert to Monday = 0 format
+        firstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
+
+        const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+        const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
+
+        // Fill previous month days
+        for (let i = firstDayIndex - 1; i >= 0; i--) {
+            const d = prevMonthDays - i;
+            grid.innerHTML += `<span class="text-gray-300 py-1 font-mono select-none">${d}</span>`;
+        }
+
+        // Today state markers
+        const today = new Date();
+        const todayY = today.getFullYear();
+        const todayM = today.getMonth();
+        const todayD = today.getDate();
+
+        let selY = -1, selM = -1, selD = -1;
+        if (currentWorkingDate) {
+            const p = currentWorkingDate.split('-');
+            selY = parseInt(p[0]);
+            selM = parseInt(p[1]) - 1;
+            selD = parseInt(p[2]);
+        }
+
+        // Fill current month days
+        for (let d = 1; d <= daysInMonth; d++) {
+            const iterDate = new Date(viewYear, viewMonth, d);
+            const isFuture = iterDate > today;
+            
+            const iterYStr = viewYear;
+            const iterMStr = String(viewMonth + 1).padStart(2, '0');
+            const iterDStr = String(d).padStart(2, '0');
+            const dateValStr = `${iterYStr}-${iterMStr}-${iterDStr}`;
+
+            let styling = "cursor-pointer rounded-lg hover:bg-coffee-rust/10 py-1 transition-all font-mono font-medium ";
+            
+            if (viewYear === todayY && viewMonth === todayM && d === todayD) {
+                styling += "text-coffee-rust bg-coffee-light border border-coffee-rust/35 ";
+            } else if (viewYear === selY && viewMonth === selM && d === selD) {
+                styling += "bg-coffee-rust text-white font-bold ";
+            } else {
+                styling += "text-coffee-dark ";
+            }
+
+            if (isFuture) {
+                grid.innerHTML += `<button onclick="alert('Dữ liệu chưa có'); event.stopPropagation();" class="text-gray-300 py-1 text-center font-mono opacity-40 select-none cursor-not-allowed" title="Dữ liệu chưa có">${d}</button>`;
+            } else {
+                grid.innerHTML += `<button onclick="onCustomDateSelect('${dateValStr}', event)" class="${styling}">${d}</button>`;
+            }
+        }
+    }
+
+    function onCustomDateSelect(dateVal, event) {
+        if (event) event.stopPropagation();
+        onDateChanged(dateVal);
+        const dd = document.getElementById('calendar-dropdown');
+        if (dd) dd.classList.add('hidden');
+    }
+
+    function selectQuickDate(type, event) {
+        if (event) event.stopPropagation();
+        const today = new Date();
+        let target = today;
+        if (type === 'yesterday') {
+            target = new Date();
+            target.setDate(today.getDate() - 1);
+        }
+        const yyyy = target.getFullYear();
+        const mm = String(target.getMonth() + 1).padStart(2, '0');
+        const dd = String(target.getDate()).padStart(2, '0');
+        const dStr = `${yyyy}-${mm}-${dd}`;
+        onDateChanged(dStr);
+        const ddDropdown = document.getElementById('calendar-dropdown');
+        if (ddDropdown) ddDropdown.classList.add('hidden');
+    }
+
+    // Document-level click handler to close calendar dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+        const calDd = document.getElementById('calendar-dropdown');
+        if (calDd && !calDd.classList.contains('hidden')) {
+            const container = calDd.parentElement;
+            if (container && !container.contains(e.target)) {
+                calDd.classList.add('hidden');
+            }
+        }
+    });
+
+    // Initialize calendar bounds and visual format on ready
+    document.addEventListener("DOMContentLoaded", () => {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        
+        currentWorkingDate = todayStr;
+        
+        const inputEl = document.getElementById('calendar-date-input');
+        if (inputEl) {
+            inputEl.max = todayStr;
+            inputEl.value = todayStr;
+        }
+        
+        const labelEl = document.getElementById('date-picker-visual');
+        if (labelEl) {
+            labelEl.innerText = `${dd}/${mm}/${yyyy}`;
+        }
+        
+        const clockCont = document.getElementById('nav-clock-container');
+        if (clockCont) {
+            clockCont.classList.remove('hidden');
+        }
+        
+        // Initialize dynamic top beverages on load
+        updateTopBeverages(todayStr);
+    });
 
     // Live Clock display
     setInterval(() => {

@@ -17,8 +17,7 @@
     </servlet-mapping>
 
     <session-config>
-        <!-- Default timeout for unauthenticated sessions (e.g. customers on public pages) -->
-        <session-timeout>10</session-timeout>
+        <session-timeout>30</session-timeout>
     </session-config>
     
     <welcome-file-list>

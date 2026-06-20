@@ -39,16 +39,18 @@ public class BrewStateService {
         notifyStateChange();
     }
 
+    private final dao.InventoryDAO inventoryDAO;
     private final List<Ingredient> inventory = new ArrayList<>();
     private final List<Expense> expenses = new ArrayList<>();
     private final Map<String, List<RecipeRequirement>> recipes = new HashMap<>();
 
-    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, BrewWebSocketHandler webSocketHandler) {
+    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, dao.InventoryDAO inventoryDAO, BrewWebSocketHandler webSocketHandler) {
         this.menuDAO = menuDAO;
         this.tableDAO = tableDAO;
         this.orderDAO = orderDAO;
         this.staffDAO = staffDAO;
         this.memberDAO = memberDAO;
+        this.inventoryDAO = inventoryDAO;
         this.webSocketHandler = webSocketHandler;
         
         // Initialize Inventory and Recipe models
@@ -70,17 +72,12 @@ public class BrewStateService {
         recipes.put("m8", Arrays.asList(new RecipeRequirement("i9", 1)));
         recipes.put("m9", Arrays.asList(new RecipeRequirement("i10", 1)));
 
-        // Init initial stock values
-        inventory.add(new Ingredient("i1", "Hạt cà phê nguyên chất", "g", 1500, 300, 50));
-        inventory.add(new Ingredient("i2", "Sữa đặc đặc sánh", "g", 1000, 200, 40));
-        inventory.add(new Ingredient("i3", "Sữa tươi tiệt trùng", "ml", 2000, 500, 20));
-        inventory.add(new Ingredient("i4", "Kem béo muối biển", "ml", 80, 150, 80));
-        inventory.add(new Ingredient("i5", "Siro đào thơm mát", "ml", 600, 100, 60));
-        inventory.add(new Ingredient("i6", "Sả tươi thơm nồng", "nhánh", 20, 5, 1000));
-        inventory.add(new Ingredient("i7", "Bột Trà xanh Matcha Uji", "g", 0, 100, 200));
-        inventory.add(new Ingredient("i8", "Lá trà Ô long khô", "g", 500, 100, 100));
-        inventory.add(new Ingredient("i9", "Vỏ bánh sừng bò sấy", "cái", 15, 4, 15000));
-        inventory.add(new Ingredient("i10", "Bánh Tiramisu cắt sẵn", "lát", 1, 3, 25000));
+        // Load inventory from our SQL Server Database
+        inventory.clear();
+        List<Ingredient> dbInventory = inventoryDAO.getAll();
+        if (dbInventory != null) {
+            inventory.addAll(dbInventory);
+        }
     }
 
     private void seedInitialOrder() {
@@ -165,6 +162,7 @@ public class BrewStateService {
                 int lineCost = ing.getImportCost() * quantity;
                 totalCost += lineCost;
                 ing.setStock(ing.getStock() + quantity);
+                inventoryDAO.save(ing);
                 summaryDetails.add("+" + quantity + " " + ing.getUnit() + " " + ing.getName());
             }
         }
@@ -242,6 +240,7 @@ public class BrewStateService {
                     Ingredient ing = getIngredientById(req.getIngredientId());
                     if (ing != null) {
                         ing.setStock(Math.max(0, ing.getStock() - req.getQuantityPerUnit() * quantity));
+                        inventoryDAO.save(ing);
                     }
                 }
             }

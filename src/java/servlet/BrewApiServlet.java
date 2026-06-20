@@ -210,12 +210,47 @@ public class BrewApiServlet extends HttpServlet {
                 String status = sMap.containsKey("status") && sMap.get("status") != null ? (String) sMap.get("status") : "Active";
                 boolean overtime = sMap.containsKey("overtime") && sMap.get("overtime") != null ? (Boolean) sMap.get("overtime") : false;
 
+                // Restrict manager modifications
+                List<Staff> roster = stateService.getStaff();
+                boolean isExistingManager = false;
+                for (Staff existing : roster) {
+                    if (existing.getId() == id && "manager".equalsIgnoreCase(existing.getRole())) {
+                        isExistingManager = true;
+                        break;
+                    }
+                }
+
+                if (isExistingManager) {
+                    role = "manager";
+                    active = true;
+                    status = "Active";
+                } else if ("manager".equalsIgnoreCase(role)) {
+                    role = "waiter"; // Prevent duplicate manager creation
+                }
+
                 Staff staff = new Staff(id, name, role, pin, shift, active, username, password, status, overtime);
                 stateService.saveStaff(staff);
                 resp.getWriter().write(JsonUtils.toJson(staff));
             } else if (pathInfo.equals("/staff/delete")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 int id = ((Number) reqMap.get("id")).intValue();
+                
+                // Block manager deletion
+                List<Staff> roster = stateService.getStaff();
+                boolean isManager = false;
+                for (Staff existing : roster) {
+                    if (existing.getId() == id && "manager".equalsIgnoreCase(existing.getRole())) {
+                        isManager = true;
+                        break;
+                    }
+                }
+                
+                if (isManager) {
+                    resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    resp.getWriter().write("{\"error\": \"Cannot delete system manager!\"}");
+                    return;
+                }
+
                 stateService.deleteStaff(id);
                 resp.getWriter().write("{\"message\": \"Staff deleted successfully.\"}");
             } else if (pathInfo.equals("/members")) {

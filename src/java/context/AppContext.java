@@ -5,6 +5,7 @@ import dao.TableDAO;
 import dao.OrderDAO;
 import dao.StaffDAO;
 import dao.MemberDAO;
+import dao.InventoryDAO;
 import service.BrewStateService;
 import websocket.BrewWebSocketHandler;
 
@@ -17,6 +18,7 @@ public class AppContext {
     private final OrderDAO orderDAO;
     private final StaffDAO staffDAO;
     private final MemberDAO memberDAO;
+    private final InventoryDAO inventoryDAO;
     private final BrewStateService stateService;
     private final BrewWebSocketHandler webSocketHandler;
 
@@ -26,8 +28,9 @@ public class AppContext {
         this.orderDAO = new OrderDAO();
         this.staffDAO = new StaffDAO();
         this.memberDAO = new MemberDAO();
+        this.inventoryDAO = new InventoryDAO();
         this.webSocketHandler = new BrewWebSocketHandler();
-        this.stateService = new BrewStateService(menuDAO, tableDAO, orderDAO, staffDAO, memberDAO, webSocketHandler);
+        this.stateService = new BrewStateService(menuDAO, tableDAO, orderDAO, staffDAO, memberDAO, inventoryDAO, webSocketHandler);
     }
 
     public static AppContext getInstance() {
@@ -46,6 +49,7 @@ public class AppContext {
     public OrderDAO getOrderDAO() { return orderDAO; }
     public StaffDAO getStaffDAO() { return staffDAO; }
     public MemberDAO getMemberDAO() { return memberDAO; }
+    public InventoryDAO getInventoryDAO() { return inventoryDAO; }
     public BrewStateService getStateService() { return stateService; }
     public BrewWebSocketHandler getWebSocketHandler() { return webSocketHandler; }
 }

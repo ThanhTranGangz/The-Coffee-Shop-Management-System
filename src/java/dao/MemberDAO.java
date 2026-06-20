@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MemberDAO {
-    private List<Member> fallbackMembers;
+    private List<Member> fallbackMembers = new ArrayList<>();
 
     public List<Member> getAll() {
         List<Member> list = new ArrayList<>();
@@ -31,8 +31,10 @@ public class MemberDAO {
                     rs.getString("discount")
                 ));
             }
+            // Sync fallback memory context
+            fallbackMembers = new ArrayList<>(list);
         } catch (Exception e) {
-            System.err.println("Database fetch failed in MemberDAO.getAll(), falling back: " + e.getMessage());
+            System.err.println("Database fetch failed in MemberDAO.getAll(), falling back to cache: " + e.getMessage());
             return getFallbackMembers();
         }
         
@@ -62,7 +64,7 @@ public class MemberDAO {
                 }
             }
         } catch (Exception e) {
-            System.err.println("Database getByPhone failed in MemberDAO.getByPhone(), searching memory...");
+            System.err.println("Database getByPhone failed in MemberDAO.getByPhone(), searching cached fallback...");
         }
 
         return getFallbackMembers().stream()
@@ -126,12 +128,6 @@ public class MemberDAO {
     }
 
     public List<Member> getFallbackMembers() {
-        if (fallbackMembers == null) {
-            fallbackMembers = new ArrayList<>();
-            fallbackMembers.add(new Member("0909123456", "Trần Thị Thuỷ Tiên", "Platinum", 740, "thuytien@gmail.com", "Espresso", "Giảm 15% tổng hoá đơn"));
-            fallbackMembers.add(new Member("0901234567", "Lê Hoàng Phong", "Gold", 320, "hoangphong@gmail.com", "Tea", "Giảm 10% tổng hoá đơn"));
-            fallbackMembers.add(new Member("0987654321", "Nguyễn Minh Quân", "Silver", 120, "minhquan@gmail.com", "Special", "Giảm 5% tổng hoá đơn"));
-        }
         return fallbackMembers;
     }
 }
