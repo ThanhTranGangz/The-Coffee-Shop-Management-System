@@ -476,13 +476,22 @@
                 const actionHandler = it.status !== 'Served' ? `onclick="toggleBaristaItem('${o.id}', '${it.id}', '${nextStatus}')"` : '';
 
                 itemsRows += `
-                    <div ${actionHandler} class="flex items-start justify-between p-2.5 rounded-xl transition-all border border-transparent hover:border-coffee-sand/40 ${it.status !== 'Served' ? 'hover:bg-coffee-light/40 cursor-pointer' : ''}">
+                    <div ${actionHandler} class="flex items-start justify-between p-2.5 rounded-xl transition-all border border-transparent hover:border-coffee-sand/40 <c:choose>
+    <c:when test="${it.status != 'Served'}">
+        hover:bg-coffee-light/40 cursor-pointer
+    </c:when>
+</c:choose>
+">
                         <div class="space-y-0.5 pr-2">
                             <p class="text-xs ${rowClass}">
                                 ${it.name} <span class="font-mono text-xs opacity-80">x${it.quantity}</span>
                             </p>
                             <p class="text-[9.5px] text-coffee-milk">Size ${it.customization ? it.customization.size : 'M'} \u2022 Ngọt:${it.customization ? it.customization.sugar : '100%'} \u2022 Đá:${it.customization ? it.customization.ice : '100%'}</p>
-                            ${it.notes ? `<p class="text-[9px] bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 inline-block block italic mt-1 font-medium">"${it.notes}"</p>` : ''}
+<c:if test="${not empty it.notes}">
+    <p class="text-[9px] bg-amber-50 text-amber-800 rounded px-1.5 py-0.5 inline-block block italic mt-1 font-medium">
+        "${it.notes}"
+    </p>
+</c:if>
                         </div>
                         <span class="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0 ${stBadge}">
                             ${label}
@@ -501,7 +510,11 @@
                             </div>
                             <div class="text-right">
                                 <span class="text-[9px] font-mono uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border ${cardBadge}">
-                                    ${o.status === 'Pending' ? 'ĐỢI PHÊ' : o.status === 'Preparing' ? 'ĐANG PHA' : 'ĐỒ XONG'}
+<c:choose>
+    <c:when test="${o.status == 'Pending'}">ĐỢI PHA</c:when>
+    <c:when test="${o.status == 'Preparing'}">ĐANG PHA</c:when>
+    <c:otherwise>ĐỔ XONG</c:otherwise>
+</c:choose>
                                 </span>
                                 <p class="text-[10px] text-coffee-milk font-mono mt-1">${ageText}</p>
                             </div>
@@ -523,11 +536,12 @@
                             ${itemsRows}
                         </div>
 
-                        ${o.notes ? `
-                            <div class="bg-amber-50/50 border border-amber-150 rounded-xl p-2.5 text-[10px] text-amber-900 leading-normal font-medium">
-                                Ghi chú bếp: "${o.notes}"
-                            </div>
-                        ` : ''}
+                        <c:if test="${not empty o.notes}">
+    <div class="bg-amber-50/50 border border-amber-150 rounded-xl p-2.5 text-[10px] text-amber-900 leading-normal font-medium">
+        Ghi chú bếp: "${o.notes}"
+    </div>
+</c:if>
+
                     </div>
 
                     <!-- Complete orders -->

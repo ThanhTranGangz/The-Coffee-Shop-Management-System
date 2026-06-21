@@ -1,3 +1,4 @@
+<%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -702,7 +703,12 @@
             `;
             tables.forEach(t => {
                 const isSelected = (t.id === userSittingTableId) ? 'selected' : '';
-                selectHtml += `<option value="${t.id}" ${isSelected}>${t.name} (${t.zone === 'Ground Floor' ? 'Tầng trệt' : t.zone === 'Terrace' ? 'Sân vườn' : 'Khu lửng'})</option>`;
+                selectHtml += `<option value="${t.id}" ${isSelected}>${t.name} (<c:choose>
+    <c:when test="${t.zone == 'Ground Floor'}">Tầng trệt</c:when>
+    <c:when test="${t.zone == 'Terrace'}">Sân vườn</c:when>
+    <c:otherwise>Khu lửng</c:otherwise>
+</c:choose>
+)</option>`;
             });
             selectHtml += `</select>`;
             selectHtml += `
@@ -759,7 +765,11 @@
             eligibleStaff.forEach(s => {
                 const opt = document.createElement('option');
                 opt.value = s.username;
-                opt.text = `${s.name} (${s.role === 'manager' ? 'Quản lý' : 'Phục vụ'})`;
+                opt.text = `${s.name} (<c:choose>
+    <c:when test="${s.role == 'manager'}">Quản lý</c:when>
+    <c:otherwise>Phục vụ</c:otherwise>
+</c:choose>
+)`;
                 wSelect.appendChild(opt);
             });
         }
@@ -771,7 +781,12 @@
             tables.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t.id;
-                opt.text = `${t.name} (${t.zone === 'Ground Floor' ? 'Tầng trệt' : t.zone === 'Terrace' ? 'Sân vườn' : 'Khu lửng'})`;
+                opt.text = `${t.name} (<c:choose>
+    <c:when test="${t.zone == 'Ground Floor'}">Tầng trệt</c:when>
+    <c:when test="${t.zone == 'Terrace'}">Sân vườn</c:when>
+    <c:otherwise>Khu lửng</c:otherwise>
+</c:choose>
+)`;
                 if (t.id === userSittingTableId) {
                     opt.text += ' [Đang ngồi tại đây]';
                     opt.selected = true;
@@ -839,13 +854,23 @@
         // Apply transfer and save state
         changeSittingTable(targetTableId);
         closeWaiterConfirmationModal();
-        flashNotify(`🔄 Đã chuyển khách sang ${tables.find(t => t.id === targetTableId).name} (được duyệt bởi ${match.name})`);
+        flashNotify(`🔄 Đã chuyển khách sang <c:set var="targetTableName" value="" />
+
+<c:forEach var="t" items="${tables}">
+    <c:if test="${t.id == targetTableId}">
+        <c:set var="targetTableName" value="${t.name}" />
+    </c:if>
+</c:forEach>
+
+${targetTableName}
+ (được duyệt bởi ${match.name})`);
     }
 
     function setCustMenuCategory(cat) {
         customerCategory = cat;
         ['All', 'Coffee', 'Tea', 'Specialty', 'Pastry'].forEach(p => {
-            const btn = document.getElementById(`custcat-${p === 'All' ? 'all' : p.toLowerCase()}`);
+            const btn = document.getElementById(`custcat-${p == 'All' ? 'all' : fn:toLowerCase(p)}
+`);
             if (!btn) return;
             if (p === cat) {
                 btn.className = "text-[11px] font-bold px-3 py-1.5 bg-coffee-rust text-white rounded-lg shadow-xs";
@@ -881,28 +906,45 @@
             const vietNameVal = categoryMap[item.category] || item.category;
             const outOfStock = item.inStock === false;
             container.innerHTML += `
-                <div onclick="${outOfStock ? "flashNotify('⚠️ Thức uống này hiện đã tạm hết nguyên liệu pha chế!')" : `triggerCustomerSettings('${item.id}')`}" 
+                <div onclick="<c:if test="${outOfStock}">
+    <script>
+        flashNotify('⚠️ Thức uống này hiện đã tạm hết nguyên liệu pha chế!');
+    </script>
+</c:if>
+
+<c:if test="${not outOfStock}">
+    <script>
+        triggerCustomerSettings('${item.id}');
+    </script>
+</c:if>
+" 
                      class="${outOfStock ? 'opacity-60 relative cursor-not-allowed bg-coffee-light/20' : 'bg-white hover:bg-coffee-light/40 cursor-pointer'} border border-coffee-sand/70 hover:border-coffee-rust/50 transition-all rounded-3xl p-4 flex flex-col justify-between group shadow-xs">
                     
-                    ${outOfStock ? `
-                    <div class="absolute top-4 right-4 z-10 bg-red-50 text-red-750 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-full select-none shadow-xs font-mono">
-                        Tạm hết hàng 🚫
-                    </div>
-                    ` : ''}
+                    <c:if test="${outOfStock}">
+    <div class="absolute top-4 right-4 z-10 bg-red-50 text-red-750 border border-red-200 text-[10px] font-bold px-2 py-0.5 rounded-full select-none shadow-xs font-mono">
+        Tạm hết hàng 🚫
+    </div>
+</c:if>
+
 
                     <div class="space-y-3">
-                        ${item.image ? `
-                        <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden bg-coffee-light border border-coffee-sand/30 relative">
-                            <img src="${item.image}" alt="${item.name}" referrerpolicy="no-referrer" class="w-full h-full object-cover ${outOfStock ? '' : 'group-hover:scale-105'} transition-transform duration-300">
-                        </div>
-                        ` : ''}
+                        <c:if test="${not empty item.image}">
+    <div class="w-full aspect-[4/3] rounded-2xl overflow-hidden bg-coffee-light border border-coffee-sand/30 relative">
+        <img src="${item.image}"
+             alt="${item.name}"
+             referrerpolicy="no-referrer"
+             class="w-full h-full object-cover ${outOfStock ? '' : 'group-hover:scale-105'} transition-transform duration-300">
+    </div>
+</c:if>
+
                         <div class="space-y-1.5">
                             <div class="flex items-center justify-between gap-2">
                                 <span class="text-[8px] tracking-wider uppercase font-mono font-bold bg-coffee-light text-coffee-rust border border-coffee-sand/40 px-2 py-0.5 rounded-md">
                                     ${vietNameVal}
                                 </span>
                                 <span class="font-mono font-bold text-coffee-rust text-[13px] ${outOfStock ? 'line-through opacity-70' : ''}">
-                                    ${formatVND(item.price)}
+                                    <fmt:formatNumber value="${item.price}" pattern="#,###"/> ₫
+
                                 </span>
                             </div>
                             <h4 class="font-serif font-bold text-coffee-dark text-sm ${outOfStock ? 'opacity-70' : 'group-hover:text-coffee-rust'} transition-colors leading-tight">
@@ -943,7 +985,8 @@
             </span>
             <h3 class="text-base font-serif font-bold text-coffee-dark mt-1">${product.name}</h3>
             <p class="text-xs text-coffee-milk">${product.description}</p>
-            <p class="text-xs text-coffee-rust font-mono font-bold pt-1.5" id="modal-product-price-label">Đơn giá gốc: ${formatVND(product.price)}</p>
+            <p class="text-xs text-coffee-rust font-mono font-bold pt-1.5" id="modal-product-price-label">Đơn giá gốc: <fmt:formatNumber value="${product.price}" pattern="#,###"/> ₫
+</p>
         `;
 
         const sizeBox = document.getElementById('modal-size-container');
@@ -986,12 +1029,23 @@
         
         const priceLabel = document.getElementById('modal-product-price-label');
         if (priceLabel) {
-            priceLabel.innerHTML = `Đơn giá: <span class="text-coffee-rust font-bold">${formatVND(singlePrice)}</span>${modalSize !== 'M' ? ` <span class="text-[10px] text-coffee-milk font-normal">(Cỡ ${modalSize})</span>` : ''}`;
+            priceLabel.innerHTML = `Đơn giá: <span class="text-coffee-rust font-bold">
+    <fmt:formatNumber value="${singlePrice}" pattern="#,###"/> ₫
+
+</span>
+
+<c:if test="${modalSize != 'M'}">
+    <span class="text-[10px] text-coffee-milk font-normal">
+        (Cỡ ${modalSize})
+    </span>
+</c:if>
+`;
         }
         
         const actionBtn = document.getElementById('modal-action-btn');
         if (actionBtn) {
-            actionBtn.innerText = `Thêm vào giỏ - ${formatVND(totalValue)} 🛒`;
+            actionBtn.innerText = `Thêm vào giỏ - <fmt:formatNumber value="${totalValue}" pattern="#,###"/> ₫
+ 🛒`;
         }
     }
 
@@ -1176,8 +1230,10 @@
         if (displayTotal) {
             if (selectedVoucherDiscount > 0 && totalVal > 0) {
                 displayTotal.innerHTML = `
-                    <span class="line-through text-coffee-milk text-xs mr-1 font-mono">${formatVND(totalVal)}</span>
-                    <span class="font-mono text-coffee-rust">${formatVND(payTotal)}</span>
+                    <span class="line-through text-coffee-milk text-xs mr-1 font-mono"><fmt:formatNumber value="${totalVal}" pattern="#,###"/> ₫
+</span>
+                    <span class="font-mono text-coffee-rust"><fmt:formatNumber value="${payTotal}" pattern="#,###"/> ₫
+</span>
                 `;
             } else {
                 displayTotal.innerText = formatVND(totalVal);
@@ -1228,14 +1284,17 @@
                         <div class="space-y-0.5">
                             <h5 class="font-bold text-coffee-dark">${c.menuItem.name}</h5>
                             <p class="text-[10px] text-coffee-milk font-medium">${customDetail}</p>
-                            ${c.notes ? `<p class="text-[9px] text-coffee-rust italic">"${c.notes}"</p>` : ''}
+<c:if test="${not empty c.notes}">
+    <p class="text-[9px] text-coffee-rust italic">"${c.notes}"</p>
+</c:if>
                         </div>
                         <button onclick="removeCustCartItem(${idx})" class="text-coffee-milk hover:text-coffee-rust text-xs shrink-0 p-1 cursor-pointer">
                             🗑️
                         </button>
                     </div>
                     <div class="flex items-center justify-between border-t border-coffee-sand/30 pt-2 mt-1">
-                        <span class="font-mono font-bold text-coffee-rust text-xs">${formatVND(itemsVal)}</span>
+                        <span class="font-mono font-bold text-coffee-rust text-xs"><fmt:formatNumber value="${itemsVal}" pattern="#,###"/> ₫
+</span>
                         <div class="flex items-center gap-2">
                             <button onclick="updateCustItemQty(${idx}, -1)" class="w-5 h-5 bg-white border border-coffee-sand text-xs flex items-center justify-center rounded font-bold hover:bg-coffee-rust hover:text-white transition-all cursor-pointer">-</button>
                             <span class="font-mono text-xs font-bold">${c.quantity}</span>
@@ -1378,7 +1437,11 @@
                     <div class="flex justify-between items-center bg-white px-2 py-1 rounded-xl">
                         <span class="font-bold text-coffee-rust">Mã đơn #${o.orderNumber}</span>
                         <span class="text-[9px] uppercase font-mono font-bold px-2 py-0.5 rounded border ${statusBadgeClass}">
-                            ${o.status === 'Pending' ? 'Đầu quầy' : o.status === 'Preparing' ? 'Pha chế' : 'Hoàn thành'}
+<c:choose>
+    <c:when test="${o.status == 'Pending'}">Đầu quầy</c:when>
+    <c:when test="${o.status == 'Preparing'}">Pha chế</c:when>
+    <c:otherwise>Hoàn thành</c:otherwise>
+</c:choose>
                         </span>
                     </div>
                     <div class="space-y-0.5">

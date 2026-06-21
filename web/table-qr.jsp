@@ -297,6 +297,26 @@
     <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
+    <!-- SERVER-SIDE CONDITIONS VIA JSTL <c:choose> AND <c:if> -->
+    <c:choose>
+        <c:when test="${not empty param.printMode}">
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 rounded-r-xl">
+                <p class="text-xs text-amber-800 font-bold uppercase tracking-wider font-mono">Chế độ in ấn nâng cao (Server-activated JSTL)</p>
+                <p class="text-xs text-amber-700 mt-1">Hệ thống JSTL đã cấu hình mẫu in thẻ QR tự động. Hãy nhấn nút "In trang tem" bên dưới.</p>
+            </div>
+        </c:when>
+        <c:otherwise>
+            <c:if test="${empty param.noNotice}">
+                <div class="bg-emerald-50 border border-emerald-250/50 p-3.5 rounded-2xl mb-6">
+                    <p class="text-xs text-emerald-800 font-bold flex items-center gap-1.5 font-sans">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Cổng phân phối QR Code trực tuyến (JSTL Secure Zone)</span>
+                    </p>
+                </div>
+            </c:if>
+        </c:otherwise>
+    </c:choose>
+
 <div class="space-y-6">
     <!-- Header visual summary -->
     <div class="bg-white border border-coffee-sand/70 p-5 rounded-3xl shadow-xs flex justify-between items-center">
@@ -338,40 +358,39 @@
         grid.innerHTML = '';
 
         tables.forEach(table => {
-            const originLinkEnv = `${window.location.protocol}//${window.location.host}/menu.jsp?tableId=${table.id}`;
-            const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(originLinkEnv)}`;
+            const originLinkEnv = window.location.protocol + '//' + window.location.host + '/menu.jsp?tableId=' + table.id;
+            const qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(originLinkEnv);
 
             const zoneName = table.zone === 'Ground Floor' ? 'Khu Nhà Trệt' : table.zone === 'Terrace' ? 'Khu Sân Vườn' : 'Khu Tầng Lửng';
 
-            grid.innerHTML += `
-                <div class="bg-white border-2 border-coffee-sand/75 rounded-3xl p-6 shadow-sm flex flex-col justify-between items-center text-center space-y-4 hover:border-coffee-rust/45 transition-colors relative">
-                    <!-- Brand deco header -->
-                    <div class="space-y-0.5 border-b border-coffee-sand/40 pb-2 w-full text-center">
-                        <span class="text-[8px] uppercase tracking-widest font-bold text-coffee-milk font-mono">TABLE SCAN TERMINAL</span>
-                        <h4 class="font-serif italic font-bold text-coffee-rust text-lg">nhà cà phê<span class="font-sans text-coffee-dark">.</span></h4>
-                    </div>
+            grid.innerHTML += 
+                '<div class="bg-white border-2 border-coffee-sand/75 rounded-3xl p-6 shadow-sm flex flex-col justify-between items-center text-center space-y-4 hover:border-coffee-rust/45 transition-colors relative">' +
+                    '<!-- Brand deco header -->' +
+                    '<div class="space-y-0.5 border-b border-coffee-sand/40 pb-2 w-full text-center">' +
+                        '<span class="text-[8px] uppercase tracking-widest font-bold text-coffee-milk font-mono">TABLE SCAN TERMINAL</span>' +
+                        '<h4 class="font-serif italic font-bold text-coffee-rust text-lg">nhà cà phê<span class="font-sans text-coffee-dark">.</span></h4>' +
+                    '</div>' +
 
-                    <!-- QR Display Box -->
-                    <div class="bg-coffee-light border border-coffee-sand/80 p-3 rounded-2xl shadow-2xs relative">
-                        <img src="${qrApiUrl}" alt="Mã QR ${table.name}" class="w-36 h-36 object-contain mix-blend-multiply">
-                        <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-coffee-rust text-white text-[9px] font-mono font-bold flex items-center justify-center border border-white">
-                            ✓
-                        </div>
-                    </div>
+                    '<!-- QR Display Box -->' +
+                    '<div class="bg-coffee-light border border-coffee-sand/80 p-3 rounded-2xl shadow-2xs relative">' +
+                        '<img src="' + qrApiUrl + '" alt="Mã QR ' + table.name + '" class="w-36 h-36 object-contain mix-blend-multiply">' +
+                        '<div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-coffee-rust text-white text-[9px] font-mono font-bold flex items-center justify-center border border-white">' +
+                            '✓' +
+                        '</div>' +
+                    '</div>' +
 
-                    <!-- Table metadata footer info -->
-                    <div class="space-y-1">
-                        <h5 class="text-xl font-serif font-bold italic text-coffee-dark">${table.name}</h5>
-                        <p class="text-[10px] text-coffee-milk font-bold uppercase tracking-wide">${zoneName} \u2022 Ghế: ${table.capacity}</p>
-                        <p class="text-[9px] text-coffee-milk/70 font-mono italic break-all max-w-[200px] leading-snug pt-1">${originLinkEnv}</p>
-                    </div>
+                    '<!-- Table metadata footer info -->' +
+                    '<div class="space-y-1">' +
+                        '<h5 class="text-xl font-serif font-bold italic text-coffee-dark">' + table.name + '</h5>' +
+                        '<p class="text-[10px] text-coffee-milk font-bold uppercase tracking-wide">' + zoneName + ' • Ghế: ' + table.capacity + '</p>' +
+                        '<p class="text-[9px] text-coffee-milk/70 font-mono italic break-all max-w-[200px] leading-snug pt-1">' + originLinkEnv + '</p>' +
+                    '</div>' +
 
-                    <!-- Footers deco instructions -->
-                    <div class="bg-coffee-light/40 border border-coffee-sand/40 p-2 rounded-xl text-[10px] leading-relaxed text-coffee-milk w-full">
-                        📌 <strong>Hướng dẫn:</strong> Bật camera điện thoại, quét mã để xem menu & gọi đồ uống tại chỗ tiện lợi.
-                    </div>
-                </div>
-            `;
+                    '<!-- Footers deco instructions -->' +
+                    '<div class="bg-coffee-light/40 border border-coffee-sand/40 p-2 rounded-xl text-[10px] leading-relaxed text-coffee-milk w-full">' +
+                        '📌 <strong>Hướng dẫn:</strong> Bật camera điện thoại, quét mã để xem menu & gọi đồ uống tại chỗ tiện lợi.' +
+                    '</div>' +
+                '</div>';
         });
     }
 

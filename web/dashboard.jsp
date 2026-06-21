@@ -931,7 +931,8 @@
                 tableBody.innerHTML += `
                     <tr class="hover:bg-coffee-light/30 transition-colors">
                         <td class="py-2.5 font-bold text-coffee-dark font-mono">${r.month}</td>
-                        <td class="py-2.5 font-mono">${formatVND(r.revenue)}</td>
+                        <td class="py-2.5 font-mono"><fmt:formatNumber value="${r.revenue}" pattern="#,###"/> ₫
+</td>
                         <td class="py-2.5 font-mono text-coffee-milk">${formatVND(r.cost)}</td>
                         <td class="py-2.5 font-mono font-bold ${textClass}">${formatVND(r.profit)}</td>
                         <td class="py-2.5 text-right font-semibold">${stateBadge}</td>
@@ -1123,7 +1124,8 @@
                     </div>
                     <div class="text-right shrink-0">
                         <span class="text-[11px] font-bold text-coffee-dark block">${qty} ly</span>
-                        <span class="text-[9px] text-coffee-milk font-mono">${new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(rev)}</span>
+                        <span class="text-[9px] text-coffee-milk font-mono"><fmt:formatNumber value="${rev}" pattern="#,###"/> ₫
+</span>
                     </div>
                 </div>
             `;
@@ -1566,7 +1568,15 @@
                             <div class="bg-[#EEF7F2] border border-[#BFDFCD] rounded-2xl p-2.5 flex flex-col items-center text-center">
                                 <span class="text-xs font-bold text-coffee-dark">${t.name}</span>
                                 <span class="text-[9px] text-[#2EA55F] font-bold mt-1">👥 2</span>
-                                <span class="text-[8px] text-[#8E7D6F] font-mono mt-0.5">${t.status === 'served' ? 'Served' : 'Chuẩn bị'}</span>
+                                <span class="text-[8px] text-[#8E7D6F] font-mono mt-0.5"><c:choose>
+    <c:when test="${t.status == 'served'}">
+        Served
+    </c:when>
+    <c:otherwise>
+        Chuẩn bị
+    </c:otherwise>
+</c:choose>
+</span>
                             </div>
                         `;
                     }

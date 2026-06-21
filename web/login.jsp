@@ -298,6 +298,13 @@
     <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
+    <!-- SERVER-SIDE CONDITIONS VIA JSTL <c:if> -->
+    <c:if test="${empty param.disableSecureBanner}">
+        <div class="max-w-md w-full mx-auto bg-coffee-light/45 border border-coffee-sand/50 p-3 rounded-2xl mb-4 text-center">
+            <span class="text-[9px] text-coffee-dark font-bold font-mono tracking-wider">🔒 SECURE GATEWAY (JSTL PROTECTED AREA)</span>
+        </div>
+    </c:if>
+
 <div class="max-w-md w-full mx-auto bg-white border border-coffee-sand rounded-3xl p-8 shadow-sm space-y-6 my-12 animate-fade-in">
     <div class="text-center space-y-1">
         <span class="text-3xl">🔑</span>
@@ -471,7 +478,7 @@
         localStorage.setItem('auth_role', finalRole);
         localStorage.setItem('auth_user', finalUser);
 
-        alert(`🔑 Đăng nhập thành công với vai trò: ${finalRole === 'manager' ? 'Quản lý (Manager)' : finalRole === 'barista' ? 'Pha chế (Barista)' : 'Phục vụ (Waiter)'}! Chào mừng ${finalUser}.`);
+        alert('🔑 Đăng nhập thành công với vai trò: ' + (finalRole === 'manager' ? 'Quản lý (Manager)' : finalRole === 'barista' ? 'Pha chế (Barista)' : 'Phục vụ (Waiter)') + '! Chào mừng ' + finalUser + '.');
 
         if (finalRole === 'barista') {
             window.location.href = 'kds.jsp';

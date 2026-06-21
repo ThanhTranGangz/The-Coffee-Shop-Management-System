@@ -413,17 +413,23 @@
                 <tr class="hover:bg-coffee-light/10 transition-colors">
                     <td class="py-3.5 px-4 font-bold text-coffee-rust font-mono text-[13px]">
                         #${o.orderNumber}
-                        <div class="text-[9px] text-coffee-milk font-normal font-sans">${new Date(o.createdAt).toLocaleTimeString('vi-VN')}</div>
+                        <div class="text-[9px] text-coffee-milk font-normal font-sans"><fmt:formatDate value="${o.createdAt}" pattern="HH:mm"/>
+</div>
                     </td>
                     <td class="py-3.5 px-4 font-bold text-coffee-dark">
                         ${o.tableName}
                     </td>
                     <td class="py-3.5 px-4 max-w-xs space-y-0.5">
                         ${detailLiHtml}
-                        ${o.notes ? `<div class="text-[9.5px] text-amber-800 italic mt-1 bg-amber-50 rounded px-1.5 py-0.5 inline-block">"Ghi chú: ${o.notes}"</div>` : ''}
+<c:if test="${not empty o.notes}">
+    <div class="text-[9.5px] text-amber-800 italic mt-1 bg-amber-50 rounded px-1.5 py-0.5 inline-block">
+        "Ghi chú: ${o.notes}"
+    </div>
+</c:if>
                     </td>
                     <td class="py-3.5 px-4 font-mono font-bold text-right text-coffee-dark">
-                        ${formatVND(o.totalAmount)}
+                       <fmt:formatNumber value="${o.totalAmount}" pattern="#,###"/> ₫
+
                     </td>
                     <td class="py-3.5 px-4 text-center">
                         <span class="text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded-full ${badgeStyle}">
@@ -431,13 +437,21 @@
                         </span>
                     </td>
                     <td class="py-3.5 px-4 text-center">
-                        ${o.status !== 'Served' ? `
-                            <a href="order-summary.jsp?tableId=${o.tableId}" class="bg-coffee-rust/10 text-coffee-rust border border-coffee-rust/20 hover:bg-coffee-rust hover:text-white transition-all text-[10px] px-2.5 py-1.5 rounded-lg font-bold">
-                                💸 Thu ngân
-                            </a>
-                        ` : `
-                            <span class="text-[10px] text-coffee-milk italic font-normal">Đã hoàn tất</span>
-                        `}
+                        <c:choose>
+    <c:when test="${o.status != 'Served'}">
+        <a href="order-summary.jsp?tableId=${o.tableId}"
+           class="bg-coffee-rust/10 text-coffee-rust border border-coffee-rust/20 hover:bg-coffee-rust hover:text-white transition-all text-[10px] px-2.5 py-1.5 rounded-lg font-bold">
+            💸 Thu ngân
+        </a>
+    </c:when>
+
+    <c:otherwise>
+        <span class="text-[10px] text-coffee-milk italic font-normal">
+            Đã hoàn tất
+        </span>
+    </c:otherwise>
+</c:choose>
+
                     </td>
                 </tr>
             `;

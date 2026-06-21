@@ -467,13 +467,14 @@
                             </div>
                             <!-- Visual Progress bar -->
                             <div class="w-full h-2 bg-coffee-sand/40 rounded-full overflow-hidden">
-                                <div class="h-full rounded-full transition-all duration-300 ${isOutOfStock ? 'bg-red-500 w-0' : isLowStock ? 'bg-amber-500' : 'bg-coffee-rust'}" style="width: ${progressPct}%"></div>
+                                <div class="h-full rounded-full transition-all duration-300 ${isOutOfStock ? 'bg-red-500 w-0' : isLowStock ? 'bg-amber-500' : 'bg-coffee-rust'}" style="width: ${progressPct}"></div>
                             </div>
                         </div>
 
                         <div class="flex justify-between items-center text-[10px] text-coffee-milk pt-1 border-t border-coffee-sand/20">
                             <span>Đơn giá nhập hộ:</span>
-                            <span class="font-mono font-bold text-coffee-dark">${formatVND(ing.importCost)} / ${ing.unit}</span>
+                            <span class="font-mono font-bold text-coffee-dark"><fmt:formatNumber value="${ing.importCost}" pattern="#,###"/> ₫
+ / ${ing.unit}</span>
                         </div>
                     </div>
                 `;
@@ -496,7 +497,8 @@
                                 ${ing.name}
                                 ${isOutOfStock ? '<span class="text-red-600 text-[10px] font-bold">● Hết</span>' : isLowStock ? '<span class="text-amber-600 text-[10px] font-bold">● Sắp hết</span>' : ''}
                             </h4>
-                            <p class="text-[10px] text-coffee-milk font-mono">Tồn thực: ${ing.stock} ${ing.unit} • Đơn giá mua: ${formatVND(ing.importCost)}/${ing.unit}</p>
+                            <p class="text-[10px] text-coffee-milk font-mono">Tồn thực: ${ing.stock} ${ing.unit} • Đơn giá mua: <fmt:formatNumber value="${ing.importCost}" pattern="#,###"/> ₫
+/${ing.unit}</p>
                         </div>
                         <div class="flex items-center gap-2 shrink-0">
                             <input type="number" min="0" value="0" id="import-qty-${ing.id}" oninput="calculateImportReceipt()" class="w-24 bg-white text-xs font-mono font-semibold border border-coffee-sand rounded-xl px-2.5 py-1.5 text-center focus:border-coffee-rust focus:outline-none" placeholder="Nhập số...">
@@ -615,12 +617,13 @@
                         <div class="space-y-1 mt-2">
                             <h5 class="text-[10px] font-bold uppercase text-coffee-milk tracking-wider">Nguyên liệu định lượng định sẵn:</h5>
                             <ul class="space-y-1 text-xs text-coffee-dark font-mono">
-                                ${clientRecipe.map(req => `
-                                    <li class="flex justify-between border-b border-dashed border-coffee-sand/40 pb-0.5">
-                                        <span>• ${req.name}</span>
-                                        <span class="font-bold">${req.qty}</span>
-                                    </li>
-                                `).join('')}
+                                <c:forEach var="req" items="${clientRecipe}">
+    <li class="flex justify-between border-b border-dashed border-coffee-sand/40 pb-0.5">
+        <span>&bull; ${req.name}</span>
+        <span class="font-bold">${req.qty}</span>
+    </li>
+</c:forEach>
+
                             </ul>
                         </div>
                     `;

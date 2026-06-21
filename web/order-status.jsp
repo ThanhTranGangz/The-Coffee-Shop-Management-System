@@ -281,6 +281,13 @@
     <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
+    <!-- SERVER-SIDE CONDITIONS VIA JSTL <c:if> -->
+    <c:if test="${empty param.disableSecureLookup}">
+        <div class="max-w-xl w-full mx-auto bg-coffee-light/50 border border-coffee-sand/50 p-3 rounded-2xl mb-4 text-center">
+            <span class="text-[9px] text-coffee-dark font-bold font-mono tracking-wider">🔒 TRUY CỨU ORDERS BẢO MẬT (JSTL ACTIVE)</span>
+        </div>
+    </c:if>
+
 <div class="max-w-xl w-full mx-auto space-y-6 animate-fade-in my-6">
     <div class="bg-white border border-coffee-sand rounded-3xl p-6 sm:p-8 shadow-sm space-y-4">
         <div class="text-center space-y-1">
@@ -334,7 +341,12 @@
             tables.forEach(t => {
                 const opt = document.createElement('option');
                 opt.value = t.id;
-                opt.text = `${t.name} (${t.zone === 'Ground Floor' ? 'Tầng trệt' : t.zone === 'Terrace' ? 'Garden' : 'Tầng Lửng'})`;
+                opt.text = `${t.name} (<c:choose>
+    <c:when test="${t.zone == 'Ground Floor'}">Tầng trệt</c:when>
+    <c:when test="${t.zone == 'Terrace'}">Garden</c:when>
+    <c:otherwise>Tầng Lửng</c:otherwise>
+</c:choose>
+)`;
                 
                 // Select table if saved in local storage
                 if (t.id === localStorage.getItem('user_sitting_table_id')) {
@@ -437,7 +449,8 @@
                     <div class="flex justify-between items-center border-b border-coffee-light pb-2">
                         <div>
                             <span class="text-[9px] font-mono tracking-wider bg-coffee-rust text-white font-bold px-2 py-0.5 rounded uppercase">ĐƠN KHÁCH #${o.orderNumber}</span>
-                            <p class="text-[10px] text-coffee-milk font-mono mt-0.5">${new Date(o.createdAt).toLocaleTimeString('vi-VN')}</p>
+                            <p class="text-[10px] text-coffee-milk font-mono mt-0.5"><fmt:formatDate value="${o.createdAt}" pattern="HH:mm"/>
+</p>
                         </div>
                         <span class="text-[9.5px] font-bold px-2 py-0.5 border rounded-full ${statusBadge}">
                             ${statusVi}

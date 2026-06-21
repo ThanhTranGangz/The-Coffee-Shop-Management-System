@@ -299,6 +299,16 @@
     <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
+    <!-- SERVER-SIDE CONDITIONS VIA JSTL <c:if> -->
+    <c:if test="${empty param.disableSecureAnalytic}">
+        <div class="max-w-7xl w-full mx-auto bg-coffee-light/60 border border-coffee-sand/55 p-3.5 rounded-2xl mb-6">
+            <p class="text-xs text-coffee-dark font-semibold font-sans flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Phân hệ giám định kinh doanh JSTL Secure Analytics Zone hoạt động ổn định</span>
+            </p>
+        </div>
+    </c:if>
+
 <div class="space-y-6">
     <!-- Summary header -->
     <div class="bg-white border border-coffee-sand/70 p-5 rounded-3xl shadow-xs flex justify-between items-center">
@@ -549,19 +559,18 @@
                 labelText = '⚖️ Hòa vốn';
             }
             
-            tbody.innerHTML += `
-                <tr class="hover:bg-coffee-light/25 transition-colors">
-                    <td class="py-3.5 px-4 font-bold text-coffee-dark">Tháng ${r.month} / ${r.year}</td>
-                    <td class="py-3.5 px-4 text-coffee-dark font-mono font-semibold">${formatVND(r.revenue)}</td>
-                    <td class="py-3.5 px-4 text-coffee-milk font-mono">${formatVND(r.expenses)}</td>
-                    <td class="py-3.5 px-4 font-mono font-bold ${r.profit >= 0 ? 'text-coffee-rust' : 'text-red-650'}">${formatVND(r.profit)}</td>
-                    <td class="py-3.5 px-4 text-center">
-                        <span class="text-[9.5px] font-bold px-2.5 py-0.5 rounded-full ${badgeClass}">
-                            ${labelText}
-                        </span>
-                    </td>
-                </tr>
-            `;
+            tbody.innerHTML += 
+                '<tr class="hover:bg-coffee-light/25 transition-colors">' +
+                    '<td class="py-3.5 px-4 font-bold text-coffee-dark">Tháng ' + r.month + ' / ' + r.year + '</td>' +
+                    '<td class="py-3.5 px-4 text-coffee-dark font-mono font-semibold">' + formatVND(r.revenue) + '</td>' +
+                    '<td class="py-3.5 px-4 text-coffee-milk font-mono">' + formatVND(r.expenses) + '</td>' +
+                    '<td class="py-3.5 px-4 font-mono font-bold ' + (r.profit >= 0 ? 'text-coffee-rust' : 'text-red-650') + '">' + formatVND(r.profit) + '</td>' +
+                    '<td class="py-3.5 px-4 text-center">' +
+                        '<span class="text-[9.5px] font-bold px-2.5 py-0.5 rounded-full ' + badgeClass + '">' +
+                            labelText +
+                        '</span>' +
+                    '</td>' +
+                '</tr>';
         });
         
         // Update summary cards
@@ -621,8 +630,8 @@
             const p = Math.max(10, Math.round((count / maxSales) * 100));
 
             const idStr = cat.toLowerCase();
-            document.getElementById(`label-sales-${idStr}`).innerText = `${count} món (${formatVND(money)})`;
-            document.getElementById(`bar-sales-${idStr}`).style.width = `${p}%`;
+            document.getElementById('label-sales-' + idStr).innerText = count + ' món (' + formatVND(money) + ')';
+            document.getElementById('bar-sales-' + idStr).style.width = p + '%';
         });
 
         // Zones occupancy analytics
@@ -644,13 +653,12 @@
         zonePerfBox.innerHTML = '';
         Object.keys(zoneStats).forEach(key => {
             const z = zoneStats[key];
-            zonePerfBox.innerHTML += `
-                <div class="bg-coffee-light/60 border border-coffee-sand/70 rounded-2xl p-4 text-xs font-medium text-center space-y-1">
-                    <span class="text-coffee-milk uppercase tracking-wider font-mono text-[9px] font-bold block">${z.name}</span>
-                    <p class="text-base font-serif font-bold text-coffee-dark mt-1">${z.count} hóa đơn</p>
-                    <p class="text-[11px] font-mono font-bold text-coffee-rust">${formatVND(z.revenue)}</p>
-                </div>
-            `;
+            zonePerfBox.innerHTML += 
+                '<div class="bg-coffee-light/60 border border-coffee-sand/70 rounded-2xl p-4 text-xs font-medium text-center space-y-1">' +
+                    '<span class="text-coffee-milk uppercase tracking-wider font-mono text-[9px] font-bold block">' + z.name + '</span>' +
+                    '<p class="text-base font-serif font-bold text-coffee-dark mt-1">' + z.count + ' hóa đơn</p>' +
+                    '<p class="text-[11px] font-mono font-bold text-coffee-rust">' + formatVND(z.revenue) + '</p>' +
+                '</div>';
         });
 
         // Lead item frequency lists (Hot sellers)
@@ -670,17 +678,16 @@
         }
 
         sortedItems.slice(0, 5).forEach((it, idx) => {
-            hotList.innerHTML += `
-                <div class="flex items-center gap-3 bg-coffee-light/40 border border-coffee-sand/50 p-2.5 rounded-xl text-xs font-medium justify-between shadow-3xs">
-                    <div class="flex items-center gap-2">
-                        <span class="w-5 h-5 rounded-full bg-coffee-rust text-white flex items-center justify-center font-bold text-[10px] font-mono shrink-0">${idx+1}</span>
-                        <span class="text-coffee-dark font-bold">${it.name}</span>
-                    </div>
-                    <span class="font-mono text-coffee-rust font-bold bg-white px-2 py-0.5 border border-coffee-sand rounded-md shrink-0">
-                        ${it.quantity} ly đã nạp
-                    </span>
-                </div>
-            `;
+            hotList.innerHTML += 
+                '<div class="flex items-center gap-3 bg-coffee-light/40 border border-coffee-sand/50 p-2.5 rounded-xl text-xs font-medium justify-between shadow-3xs">' +
+                    '<div class="flex items-center gap-2">' +
+                        '<span class="w-5 h-5 rounded-full bg-coffee-rust text-white flex items-center justify-center font-bold text-[10px] font-mono shrink-0">' + (idx + 1) + '</span>' +
+                        '<span class="text-coffee-dark font-bold">' + it.name + '</span>' +
+                    '</div>' +
+                    '<span class="font-mono text-coffee-rust font-bold bg-white px-2 py-0.5 border border-coffee-sand rounded-md shrink-0">' +
+                        it.quantity + ' ly đã nạp' +
+                    '</span>' +
+                '</div>';
         });
     }
 

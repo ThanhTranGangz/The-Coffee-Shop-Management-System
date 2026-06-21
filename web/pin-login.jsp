@@ -298,6 +298,13 @@
     <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
+    <!-- SERVER-SIDE CONDITIONS VIA JSTL <c:if> -->
+    <c:if test="${empty param.disablePortalNotice}">
+        <div class="max-w-xs w-full mx-auto bg-amber-50 border border-amber-250/50 p-3 rounded-2xl mb-4 text-center">
+            <span class="text-[10px] text-amber-800 font-bold uppercase font-mono">🔐 Đăng nhập POS Bảo Mật (JSTL Active)</span>
+        </div>
+    </c:if>
+
 <div class="max-w-xs w-full mx-auto bg-white border border-coffee-sand rounded-3xl p-6 shadow-sm space-y-4 my-8 animate-fade-in text-center">
     <div class="space-y-1">
         <span class="text-3xl">📟</span>
@@ -395,7 +402,7 @@
         selectEl.innerHTML = '';
         roster.forEach(s => {
             const roleName = s.role === 'manager' ? 'Admin' : s.role === 'barista' ? 'Barista' : 'Waiter';
-            selectEl.innerHTML += `<option value="${s.username}">${s.username} [${roleName}]</option>`;
+            selectEl.innerHTML += '<option value="' + s.username + '">' + s.username + ' [' + roleName + ']</option>';
         });
     }
 
@@ -416,7 +423,7 @@
 
     function updatePinDots() {
         for (let i = 1; i <= 4; i++) {
-            const el = document.getElementById(`pin-dig-${i}`);
+            const el = document.getElementById('pin-dig-' + i);
             if (i <= activePin.length) {
                 el.innerText = '●';
                 el.className = 'text-xl font-mono text-coffee-rust select-none font-bold animate-bounce';
@@ -508,7 +515,7 @@
             localStorage.setItem('auth_role', match.role);
             localStorage.setItem('auth_user', match.name);
             
-            alert(`📟 Đăng nhập PIN thành công! Chào mừng ${match.name} (${match.role === 'manager' ? 'Quản lý' : match.role === 'barista' ? 'Pha chế' : 'Phục vụ'}).`);
+            alert('📟 Đăng nhập PIN thành công! Chào mừng ' + match.name + ' (' + (match.role === 'manager' ? 'Quản lý' : match.role === 'barista' ? 'Pha chế' : 'Phục vụ') + ').');
             
             if (match.role === 'manager') {
                 window.location.href = 'dashboard.jsp';

@@ -440,7 +440,11 @@
                 return;
             }
 
-            document.getElementById('bill-table-name').innerText = table.name + ` (${table.zone === 'Ground Floor' ? 'Khu Trệt' : 'Sân Sát'})`;
+            document.getElementById('bill-table-name').innerText = table.name + ` (<c:choose>
+    <c:when test="${table.zone == 'Ground Floor'}">Khu Trệt</c:when>
+    <c:otherwise>Sân Sát</c:otherwise>
+</c:choose>
+)`;
             
             if (!activeOrder) {
                 document.getElementById('bill-items-container').innerHTML = `
@@ -474,9 +478,12 @@
                         <div class="space-y-0.5 pr-2">
                             <p class="font-bold text-coffee-dark">${it.name} <span class="text-[10px] text-coffee-rust font-mono">x${it.quantity}</span></p>
                             <p class="text-[9.5px] text-coffee-milk">Size ${sizeChar} \u2022 Ngọt:${it.customization ? it.customization.sugar : '100%'} \u2022 Đá:${it.customization ? it.customization.ice : '100%'}</p>
-                            ${it.notes ? `<p class="text-[9.5px] italic text-coffee-rust">"${it.notes}"</p>` : ''}
+<c:if test="${not empty it.notes}">
+    <p class="text-[9.5px] italic text-coffee-rust">"${it.notes}"</p>
+</c:if>
                         </div>
-                        <span class="font-bold font-mono text-coffee-dark text-[11px] shrink-0">${formatVND(itemTotal)}</span>
+                        <span class="font-bold font-mono text-coffee-dark text-[11px] shrink-0"><fmt:formatNumber value="${itemTotal}" pattern="#,###"/> ₫
+</span>
                     </div>
                 `;
             });
