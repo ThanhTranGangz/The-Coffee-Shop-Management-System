@@ -1,0 +1,11 @@
+build/
+dist/
+*.class
+*.war
+*~
+
+.DS_Store
+Thumbs.db
+
+nbproject/private/
+*.log
