@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class InventoryDAO {
-    private List<Ingredient> fallbackInventory = new ArrayList<>();
+    private List<Ingredient> fallbackInventory = createDefaultInventory();
 
     public List<Ingredient> getAll() {
         List<Ingredient> list = new ArrayList<>();
@@ -147,6 +147,24 @@ public class InventoryDAO {
     }
 
     public List<Ingredient> getFallbackInventory() {
+        if (fallbackInventory == null || fallbackInventory.isEmpty()) {
+            fallbackInventory = createDefaultInventory();
+        }
         return fallbackInventory;
+    }
+
+    private List<Ingredient> createDefaultInventory() {
+        List<Ingredient> defaults = new ArrayList<>();
+        defaults.add(new Ingredient("i1", "Hạt cà phê nguyên chất", "g", 1500, 300, 50));
+        defaults.add(new Ingredient("i2", "Sữa đặc", "g", 1000, 200, 40));
+        defaults.add(new Ingredient("i3", "Sữa tươi", "ml", 2000, 500, 20));
+        defaults.add(new Ingredient("i4", "Kem muối", "ml", 600, 150, 80));
+        defaults.add(new Ingredient("i5", "Siro đào", "ml", 600, 100, 60));
+        defaults.add(new Ingredient("i6", "Sả tươi", "nhánh", 20, 5, 1000));
+        defaults.add(new Ingredient("i7", "Bột matcha", "g", 500, 100, 200));
+        defaults.add(new Ingredient("i8", "Lá trà ô long", "g", 500, 100, 100));
+        defaults.add(new Ingredient("i9", "Vỏ croissant", "cái", 15, 4, 15000));
+        defaults.add(new Ingredient("i10", "Bánh tiramisu", "lát", 15, 3, 25000));
+        return defaults;
     }
 }

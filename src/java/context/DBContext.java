@@ -29,10 +29,11 @@ public class DBContext {
     public Connection getConnection() throws Exception {
         String url = "jdbc:sqlserver://" + serverName + ":" + portNumber 
                 + ";databaseName=" + dbName 
-                + ";encrypt=true;trustServerCertificate=true";
+                + ";encrypt=true;trustServerCertificate=true"
+                + ";loginTimeout=3;connectRetryCount=0;socketTimeout=5000";
         
-        // Load SQL Server Driver
         Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+        DriverManager.setLoginTimeout(3);
         
         return DriverManager.getConnection(url, userID, password);
     }

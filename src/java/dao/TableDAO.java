@@ -11,10 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TableDAO {
-    private List<Table> fallbackTables = new ArrayList<>();
+    private List<Table> fallbackTables = createDefaultTables();
 
     public List<Table> getAll() {
-        ensureTableCodeColumn();
         List<Table> tables = new ArrayList<>();
         String sql = "SELECT id, name, zone, status, capacity, activeOrderId, tableCode FROM dbo.Tables";
         DBContext db = new DBContext();
@@ -47,7 +46,6 @@ public class TableDAO {
     }
 
     public Table getById(String id) {
-        ensureTableCodeColumn();
         String sql = "SELECT id, name, zone, status, capacity, activeOrderId, tableCode FROM dbo.Tables WHERE id = ?";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
@@ -81,7 +79,6 @@ public class TableDAO {
             return null;
         }
         String normalized = tableCode.trim().toUpperCase();
-        ensureTableCodeColumn();
         String sql = "SELECT id, name, zone, status, capacity, activeOrderId, tableCode FROM dbo.Tables WHERE UPPER(tableCode) = ?";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
@@ -174,7 +171,27 @@ public class TableDAO {
     }
 
     private List<Table> getFallbackTables() {
+        if (fallbackTables == null || fallbackTables.isEmpty()) {
+            fallbackTables = createDefaultTables();
+        }
         return fallbackTables;
+    }
+
+    private List<Table> createDefaultTables() {
+        List<Table> defaults = new ArrayList<>();
+        defaults.add(new Table("t1", "Bàn 1", "Tầng trệt", "empty", 2, null, "TBL-T1-1001"));
+        defaults.add(new Table("t2", "Bàn 2", "Tầng trệt", "empty", 2, null, "TBL-T2-1002"));
+        defaults.add(new Table("t3", "Bàn 3", "Tầng trệt", "empty", 4, null, "TBL-T3-1003"));
+        defaults.add(new Table("t4", "Bàn 4", "Tầng trệt", "empty", 6, null, "TBL-T4-1004"));
+        defaults.add(new Table("t5", "Sân vườn A", "Sân vườn", "empty", 2, null, "TBL-T5-1005"));
+        defaults.add(new Table("t6", "Sân vườn B", "Sân vườn", "empty", 2, null, "TBL-T6-1006"));
+        defaults.add(new Table("t7", "Sân vườn C", "Sân vườn", "empty", 4, null, "TBL-T7-1007"));
+        defaults.add(new Table("t8", "Sân vườn D", "Sân vườn", "empty", 4, null, "TBL-T8-1008"));
+        defaults.add(new Table("t9", "Phòng trên 1", "Tầng trên", "empty", 4, null, "TBL-T9-1009"));
+        defaults.add(new Table("t10", "Phòng trên 2", "Tầng trên", "empty", 4, null, "TBL-T10-1010"));
+        defaults.add(new Table("t11", "Ban công", "Tầng trên", "empty", 2, null, "TBL-T11-1011"));
+        defaults.add(new Table("t12", "Lounge", "Tầng trên", "empty", 8, null, "TBL-T12-1012"));
+        return defaults;
     }
 
     private void ensureTableCodeColumn() {

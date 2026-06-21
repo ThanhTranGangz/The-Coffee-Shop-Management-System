@@ -1124,6 +1124,13 @@
         }
     }
 
+    function fetchWithTimeout(url, options = {}, timeoutMs = 6000) {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        return fetch(url, { ...options, signal: controller.signal })
+            .finally(() => window.clearTimeout(timer));
+    }
+
     function finishInitialMenuLoad() {
         if (initialMenuLoadDone) {
             return Promise.resolve();
@@ -1393,7 +1400,7 @@
 
     async function checkOrderingRestriction() {
         try {
-            const res = await fetch('api/shop/status');
+            const res = await fetchWithTimeout('api/shop/status', {}, 4000);
             if (res.ok) {
                 const data = await res.json();
                 shopClosedGlobal = data.closed;
@@ -1485,14 +1492,14 @@
     }
 
     async function fetchStateCore() {
+        const isInitialLoad = !initialMenuLoadDone;
         try {
-            const isInitialLoad = !initialMenuLoadDone;
             if (isInitialLoad) setMenuLoadingStatus('loadingCheckHours');
             await checkOrderingRestriction();
             if (isInitialLoad) setMenuLoadingStatus('loadingMenuTables');
             const [rMenu, rTables] = await Promise.all([
-                fetch('api/menu'),
-                fetch('api/tables')
+                fetchWithTimeout('api/menu'),
+                fetchWithTimeout('api/tables')
             ]);
 
             if (rMenu.ok) menu = await rMenu.json();
@@ -1514,6 +1521,15 @@
         } catch (err) {
             console.error('Core fetch error', err);
             setMenuLoadingStatus('loadingRetry');
+            if (isInitialLoad) {
+                drawCustomerDropdown();
+                drawCustMenuList();
+                drawCustCartList();
+                drawGuestHistory();
+                await finishInitialMenuLoad();
+                window.setTimeout(maybeOpenTableSetupPrompt, 180);
+                return;
+            }
             window.setTimeout(() => {
                 if (!initialMenuLoadDone) {
                     fetchStateCore();
