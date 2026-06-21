@@ -241,18 +241,22 @@
             target.innerHTML = list.map(order => {
                 const active = order.id === selectedOrderId;
                 const disabled = order.status === 'Served';
-                return `
-                    <button onclick="selectOrder('${order.id}')" class="w-full text-left border rounded-2xl p-3 transition-all ${active ? 'bg-coffee-dark text-white border-coffee-dark' : 'bg-white border-coffee-sand hover:border-coffee-rust'} ${disabled ? 'opacity-60' : ''}">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-[10px] font-mono font-bold ${active ? 'text-coffee-sand' : 'text-coffee-milk'}">#${order.orderNumber || '--'} • ${order.tableName || 'Mang đi'}</p>
-                                <h4 class="font-serif italic font-bold text-lg">${order.tableName || 'Không có bàn'}</h4>
-                                <p class="text-[11px] ${active ? 'text-coffee-sand' : 'text-coffee-milk'}">${(order.items || []).length} dòng món • ${statusText[order.status] || order.status}</p>
-                            </div>
-                            <span class="font-mono text-sm font-bold ${active ? 'text-white' : 'text-coffee-rust'}">${formatVND(order.totalAmount)}</span>
-                        </div>
-                    </button>
-                `;
+                const buttonClass = 'w-full text-left border rounded-2xl p-3 transition-all '
+                    + (active ? 'bg-coffee-dark text-white border-coffee-dark' : 'bg-white border-coffee-sand hover:border-coffee-rust')
+                    + (disabled ? ' opacity-60' : '');
+                const mutedClass = active ? 'text-coffee-sand' : 'text-coffee-milk';
+                const totalClass = active ? 'text-white' : 'text-coffee-rust';
+                return ''
+                    + '<button onclick="selectOrder(\'' + order.id + '\')" class="' + buttonClass + '">'
+                    + '<div class="flex items-start justify-between gap-3">'
+                    + '<div>'
+                    + '<p class="text-[10px] font-mono font-bold ' + mutedClass + '">#' + (order.orderNumber || '--') + ' • ' + (order.tableName || 'Mang đi') + '</p>'
+                    + '<h4 class="font-serif italic font-bold text-lg">' + (order.tableName || 'Không có bàn') + '</h4>'
+                    + '<p class="text-[11px] ' + mutedClass + '">' + ((order.items || []).length) + ' dòng món • ' + (statusText[order.status] || order.status) + '</p>'
+                    + '</div>'
+                    + '<span class="font-mono text-sm font-bold ' + totalClass + '">' + formatVND(order.totalAmount) + '</span>'
+                    + '</div>'
+                    + '</button>';
             }).join('');
         }
 
@@ -279,26 +283,25 @@
                 return;
             }
 
-            document.getElementById('selected-title').innerText = `${order.tableName || 'Không có bàn'} • #${order.orderNumber}`;
-            document.getElementById('selected-subtitle').innerText = `${statusText[order.status] || order.status} • ${order.createdAt || ''}`;
+            document.getElementById('selected-title').innerText = (order.tableName || 'Không có bàn') + ' • #' + order.orderNumber;
+            document.getElementById('selected-subtitle').innerText = (statusText[order.status] || order.status) + ' • ' + (order.createdAt || '');
             document.getElementById('selected-total').innerText = formatVND(order.totalAmount);
             document.getElementById('payment-amount').value = order.totalAmount || 0;
 
             document.getElementById('selected-items').innerHTML = (order.items || []).map(item => {
                 const custom = item.customization || {};
-                return `
-                    <div class="border border-coffee-sand rounded-2xl p-3 flex items-start justify-between gap-4">
-                        <div>
-                            <h4 class="font-bold text-sm">${item.name}</h4>
-                            <p class="text-[11px] text-coffee-milk">SL ${item.quantity} • Size ${custom.size || 'M'} • Ngọt ${custom.sugar || '100%'} • Đá ${custom.ice || '100%'}</p>
-                            ${item.notes ? `<p class="text-[10px] text-coffee-rust italic mt-1">${item.notes}</p>` : ''}
-                        </div>
-                        <div class="text-right">
-                            <p class="font-mono font-bold text-coffee-rust">${formatVND((item.price || 0) * (item.quantity || 1))}</p>
-                            <p class="text-[10px] text-coffee-milk">${statusText[item.status] || item.status}</p>
-                        </div>
-                    </div>
-                `;
+                return ''
+                    + '<div class="border border-coffee-sand rounded-2xl p-3 flex items-start justify-between gap-4">'
+                    + '<div>'
+                    + '<h4 class="font-bold text-sm">' + item.name + '</h4>'
+                    + '<p class="text-[11px] text-coffee-milk">SL ' + item.quantity + ' • Size ' + (custom.size || 'M') + ' • Ngọt ' + (custom.sugar || '100%') + ' • Đá ' + (custom.ice || '100%') + '</p>'
+                    + (item.notes ? '<p class="text-[10px] text-coffee-rust italic mt-1">' + item.notes + '</p>' : '')
+                    + '</div>'
+                    + '<div class="text-right">'
+                    + '<p class="font-mono font-bold text-coffee-rust">' + formatVND((item.price || 0) * (item.quantity || 1)) + '</p>'
+                    + '<p class="text-[10px] text-coffee-milk">' + (statusText[item.status] || item.status) + '</p>'
+                    + '</div>'
+                    + '</div>';
             }).join('');
             updatePaymentMath();
         }
@@ -360,7 +363,7 @@
                 body: JSON.stringify({
                     orderId: order.id,
                     amount: Number(document.getElementById('payment-amount').value || order.totalAmount),
-                    reference: document.getElementById('payment-reference').value || `BANK-ORDER-${order.orderNumber}`,
+                    reference: document.getElementById('payment-reference').value || ('BANK-ORDER-' + order.orderNumber),
                     bankTrace: 'SIMULATED-SUCCESS'
                 })
             });
@@ -380,7 +383,7 @@
                 return;
             }
             const parts = Number(document.getElementById('split-parts').value || 2);
-            const res = await fetch(`api/orders/${order.id}/split-bill`, {
+            const res = await fetch('api/orders/' + order.id + '/split-bill', {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: { 'Content-Type': 'application/json' },
@@ -391,9 +394,13 @@
                 alert(data.error || 'Không thể tách bill.');
                 return;
             }
-            document.getElementById('split-result').innerHTML = data.shares.map(share =>
-                `<div class="flex justify-between border-b border-coffee-sand/60 py-1"><span>${share.name}</span><strong>${formatVND(share.amount)}</strong></div>`
-            ).join('');
+            document.getElementById('split-result').innerHTML = data.shares.map(function(share) {
+                return '<div class="flex justify-between border-b border-coffee-sand/60 py-1"><span>'
+                    + share.name
+                    + '</span><strong>'
+                    + formatVND(share.amount)
+                    + '</strong></div>';
+            }).join('');
         }
 
         async function openShift() {
@@ -441,16 +448,15 @@
                 return;
             }
             const open = shift.status === 'OPEN';
-            label.innerText = open ? `Đang mở • ${shift.cashierName}` : `Đã đóng • ${shift.cashierName}`;
+            label.innerText = (open ? 'Đang mở • ' : 'Đã đóng • ') + shift.cashierName;
             dot.className = open ? 'w-3 h-3 rounded-full bg-emerald-500' : 'w-3 h-3 rounded-full bg-coffee-sand';
-            summary.innerHTML = `
-                <div class="grid grid-cols-2 gap-x-3 gap-y-1">
-                    <span>Doanh thu</span><b class="text-right">${formatVND(shift.totalRevenue)}</b>
-                    <span>Tiền mặt</span><b class="text-right">${formatVND(shift.cashTotal)}</b>
-                    <span>Chuyển khoản</span><b class="text-right">${formatVND(shift.bankTotal)}</b>
-                    <span>Thẻ</span><b class="text-right">${formatVND(shift.cardTotal)}</b>
-                </div>
-            `;
+            summary.innerHTML = ''
+                + '<div class="grid grid-cols-2 gap-x-3 gap-y-1">'
+                + '<span>Doanh thu</span><b class="text-right">' + formatVND(shift.totalRevenue) + '</b>'
+                + '<span>Tiền mặt</span><b class="text-right">' + formatVND(shift.cashTotal) + '</b>'
+                + '<span>Chuyển khoản</span><b class="text-right">' + formatVND(shift.bankTotal) + '</b>'
+                + '<span>Thẻ</span><b class="text-right">' + formatVND(shift.cardTotal) + '</b>'
+                + '</div>';
         }
 
         function drawEvents() {
@@ -460,15 +466,16 @@
                 target.innerHTML = '<p class="text-xs text-coffee-milk">Chưa có giao dịch.</p>';
                 return;
             }
-            target.innerHTML = events.slice(0, 8).map(event => `
-                <div class="bg-coffee-light border border-coffee-sand rounded-xl p-2">
-                    <div class="flex justify-between gap-2">
-                        <span class="font-bold">#${event.orderNumber || '--'} • ${event.method}</span>
-                        <b class="font-mono text-coffee-rust">${formatVND(event.expectedAmount || event.amount)}</b>
-                    </div>
-                    <p class="text-[10px] text-coffee-milk">${event.createdAt || ''} • ${event.reference || ''}</p>
-                </div>
-            `).join('');
+            target.innerHTML = events.slice(0, 8).map(function(event) {
+                return ''
+                    + '<div class="bg-coffee-light border border-coffee-sand rounded-xl p-2">'
+                    + '<div class="flex justify-between gap-2">'
+                    + '<span class="font-bold">#' + (event.orderNumber || '--') + ' • ' + event.method + '</span>'
+                    + '<b class="font-mono text-coffee-rust">' + formatVND(event.expectedAmount || event.amount) + '</b>'
+                    + '</div>'
+                    + '<p class="text-[10px] text-coffee-milk">' + (event.createdAt || '') + ' • ' + (event.reference || '') + '</p>'
+                    + '</div>';
+            }).join('');
         }
 
         document.getElementById('payment-amount').addEventListener('input', updatePaymentMath);
