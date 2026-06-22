@@ -277,6 +277,60 @@ public class BrewStateService {
         return items;
     }
 
+    public synchronized MenuItem createMenuItem(String name, String category, int price, String description, List<String> availableSizes, String image) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Tên món không được để trống.");
+        }
+        if (price <= 0) {
+            throw new IllegalArgumentException("Giá bán phải lớn hơn 0.");
+        }
+
+        List<String> sizes = normalizeSizes(availableSizes);
+        String cleanCategory = normalizeMenuCategory(category);
+        String cleanDescription = description == null || description.trim().isEmpty()
+                ? "Món mới được thêm từ trang quản trị."
+                : description.trim();
+        String cleanImage = image == null ? "" : image.trim();
+        String id = "m" + System.currentTimeMillis();
+
+        MenuItem item = new MenuItem(id, name.trim(), cleanCategory, price, cleanDescription, sizes, cleanImage);
+        menuDAO.create(item);
+        notifyStateChange();
+        return item;
+    }
+
+    private List<String> normalizeSizes(List<String> availableSizes) {
+        List<String> sizes = new ArrayList<>();
+        if (availableSizes != null) {
+            for (String size : availableSizes) {
+                if (size != null && !size.trim().isEmpty()) {
+                    sizes.add(size.trim());
+                }
+            }
+        }
+        if (sizes.isEmpty()) {
+            sizes.add("S");
+            sizes.add("M");
+            sizes.add("L");
+        }
+        return sizes;
+    }
+
+    private String normalizeMenuCategory(String category) {
+        if (category == null || category.trim().isEmpty()) {
+            return "Specialty";
+        }
+        String clean = category.trim();
+        if ("Ice Blended".equalsIgnoreCase(clean) || "Blended".equalsIgnoreCase(clean)) {
+            return "Specialty";
+        }
+        if ("Coffee".equalsIgnoreCase(clean)) return "Coffee";
+        if ("Tea".equalsIgnoreCase(clean)) return "Tea";
+        if ("Pastry".equalsIgnoreCase(clean)) return "Pastry";
+        if ("Specialty".equalsIgnoreCase(clean)) return "Specialty";
+        return clean;
+    }
+
     public List<Table> getTables() {
         return tableDAO.getAll();
     }

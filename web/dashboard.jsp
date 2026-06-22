@@ -248,7 +248,7 @@
                 <a href="table-qr.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-coffee-rust bg-coffee-light border border-coffee-sand/70 hover:border-coffee-rust transition-all">
                     <span class="font-mono text-[12px] tracking-tight">QR</span> <span>Mã QR bàn</span>
                 </a>
-                <a href="menu.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
+                <a href="javascript:void(0)" onclick="triggerQuickAddDrink()" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
                     🍽️ <span>Thực đơn</span>
                 </a>
                 <a href="inventory.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
@@ -795,7 +795,8 @@
                 <select id="quick-drink-category" class="w-full bg-[#FAF7EE] border border-coffee-sand rounded-xl px-3 py-2 text-xs outline-none focus:border-[#A04423]">
                     <option value="Coffee">Cà phê Việt</option>
                     <option value="Tea">Trà quả mọng</option>
-                    <option value="Ice Blended">Tuyệt tác Đá xay</option>
+                    <option value="Specialty">Tuyệt tác Đá xay</option>
+                    <option value="Pastry">Bánh ngọt</option>
                 </select>
             </div>
             <div class="space-y-1">
@@ -1378,20 +1379,30 @@
             const res = await fetch('api/menu', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: nameVal, category: catVal, price: priceVal, available: true })
+                body: JSON.stringify({
+                    name: nameVal,
+                    category: catVal,
+                    price: priceVal,
+                    description: nameVal + ' - món mới từ trang quản trị.',
+                    availableSizes: catVal === 'Pastry' ? ['S'] : ['S', 'M', 'L'],
+                    image: ''
+                })
             });
 
             if (res.ok) {
-                flashNotify(`☕ Món nước "\${nameVal}" [\${formatVND(priceVal)}] đã được tải lên danh sách bán!`);
+                const created = await res.json();
+                flashNotify(`☕ Đã thêm "\${created.name || nameVal}" vào thực đơn bán.`);
+                document.getElementById('quick-drink-name').value = '';
+                document.getElementById('quick-drink-price').value = '';
                 closeQuickAddDrink();
                 fetchStateCore();
             } else {
-                flashNotify(`🟢 Thực đơn bán: Đã cập nhật nhanh thành công món "\${nameVal}"!`);
-                closeQuickAddDrink();
+                const errorPayload = await res.json().catch(() => ({}));
+                alert(errorPayload.error || 'Không thể thêm món vào thực đơn.');
             }
         } catch(e) {
             console.error(e);
-            closeQuickAddDrink();
+            alert('Không thể kết nối máy chủ để thêm món.');
         }
     }
 

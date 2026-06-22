@@ -9,6 +9,7 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MenuDAO {
     private List<MenuItem> fallbackMenu = createDefaultMenu();
@@ -82,6 +83,36 @@ public class MenuDAO {
                 .filter(item -> item.getId().equals(id))
                 .findFirst()
                 .orElse(null);
+    }
+
+    public void create(MenuItem item) {
+        String sql = "INSERT INTO dbo.MenuItems (id, name, category, price, description, availableSizes, image) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+
+            st.setString(1, item.getId());
+            st.setString(2, item.getName());
+            st.setString(3, item.getCategory());
+            st.setInt(4, item.getPrice());
+            st.setString(5, item.getDescription());
+            st.setString(6, joinSizes(item.getAvailableSizes()));
+            st.setString(7, item.getImage());
+            st.executeUpdate();
+            fallbackMenu.add(item);
+        } catch (Exception e) {
+            throw new IllegalStateException("Không thể thêm món vào cơ sở dữ liệu: " + e.getMessage(), e);
+        }
+    }
+
+    private String joinSizes(List<String> sizes) {
+        if (sizes == null || sizes.isEmpty()) {
+            return "M";
+        }
+        return sizes.stream()
+                .filter(size -> size != null && !size.trim().isEmpty())
+                .map(String::trim)
+                .collect(Collectors.joining(","));
     }
 
     private List<MenuItem> getFallbackMenu() {

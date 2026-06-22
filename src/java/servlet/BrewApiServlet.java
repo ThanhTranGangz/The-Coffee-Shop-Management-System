@@ -144,7 +144,20 @@ public class BrewApiServlet extends HttpServlet {
         String body = readBody(req);
         
         try {
-            if (pathInfo.equals("/orders")) {
+            if (pathInfo.equals("/menu")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String name = (String) reqMap.get("name");
+                String category = (String) reqMap.getOrDefault("category", "Specialty");
+                String description = (String) reqMap.getOrDefault("description", "");
+                String image = (String) reqMap.getOrDefault("image", "");
+                int price = readInt(reqMap.get("price"), 0);
+                List<String> sizes = readStringList(reqMap.get("availableSizes"));
+
+                MenuItem createdMenuItem = stateService.createMenuItem(name, category, price, description, sizes, image);
+                resp.setStatus(HttpServletResponse.SC_CREATED);
+                resp.getWriter().write(JsonUtils.toJson(createdMenuItem));
+
+            } else if (pathInfo.equals("/orders")) {
                 int currentHour = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).getHour();
                 boolean outsideOrderingHours = currentHour >= 22 || currentHour < 6;
                 if (stateService.isShopClosed() || (!stateService.isTimeLimitUnlocked() && outsideOrderingHours)) {
@@ -637,6 +650,29 @@ public class BrewApiServlet extends HttpServlet {
             }
         }
         return fallback;
+    }
+
+    private List<String> readStringList(Object value) {
+        if (value instanceof List<?>) {
+            List<String> result = new java.util.ArrayList<>();
+            for (Object item : (List<?>) value) {
+                if (item != null && !String.valueOf(item).trim().isEmpty()) {
+                    result.add(String.valueOf(item).trim());
+                }
+            }
+            return result;
+        }
+        if (value instanceof String) {
+            List<String> result = new java.util.ArrayList<>();
+            String[] parts = ((String) value).split(",");
+            for (String part : parts) {
+                if (!part.trim().isEmpty()) {
+                    result.add(part.trim());
+                }
+            }
+            return result;
+        }
+        return java.util.Collections.emptyList();
     }
 
     private String getSessionUser(HttpServletRequest req) {
