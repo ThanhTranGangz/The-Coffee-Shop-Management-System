@@ -1997,6 +1997,32 @@
 
     let selectedVoucherCode = '';
     let selectedVoucherDiscount = 0;
+    let activeVoucherCatalog = [];
+    let activeVoucherCatalogLoaded = false;
+
+    async function loadActiveVoucherCatalog() {
+        if (activeVoucherCatalogLoaded) return;
+        try {
+            const res = await fetch('api/vouchers', { credentials: 'same-origin' });
+            if (!res.ok) throw new Error('Voucher API failed');
+            activeVoucherCatalog = await res.json();
+            activeVoucherCatalogLoaded = true;
+        } catch (error) {
+            console.warn('Không tải được voucher từ API.', error);
+            activeVoucherCatalog = [];
+            activeVoucherCatalogLoaded = true;
+        }
+    }
+
+    function activeVoucherInfo(code) {
+        return activeVoucherCatalog.find(v => String(v.code || '').toUpperCase() === String(code || '').toUpperCase() && v.active !== false);
+    }
+
+    function activeVoucherName(code) {
+        const voucher = activeVoucherInfo(code);
+        if (!voucher) return String(code || '');
+        return voucher.name || (t('discount') + ' ' + formatVND(voucher.discountAmount));
+    }
 
     async function drawCartMembershipSection() {
         const section = document.getElementById('cart-membership-section');
@@ -2017,9 +2043,11 @@
         }
 
         try {
+            await loadActiveVoucherCatalog();
             const res = await fetch(`api/members/profile?phone=\${phone}`);
             if (res.ok) {
                 const member = await res.json();
+                const usableVouchers = (member.vouchers || []).filter(vCode => activeVoucherInfo(vCode));
                 let html = `
                     <div class="space-y-1.5">
                         <div class="flex justify-between items-center text-[11px]">
@@ -2030,7 +2058,7 @@
                         </div>
                 `;
 
-                if (!member.vouchers || member.vouchers.length === 0) {
+                if (usableVouchers.length === 0) {
                     html += `
                         <p class="text-[10px] text-coffee-milk italic mt-1">\${t('noVoucher')} <a href="member.jsp" class="text-coffee-rust font-bold hover:underline">\${t('goRedeemVoucher')}</a></p>
                     `;
@@ -2043,8 +2071,8 @@
                             <select id="guest-cart-voucher-select" onchange="selectVoucherForCart(this.value)" class="w-full bg-white text-xs border border-coffee-sand rounded-lg px-2 py-1 outline-none font-medium cursor-pointer">
                                 <option value="">\${t('noVoucherOption')}</option>
                     `;
-                    member.vouchers.forEach(vCode => {
-                        const vName = vCode === 'CAFE15' ? t('discount') + ' 15,000đ' : vCode === 'CAFE30' ? t('discount') + ' 30,000đ' : vCode === 'CAFE50' ? t('discount') + ' 50,000đ' : t('discount') + ' 100,000đ';
+                    usableVouchers.forEach(vCode => {
+                        const vName = activeVoucherName(vCode);
                         const isSelected = selectedVoucherCode === vCode ? 'selected' : '';
                         html += `<option value="\${vCode}" \${isSelected}>Voucher \${vCode} (\${vName})</option>`;
                     });
@@ -2069,11 +2097,8 @@
 
     function selectVoucherForCart(val) {
         selectedVoucherCode = val;
-        if (val === 'CAFE15') selectedVoucherDiscount = 15000;
-        else if (val === 'CAFE30') selectedVoucherDiscount = 30000;
-        else if (val === 'CAFE50') selectedVoucherDiscount = 50000;
-        else if (val === 'CAFE100') selectedVoucherDiscount = 100000;
-        else selectedVoucherDiscount = 0;
+        const voucher = activeVoucherInfo(val);
+        selectedVoucherDiscount = voucher ? Number(voucher.discountAmount || 0) : 0;
 
         updateCartTotalDisplay();
     }

@@ -17,7 +17,7 @@ import java.util.List;
 @WebFilter("/*")
 public class SecurityFilter implements Filter {
 
-    private final List<String> managerPages = Arrays.asList("/dashboard.jsp", "/reports.jsp", "/staff-management.jsp", "/inventory.jsp");
+    private final List<String> managerPages = Arrays.asList("/dashboard.jsp", "/reports.jsp", "/staff-management.jsp", "/inventory.jsp", "/admin-menu.jsp", "/promotions.jsp");
     private final List<String> baristaPages = Arrays.asList("/kds.jsp");
     private final List<String> waiterPages = Arrays.asList("/waitstation.jsp", "/staff-orders.jsp", "/table-qr.jsp", "/order-summary.jsp", "/pos-payment.jsp");
     private final List<String> authEntryPages = Arrays.asList("/", "/index.html", "/staff.html", "/login.jsp", "/pin-login.jsp");
@@ -118,6 +118,7 @@ public class SecurityFilter implements Filter {
 
         if ("GET".equals(method)) {
             return path.equals("/api/menu") ||
+                   path.equals("/api/vouchers") ||
                    path.equals("/api/tables") ||
                    path.equals("/api/orders/lookup") ||
                    path.equals("/api/shop/status");

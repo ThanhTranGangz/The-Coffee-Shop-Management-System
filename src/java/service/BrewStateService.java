@@ -50,11 +50,12 @@ public class BrewStateService {
     }
 
     private final dao.InventoryDAO inventoryDAO;
+    private final dao.VoucherDAO voucherDAO;
     private final List<Ingredient> inventory = new ArrayList<>();
     private final List<Expense> expenses = new ArrayList<>();
     private final Map<String, List<RecipeRequirement>> recipes = new HashMap<>();
 
-    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, dao.InventoryDAO inventoryDAO, dao.ShiftDAO shiftDAO, BrewWebSocketHandler webSocketHandler) {
+    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, dao.InventoryDAO inventoryDAO, dao.ShiftDAO shiftDAO, dao.VoucherDAO voucherDAO, BrewWebSocketHandler webSocketHandler) {
         this.menuDAO = menuDAO;
         this.tableDAO = tableDAO;
         this.orderDAO = orderDAO;
@@ -62,6 +63,7 @@ public class BrewStateService {
         this.memberDAO = memberDAO;
         this.inventoryDAO = inventoryDAO;
         this.shiftDAO = shiftDAO;
+        this.voucherDAO = voucherDAO;
         this.webSocketHandler = webSocketHandler;
         
         // Initialize Inventory and Recipe models
@@ -299,6 +301,41 @@ public class BrewStateService {
         return item;
     }
 
+    public synchronized MenuItem updateMenuItem(String id, String name, String category, int price, String description, List<String> availableSizes, String image) {
+        if (id == null || id.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu mã món cần cập nhật.");
+        }
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Tên món không được để trống.");
+        }
+        if (price <= 0) {
+            throw new IllegalArgumentException("Giá bán phải lớn hơn 0.");
+        }
+
+        MenuItem existing = menuDAO.getById(id.trim());
+        if (existing == null) {
+            throw new IllegalArgumentException("Không tìm thấy món cần cập nhật.");
+        }
+
+        existing.setName(name.trim());
+        existing.setCategory(normalizeMenuCategory(category));
+        existing.setPrice(price);
+        existing.setDescription(description == null || description.trim().isEmpty() ? existing.getDescription() : description.trim());
+        existing.setAvailableSizes(normalizeSizes(availableSizes));
+        existing.setImage(image == null ? "" : image.trim());
+        menuDAO.update(existing);
+        notifyStateChange();
+        return existing;
+    }
+
+    public synchronized void deleteMenuItem(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu mã món cần xoá.");
+        }
+        menuDAO.delete(id.trim());
+        notifyStateChange();
+    }
+
     private List<String> normalizeSizes(List<String> availableSizes) {
         List<String> sizes = new ArrayList<>();
         if (availableSizes != null) {
@@ -329,6 +366,46 @@ public class BrewStateService {
         if ("Pastry".equalsIgnoreCase(clean)) return "Pastry";
         if ("Specialty".equalsIgnoreCase(clean)) return "Specialty";
         return clean;
+    }
+
+    public List<Voucher> getVouchers() {
+        return voucherDAO.getAll();
+    }
+
+    public List<Voucher> getActiveVouchers() {
+        return voucherDAO.getActive();
+    }
+
+    public synchronized Voucher saveVoucher(String code, String name, int discountAmount, int pointCost, boolean active) {
+        if (code == null || code.trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã voucher không được để trống.");
+        }
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("Tên voucher không được để trống.");
+        }
+        if (discountAmount <= 0) {
+            throw new IllegalArgumentException("Mức giảm phải lớn hơn 0.");
+        }
+        if (pointCost <= 0) {
+            throw new IllegalArgumentException("Giá đổi voucher phải lớn hơn 0.");
+        }
+
+        String cleanCode = code.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "");
+        if (cleanCode.isEmpty()) {
+            throw new IllegalArgumentException("Mã voucher chỉ nên gồm chữ, số, dấu gạch ngang hoặc gạch dưới.");
+        }
+        Voucher voucher = new Voucher(cleanCode, name.trim(), discountAmount, pointCost, active);
+        voucherDAO.save(voucher);
+        notifyStateChange();
+        return voucher;
+    }
+
+    public synchronized void deleteVoucher(String code) {
+        if (code == null || code.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu mã voucher cần xoá.");
+        }
+        voucherDAO.delete(code.trim().toUpperCase(Locale.ROOT));
+        notifyStateChange();
     }
 
     public List<Table> getTables() {
@@ -1075,19 +1152,19 @@ public class BrewStateService {
     }
 
     public int getVoucherValue(String code) {
-        if ("CAFE15".equals(code)) return 15000;
-        if ("CAFE30".equals(code)) return 30000;
-        if ("CAFE50".equals(code)) return 50000;
-        if ("CAFE100".equals(code)) return 100000;
-        return 0;
+        Voucher voucher = voucherDAO.getByCode(code);
+        if (voucher == null || !voucher.isActive()) {
+            return 0;
+        }
+        return voucher.getDiscountAmount();
     }
 
     public int getVoucherCost(String code) {
-        if ("CAFE15".equals(code)) return 100;
-        if ("CAFE30".equals(code)) return 200;
-        if ("CAFE50".equals(code)) return 300;
-        if ("CAFE100".equals(code)) return 500;
-        return 0;
+        Voucher voucher = voucherDAO.getByCode(code);
+        if (voucher == null || !voucher.isActive()) {
+            return 0;
+        }
+        return voucher.getPointCost();
     }
 
     public synchronized void recordMemberOrder(String phone, String voucherCode, int paidAmount) {

@@ -6,6 +6,7 @@ import model.MenuItem;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -14,9 +15,14 @@ import java.util.stream.Collectors;
 public class MenuDAO {
     private List<MenuItem> fallbackMenu = createDefaultMenu();
 
+    public MenuDAO() {
+        ensureMenuColumns();
+    }
+
     public List<MenuItem> getAll() {
+        ensureMenuColumns();
         List<MenuItem> menuItems = new ArrayList<>();
-        String sql = "SELECT id, name, category, price, description, availableSizes, image FROM dbo.MenuItems";
+        String sql = "SELECT id, name, category, price, description, availableSizes, image FROM dbo.MenuItems WHERE active = 1";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql);
@@ -52,6 +58,7 @@ public class MenuDAO {
     }
 
     public MenuItem getById(String id) {
+        ensureMenuColumns();
         String sql = "SELECT id, name, category, price, description, availableSizes, image FROM dbo.MenuItems WHERE id = ?";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
@@ -86,7 +93,8 @@ public class MenuDAO {
     }
 
     public void create(MenuItem item) {
-        String sql = "INSERT INTO dbo.MenuItems (id, name, category, price, description, availableSizes, image) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        ensureMenuColumns();
+        String sql = "INSERT INTO dbo.MenuItems (id, name, category, price, description, availableSizes, image, active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
@@ -105,6 +113,51 @@ public class MenuDAO {
         }
     }
 
+    public void update(MenuItem item) {
+        ensureMenuColumns();
+        String sql = "UPDATE dbo.MenuItems SET name = ?, category = ?, price = ?, description = ?, availableSizes = ?, image = ?, active = 1 WHERE id = ?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+
+            st.setString(1, item.getName());
+            st.setString(2, item.getCategory());
+            st.setInt(3, item.getPrice());
+            st.setString(4, item.getDescription());
+            st.setString(5, joinSizes(item.getAvailableSizes()));
+            st.setString(6, item.getImage());
+            st.setString(7, item.getId());
+            int rows = st.executeUpdate();
+            if (rows == 0) {
+                throw new IllegalArgumentException("Không tìm thấy món cần cập nhật.");
+            }
+            saveFallback(item);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Không thể cập nhật món: " + e.getMessage(), e);
+        }
+    }
+
+    public void delete(String id) {
+        ensureMenuColumns();
+        String sql = "UPDATE dbo.MenuItems SET active = 0 WHERE id = ?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, id);
+            int rows = st.executeUpdate();
+            if (rows == 0) {
+                throw new IllegalArgumentException("Không tìm thấy món cần xoá.");
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("Không thể xoá món: " + e.getMessage(), e);
+        }
+        getFallbackMenu().removeIf(item -> item.getId().equals(id));
+    }
+
     private String joinSizes(List<String> sizes) {
         if (sizes == null || sizes.isEmpty()) {
             return "M";
@@ -120,6 +173,34 @@ public class MenuDAO {
             fallbackMenu = createDefaultMenu();
         }
         return fallbackMenu;
+    }
+
+    private void saveFallback(MenuItem item) {
+        List<MenuItem> current = getFallbackMenu();
+        int idx = -1;
+        for (int i = 0; i < current.size(); i++) {
+            if (current.get(i).getId().equals(item.getId())) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx >= 0) {
+            current.set(idx, item);
+        } else {
+            current.add(item);
+        }
+    }
+
+    private void ensureMenuColumns() {
+        DBContext db = new DBContext();
+        String sql = "IF COL_LENGTH('dbo.MenuItems', 'active') IS NULL " +
+                     "ALTER TABLE dbo.MenuItems ADD active BIT NOT NULL CONSTRAINT DF_MenuItems_active DEFAULT 1;";
+        try (Connection con = db.getConnection();
+             Statement st = con.createStatement()) {
+            st.execute(sql);
+        } catch (Exception e) {
+            System.err.println("MenuDAO.ensureMenuColumns skipped: " + e.getMessage());
+        }
     }
 
     private List<MenuItem> createDefaultMenu() {

@@ -56,6 +56,15 @@ public class BrewApiServlet extends HttpServlet {
             case "/menu":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getMenu()));
                 break;
+            case "/vouchers":
+                HttpSession session = req.getSession(false);
+                String role = session != null ? (String) session.getAttribute("auth_role") : null;
+                if ("manager".equals(role)) {
+                    resp.getWriter().write(JsonUtils.toJson(stateService.getVouchers()));
+                } else {
+                    resp.getWriter().write(JsonUtils.toJson(stateService.getActiveVouchers()));
+                }
+                break;
             case "/tables":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getTables()));
                 break;
@@ -156,6 +165,29 @@ public class BrewApiServlet extends HttpServlet {
                 MenuItem createdMenuItem = stateService.createMenuItem(name, category, price, description, sizes, image);
                 resp.setStatus(HttpServletResponse.SC_CREATED);
                 resp.getWriter().write(JsonUtils.toJson(createdMenuItem));
+
+            } else if (pathInfo.equals("/menu/delete")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String id = (String) reqMap.get("id");
+                stateService.deleteMenuItem(id);
+                resp.getWriter().write("{\"message\": \"Menu item deleted.\"}");
+
+            } else if (pathInfo.equals("/vouchers")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String code = (String) reqMap.get("code");
+                String name = (String) reqMap.get("name");
+                int discountAmount = readInt(reqMap.get("discountAmount"), 0);
+                int pointCost = readInt(reqMap.get("pointCost"), 0);
+                boolean active = readBoolean(reqMap.get("active"), true);
+
+                Voucher voucher = stateService.saveVoucher(code, name, discountAmount, pointCost, active);
+                resp.getWriter().write(JsonUtils.toJson(voucher));
+
+            } else if (pathInfo.equals("/vouchers/delete")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String code = (String) reqMap.get("code");
+                stateService.deleteVoucher(code);
+                resp.getWriter().write("{\"message\": \"Voucher deleted.\"}");
 
             } else if (pathInfo.equals("/orders")) {
                 int currentHour = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).getHour();
@@ -574,19 +606,34 @@ public class BrewApiServlet extends HttpServlet {
 
         String body = readBody(req);
         Map<String, Object> reqMap = JsonUtils.parseObject(body);
-        String status = (String) reqMap.get("status");
-
-        if (status == null) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\": \"Missing required 'status' property in body.\"}");
-            return;
-        }
 
         try {
-            if (pathInfo.startsWith("/orders/") && pathInfo.contains("/items/")) {
+            if (pathInfo.startsWith("/menu/")) {
+                String[] parts = pathInfo.split("/");
+                if (parts.length >= 3) {
+                    String id = parts[2];
+                    String name = (String) reqMap.get("name");
+                    String category = (String) reqMap.getOrDefault("category", "Specialty");
+                    String description = (String) reqMap.getOrDefault("description", "");
+                    String image = (String) reqMap.getOrDefault("image", "");
+                    int price = readInt(reqMap.get("price"), 0);
+                    List<String> sizes = readStringList(reqMap.get("availableSizes"));
+                    MenuItem updated = stateService.updateMenuItem(id, name, category, price, description, sizes, image);
+                    resp.getWriter().write(JsonUtils.toJson(updated));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Malformatted menu endpoint.\"}");
+                }
+            } else if (pathInfo.startsWith("/orders/") && pathInfo.contains("/items/")) {
                 // Route format: /orders/{orderId}/items/{itemId}
                 String[] parts = pathInfo.split("/");
                 if (parts.length >= 5) {
+                    String status = (String) reqMap.get("status");
+                    if (status == null) {
+                        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        resp.getWriter().write("{\"error\": \"Missing required 'status' property in body.\"}");
+                        return;
+                    }
                     String orderId = parts[2];
                     String itemId = parts[4];
                     stateService.updateItemStatus(orderId, itemId, status);
@@ -599,6 +646,12 @@ public class BrewApiServlet extends HttpServlet {
                 // Route format: /orders/{orderId}/status
                 String[] parts = pathInfo.split("/");
                 if (parts.length >= 4) {
+                    String status = (String) reqMap.get("status");
+                    if (status == null) {
+                        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                        resp.getWriter().write("{\"error\": \"Missing required 'status' property in body.\"}");
+                        return;
+                    }
                     String orderId = parts[2];
                     stateService.updateOrderStatus(orderId, status);
                     resp.getWriter().write("{\"message\": \"Order overall status updated to " + status + ".\"}");
@@ -648,6 +701,16 @@ public class BrewApiServlet extends HttpServlet {
             } catch (NumberFormatException ignored) {
                 return fallback;
             }
+        }
+        return fallback;
+    }
+
+    private boolean readBoolean(Object value, boolean fallback) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        if (value instanceof String) {
+            return Boolean.parseBoolean(((String) value).trim());
         }
         return fallback;
     }

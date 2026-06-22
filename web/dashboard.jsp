@@ -248,7 +248,7 @@
                 <a href="table-qr.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold text-coffee-rust bg-coffee-light border border-coffee-sand/70 hover:border-coffee-rust transition-all">
                     <span class="font-mono text-[12px] tracking-tight">QR</span> <span>Mã QR bàn</span>
                 </a>
-                <a href="javascript:void(0)" onclick="triggerQuickAddDrink()" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
+                <a href="admin-menu.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
                     🍽️ <span>Thực đơn</span>
                 </a>
                 <a href="inventory.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
@@ -263,7 +263,7 @@
                 <a href="reports.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
                     📈 <span>Báo cáo</span>
                 </a>
-                <a href="reports.jsp?promo=1" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
+                <a href="promotions.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
                     🏷️ <span>Khuyến mãi</span>
                 </a>
                 <a href="javascript:void(0)" onclick="openAdminProfileModal()" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
@@ -686,9 +686,9 @@
             <a href="inventory.jsp" class="bg-blue-50 hover:bg-blue-100 border border-blue-200/60 p-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold text-blue-950 transition-colors">
                 <span>📥</span> <span>Nhập kho vật tư</span>
             </a>
-            <button onclick="triggerQuickAddDrink()" class="bg-purple-50 hover:bg-purple-100 border border-purple-200/60 p-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold text-purple-950 cursor-pointer transition-colors">
+            <a href="admin-menu.jsp" class="bg-purple-50 hover:bg-purple-100 border border-purple-200/60 p-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold text-purple-950 transition-colors">
                 <span>☕</span> <span>Thêm món uống</span>
-            </button>
+            </a>
             <a href="reports.jsp" class="bg-amber-50 hover:bg-amber-100 border border-amber-200/60 p-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold text-amber-950 transition-colors">
                 <span>📊</span> <span>Xem báo cáo</span>
             </a>

@@ -430,6 +430,14 @@
 
 <script>
     let loggedInMemberPhone = localStorage.getItem('member_phone') || null;
+    let availableVoucherCatalog = [];
+    let voucherCatalogLoaded = false;
+    const fallbackVoucherCatalog = [
+        { code: 'CAFE15', name: 'Voucher giảm 15,000đ', discountAmount: 15000, pointCost: 100, active: true },
+        { code: 'CAFE30', name: 'Voucher giảm 30,000đ', discountAmount: 30000, pointCost: 200, active: true },
+        { code: 'CAFE50', name: 'Voucher giảm 50,000đ', discountAmount: 50000, pointCost: 300, active: true },
+        { code: 'CAFE100', name: 'Voucher giảm 100,000đ', discountAmount: 100000, pointCost: 500, active: true }
+    ];
 
     document.addEventListener('DOMContentLoaded', () => {
         updateUIState();
@@ -448,6 +456,34 @@
             document.getElementById('logged-out-container').classList.remove('hidden');
             document.getElementById('logged-in-container').classList.add('hidden');
         }
+    }
+
+    function formatVoucherMoney(value) {
+        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
+    }
+
+    async function loadVoucherCatalog() {
+        if (voucherCatalogLoaded) return;
+        try {
+            const res = await fetch('api/vouchers', { credentials: 'same-origin' });
+            if (!res.ok) throw new Error('Voucher API failed');
+            availableVoucherCatalog = await res.json();
+            voucherCatalogLoaded = true;
+        } catch (error) {
+            console.warn('Không tải được voucher từ API, dùng dữ liệu demo.', error);
+            availableVoucherCatalog = fallbackVoucherCatalog.slice();
+            voucherCatalogLoaded = true;
+        }
+    }
+
+    function voucherInfo(code) {
+        return availableVoucherCatalog.find(v => String(v.code || '').toUpperCase() === String(code || '').toUpperCase());
+    }
+
+    function voucherDisplayName(code) {
+        const voucher = voucherInfo(code);
+        if (!voucher) return 'Voucher không còn áp dụng';
+        return voucher.name || ('Voucher giảm ' + formatVoucherMoney(voucher.discountAmount));
     }
 
     function toggleForm(formType) {
@@ -528,6 +564,7 @@
     async function fetchMemberDetails() {
         if (!loggedInMemberPhone) return;
         try {
+            await loadVoucherCatalog();
             const res = await fetch(`api/members/profile?phone=\${loggedInMemberPhone}`);
             if (res.ok) {
                 const m = await res.json();
@@ -546,14 +583,17 @@
                     `;
                 } else {
                     m.vouchers.forEach(vCode => {
-                        const vName = vCode === 'CAFE15' ? 'Giảm 15,000đ' : vCode === 'CAFE30' ? 'Giảm 30,000đ' : vCode === 'CAFE50' ? 'Giảm 50,000đ' : 'Giảm 100,000đ';
+                        const voucher = voucherInfo(vCode);
+                        const vName = voucherDisplayName(vCode);
+                        const activeLabel = voucher && voucher.active !== false ? 'Khả dụng' : 'Tạm tắt';
+                        const activeClass = voucher && voucher.active !== false ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-50 text-zinc-500 border-zinc-200';
                         voucherBox.innerHTML += `
                             <div class="bg-coffee-light border border-coffee-sand/70 p-3.5 rounded-2xl flex justify-between items-center transition-all hover:border-coffee-rust/30">
                                 <div>
                                     <p class="text-xs font-extrabold text-coffee-dark font-mono bg-coffee-sand/40 tracking-wider px-2 py-0.5 rounded-md inline-block">\${vCode}</p>
                                     <p class="text-[11px] font-bold text-coffee-rust mt-1">\${vName}</p>
                                 </div>
-                                <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] uppercase font-bold px-2 py-0.5 rounded-full font-mono">Khả dụng</span>
+                                <span class="\${activeClass} border text-[9px] uppercase font-bold px-2 py-0.5 rounded-full font-mono">\${activeLabel}</span>
                             </div>
                         `;
                     });
@@ -569,23 +609,28 @@
     }
 
     function renderRedemptionList(points) {
-        const list = [
-            { code: 'CAFE15', label: 'Voucher Giảm 15,000đ', cost: 100 },
-            { code: 'CAFE30', label: 'Voucher Giảm 30,000đ', cost: 200 },
-            { code: 'CAFE50', label: 'Voucher Giảm 50,000đ', cost: 300 },
-            { code: 'CAFE100', label: 'Voucher Giảm 100,000đ', cost: 500 }
-        ];
+        const list = availableVoucherCatalog.filter(item => item.active !== false);
 
         const container = document.getElementById('redemption-vouchers-container');
         container.innerHTML = '';
 
+        if (list.length === 0) {
+            container.innerHTML = `
+                <div class="bg-coffee-light/55 border border-dashed border-coffee-sand rounded-2xl p-4 text-xs text-coffee-milk">
+                    Hiện chưa có voucher đang mở đổi.
+                </div>
+            `;
+            return;
+        }
+
         list.forEach(item => {
-            const canRedeem = points >= item.cost;
+            const canRedeem = points >= item.pointCost;
+            const label = item.name || ('Voucher giảm ' + formatVoucherMoney(item.discountAmount));
             container.innerHTML += `
                 <div class="bg-coffee-light/55 border border-coffee-sand/80 rounded-2xl p-4 flex justify-between items-center hover:bg-coffee-light transition-all">
                     <div>
-                        <p class="text-xs font-bold text-coffee-dark font-serif">\${item.label}</p>
-                        <p class="text-[11px] text-coffee-milk mt-0.5 font-mono">Chi phí: <span class="text-coffee-rust font-bold">\${item.cost}</span> hạt cà phê</p>
+                        <p class="text-xs font-bold text-coffee-dark font-serif">\${label}</p>
+                        <p class="text-[11px] text-coffee-milk mt-0.5 font-mono">Chi phí: <span class="text-coffee-rust font-bold">\${item.pointCost}</span> hạt cà phê</p>
                     </div>
                     <button onclick="redeemVoucherCode('\${item.code}')" \${canRedeem ? '' : 'disabled'} class="px-3.5 py-2 rounded-xl text-[10px] uppercase font-bold tracking-wider transition-all shadow-xs \${canRedeem ? 'bg-coffee-rust text-white hover:bg-coffee-rust/95 cursor-pointer active:scale-95' : 'bg-coffee-sand/45 text-coffee-milk/70 cursor-not-allowed'}">
                         Đổi Voucher
