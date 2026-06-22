@@ -1147,8 +1147,57 @@ public class BrewStateService {
     }
 
     public synchronized void deleteMember(String phone) {
-        memberDAO.delete(phone);
+        if (phone == null || phone.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu số điện thoại khách hàng cần xoá.");
+        }
+        Member existing = memberDAO.getByPhone(phone.trim());
+        if (existing == null) {
+            throw new IllegalArgumentException("Không tìm thấy khách hàng cần xoá.");
+        }
+        memberDAO.delete(phone.trim());
         notifyStateChange();
+    }
+
+    public synchronized Member addMemberPoints(String phone, int points) {
+        if (phone == null || phone.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu số điện thoại khách hàng.");
+        }
+        if (points <= 0) {
+            throw new IllegalArgumentException("Số điểm cộng phải lớn hơn 0.");
+        }
+        Member member = memberDAO.getByPhone(phone.trim());
+        if (member == null) {
+            throw new IllegalArgumentException("Không tìm thấy khách hàng.");
+        }
+        member.setPoints(member.getPoints() + points);
+        member.setRank(rankForPoints(member.getPoints()));
+        memberDAO.save(member);
+        notifyStateChange();
+        return member;
+    }
+
+    public synchronized Member giftVoucherToMember(String phone, String code) {
+        if (phone == null || phone.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu số điện thoại khách hàng.");
+        }
+        if (code == null || code.trim().isEmpty()) {
+            throw new IllegalArgumentException("Thiếu mã voucher cần tặng.");
+        }
+        String cleanCode = code.trim().toUpperCase(Locale.ROOT);
+        Voucher voucher = voucherDAO.getByCode(cleanCode);
+        if (voucher == null || !voucher.isActive()) {
+            throw new IllegalArgumentException("Voucher không tồn tại hoặc đang tắt.");
+        }
+        Member member = memberDAO.getByPhone(phone.trim());
+        if (member == null) {
+            throw new IllegalArgumentException("Không tìm thấy khách hàng.");
+        }
+        if (!member.getVouchers().contains(cleanCode)) {
+            member.getVouchers().add(cleanCode);
+        }
+        memberDAO.save(member);
+        notifyStateChange();
+        return member;
     }
 
     public int getVoucherValue(String code) {

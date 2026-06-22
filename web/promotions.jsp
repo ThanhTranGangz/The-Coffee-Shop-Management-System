@@ -44,6 +44,7 @@
                 <a href="dashboard.jsp" class="px-3 py-2 rounded-xl border border-coffee-sand bg-white text-coffee-milk hover:text-coffee-rust">Dashboard</a>
                 <a href="admin-menu.jsp" class="px-3 py-2 rounded-xl border border-coffee-sand bg-white text-coffee-milk hover:text-coffee-rust">Thực đơn</a>
                 <a href="promotions.jsp" class="px-3 py-2 rounded-xl border border-coffee-rust bg-coffee-rust text-white">Khuyến mãi</a>
+                <a href="customers.jsp" class="px-3 py-2 rounded-xl border border-coffee-sand bg-white text-coffee-milk hover:text-coffee-rust">Khách hàng</a>
                 <a href="inventory.jsp" class="px-3 py-2 rounded-xl border border-coffee-sand bg-white text-coffee-milk hover:text-coffee-rust">Kho hàng</a>
                 <a href="reports.jsp" class="px-3 py-2 rounded-xl border border-coffee-sand bg-white text-coffee-milk hover:text-coffee-rust">Báo cáo</a>
             </nav>

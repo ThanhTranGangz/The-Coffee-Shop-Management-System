@@ -257,7 +257,7 @@
                 <a href="staff-management.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
                     👥 <span>Nhân viên</span>
                 </a>
-                <a href="member.jsp" class="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
+                <a href="customers.jsp" class="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">
                     🎟️ <span>Khách hàng</span>
                 </a>
                 <a href="reports.jsp" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-medium text-coffee-milk hover:text-coffee-rust hover:bg-coffee-light transition-all">

@@ -505,6 +505,23 @@ public class BrewApiServlet extends HttpServlet {
                 Member member = new Member(mPhone, mName, mRank, mPoints, mEmail, mPref, mDiscount);
                 stateService.saveMember(member);
                 resp.getWriter().write(JsonUtils.toJson(member));
+            } else if (pathInfo.equals("/members/delete")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String phone = (String) reqMap.get("phone");
+                stateService.deleteMember(phone);
+                resp.getWriter().write("{\"message\": \"Member deleted.\"}");
+            } else if (pathInfo.equals("/members/points")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String phone = (String) reqMap.get("phone");
+                int points = readInt(reqMap.get("points"), 0);
+                Member member = stateService.addMemberPoints(phone, points);
+                resp.getWriter().write(JsonUtils.toJson(member));
+            } else if (pathInfo.equals("/members/voucher")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String phone = (String) reqMap.get("phone");
+                String code = (String) reqMap.get("code");
+                Member member = stateService.giftVoucherToMember(phone, code);
+                resp.getWriter().write(JsonUtils.toJson(member));
             } else if (pathInfo.equals("/members/login")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 String lPhone = (String) reqMap.get("phone");
