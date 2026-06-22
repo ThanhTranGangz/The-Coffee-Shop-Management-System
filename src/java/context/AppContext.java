@@ -11,6 +11,10 @@ import dao.VoucherDAO;
 import service.BrewStateService;
 import websocket.BrewWebSocketHandler;
 
+/**
+ * The central application context that holds references to all Data Access Objects (DAOs),
+ * services, and components used across the entire application. It follows the Singleton pattern.
+ */
 public class AppContext {
     private static final Object lock = new Object();
     private static AppContext instance;
@@ -39,6 +43,11 @@ public class AppContext {
         this.stateService = new BrewStateService(menuDAO, tableDAO, orderDAO, staffDAO, memberDAO, inventoryDAO, shiftDAO, voucherDAO, webSocketHandler);
     }
 
+    /**
+     * Retrieves the singleton instance of the AppContext.
+     * 
+     * @return the AppContext instance
+     */
     public static AppContext getInstance() {
         if (instance == null) {
             synchronized (lock) {

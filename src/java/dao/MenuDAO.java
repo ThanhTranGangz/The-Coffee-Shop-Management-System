@@ -12,13 +12,25 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Data Access Object for managing menu items.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class MenuDAO {
     private List<MenuItem> fallbackMenu = createDefaultMenu();
 
+    /**
+     * Constructs a new MenuDAO and ensures necessary database columns exist.
+     */
     public MenuDAO() {
         ensureMenuColumns();
     }
 
+    /**
+     * Retrieves all active menu items from the database or fallback list.
+     * 
+     * @return a list of all menu items
+     */
     public List<MenuItem> getAll() {
         ensureMenuColumns();
         List<MenuItem> menuItems = new ArrayList<>();
@@ -57,6 +69,12 @@ public class MenuDAO {
         return menuItems;
     }
 
+    /**
+     * Retrieves a specific menu item by its ID.
+     * 
+     * @param id the unique identifier of the menu item
+     * @return the menu item if found, null otherwise
+     */
     public MenuItem getById(String id) {
         ensureMenuColumns();
         String sql = "SELECT id, name, category, price, description, availableSizes, image FROM dbo.MenuItems WHERE id = ?";
@@ -92,6 +110,11 @@ public class MenuDAO {
                 .orElse(null);
     }
 
+    /**
+     * Creates a new menu item in the database.
+     * 
+     * @param item the menu item to create
+     */
     public void create(MenuItem item) {
         ensureMenuColumns();
         String sql = "INSERT INTO dbo.MenuItems (id, name, category, price, description, availableSizes, image, active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)";
@@ -113,6 +136,11 @@ public class MenuDAO {
         }
     }
 
+    /**
+     * Updates an existing menu item in the database.
+     * 
+     * @param item the menu item to update
+     */
     public void update(MenuItem item) {
         ensureMenuColumns();
         String sql = "UPDATE dbo.MenuItems SET name = ?, category = ?, price = ?, description = ?, availableSizes = ?, image = ?, active = 1 WHERE id = ?";
@@ -139,6 +167,11 @@ public class MenuDAO {
         }
     }
 
+    /**
+     * Deactivates a menu item in the database by its ID (soft delete).
+     * 
+     * @param id the unique identifier of the menu item to delete
+     */
     public void delete(String id) {
         ensureMenuColumns();
         String sql = "UPDATE dbo.MenuItems SET active = 0 WHERE id = ?";

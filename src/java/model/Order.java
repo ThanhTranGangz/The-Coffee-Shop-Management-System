@@ -2,6 +2,9 @@ package model;
 
 import java.util.List;
 
+/**
+ * Represents a customer order, including associated table details, items, and status.
+ */
 public class Order {
     private String id;
     private String tableId;
@@ -14,8 +17,25 @@ public class Order {
     private String notes;
     private int totalAmount;
 
+    /**
+     * Default constructor.
+     */
     public Order() {}
 
+    /**
+     * Constructs an Order with full details.
+     * 
+     * @param id the order ID
+     * @param tableId the table ID
+     * @param tableName the table name
+     * @param orderNumber the queue or order number
+     * @param items the list of items in the order
+     * @param status the order status
+     * @param createdAt the creation timestamp
+     * @param updatedAt the last update timestamp
+     * @param notes any special notes
+     * @param totalAmount the total cost of the order
+     */
     public Order(String id, String tableId, String tableName, int orderNumber, List<OrderItem> items, String status, String createdAt, String updatedAt, String notes, int totalAmount) {
         this.id = id;
         this.tableId = tableId;

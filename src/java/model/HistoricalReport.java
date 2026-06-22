@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents a historical financial report for a specific month and year.
+ */
 public class HistoricalReport {
     private int year;
     private int month;
@@ -8,8 +11,21 @@ public class HistoricalReport {
     private long profit;
     private String status;
 
+    /**
+     * Default constructor.
+     */
     public HistoricalReport() {}
 
+    /**
+     * Constructs a HistoricalReport with specified values.
+     * 
+     * @param year the year of the report
+     * @param month the month of the report
+     * @param revenue the total revenue
+     * @param expenses the total expenses
+     * @param profit the net profit
+     * @param status the status of the report
+     */
     public HistoricalReport(int year, int month, long revenue, long expenses, long profit, String status) {
         this.year = year;
         this.month = month;

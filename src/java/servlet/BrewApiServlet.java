@@ -16,10 +16,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Main API servlet for handling coffee shop operations such as menu, orders, tables, and inventory.
+ */
 public class BrewApiServlet extends HttpServlet {
     private static final String BANK_WEBHOOK_TOKEN = "bank-webhook-token";
     private BrewStateService stateService;
 
+    /**
+     * Initializes the servlet and retrieves the state service.
+     * 
+     * @throws ServletException if initialization fails
+     */
     @Override
     public void init() throws ServletException {
         // Retrieve singleton business service
@@ -35,12 +43,18 @@ public class BrewApiServlet extends HttpServlet {
         resp.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Bank-Webhook-Token");
     }
 
+    /**
+     * Handles CORS preflight requests.
+     */
     @Override
     protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);
         resp.setStatus(HttpServletResponse.SC_OK);
     }
 
+    /**
+     * Handles GET requests to retrieve various data entities like menu, tables, orders, etc.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);
@@ -139,6 +153,9 @@ public class BrewApiServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Handles POST requests to create or modify data entities.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);
@@ -610,6 +627,9 @@ public class BrewApiServlet extends HttpServlet {
         }
     }
 
+    /**
+     * Handles PUT requests to update existing data entities.
+     */
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);

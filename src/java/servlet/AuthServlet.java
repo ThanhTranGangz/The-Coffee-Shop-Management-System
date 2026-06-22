@@ -20,11 +20,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Servlet handling authentication operations for staff and members.
+ */
 @WebServlet("/api/auth/*")
 public class AuthServlet extends HttpServlet {
     
     private BrewStateService stateService;
 
+    /**
+     * Initializes the servlet and retrieves the state service.
+     * 
+     * @throws ServletException if initialization fails
+     */
     @Override
     public void init() throws ServletException {
         this.stateService = AppContext.getInstance().getStateService();
@@ -38,12 +46,18 @@ public class AuthServlet extends HttpServlet {
         resp.setHeader("Access-Control-Allow-Headers", "Content-Type");
     }
 
+    /**
+     * Handles CORS preflight requests.
+     */
     @Override
     protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);
         resp.setStatus(HttpServletResponse.SC_OK);
     }
 
+    /**
+     * Handles GET requests for session information and staff options.
+     */
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);
@@ -89,6 +103,9 @@ public class AuthServlet extends HttpServlet {
         resp.getWriter().write("{\"error\": \"Endpoint not found.\"}");
     }
 
+    /**
+     * Handles POST requests for login and logout operations.
+     */
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);

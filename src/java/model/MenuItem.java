@@ -2,6 +2,9 @@ package model;
 
 import java.util.List;
 
+/**
+ * Represents a menu item in the coffee shop, including its details, pricing, and availability.
+ */
 public class MenuItem {
     private String id;
     private String name;
@@ -12,12 +15,36 @@ public class MenuItem {
     private String image;
     private Boolean inStock;
 
+    /**
+     * Default constructor.
+     */
     public MenuItem() {}
 
+    /**
+     * Constructs a MenuItem without an image.
+     * 
+     * @param id the unique identifier
+     * @param name the name of the item
+     * @param category the category of the item
+     * @param price the price of the item
+     * @param description a brief description
+     * @param availableSizes the list of available sizes
+     */
     public MenuItem(String id, String name, String category, int price, String description, List<String> availableSizes) {
         this(id, name, category, price, description, availableSizes, "");
     }
 
+    /**
+     * Constructs a MenuItem with full information including an image.
+     * 
+     * @param id the unique identifier
+     * @param name the name of the item
+     * @param category the category of the item
+     * @param price the price of the item
+     * @param description a brief description
+     * @param availableSizes the list of available sizes
+     * @param image the image URL or path
+     */
     public MenuItem(String id, String name, String category, int price, String description, List<String> availableSizes, String image) {
         this.id = id;
         this.name = name;

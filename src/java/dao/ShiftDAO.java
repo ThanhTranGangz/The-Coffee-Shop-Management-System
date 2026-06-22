@@ -9,9 +9,18 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for managing shifts.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class ShiftDAO {
     private List<Shift> fallbackShifts = new ArrayList<>();
 
+    /**
+     * Retrieves all shifts from the database or fallback list.
+     * 
+     * @return a list of all shifts
+     */
     public List<Shift> getAll() {
         List<Shift> shifts = new ArrayList<>();
         String sql = "SELECT id, staffId, staffName, shiftDate, shiftName, hours, status, notes FROM dbo.Shifts ORDER BY shiftDate DESC, shiftName";
@@ -39,6 +48,11 @@ public class ShiftDAO {
         return shifts;
     }
 
+    /**
+     * Saves a new shift or updates an existing one in the database.
+     * 
+     * @param shift the shift to save or update
+     */
     public void save(Shift shift) {
         String sql = "MERGE dbo.Shifts AS target " +
                      "USING (SELECT ? AS id, ? AS staffId, ? AS staffName, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes) AS source " +
@@ -75,6 +89,11 @@ public class ShiftDAO {
         }
     }
 
+    /**
+     * Deletes a shift from the database by its ID.
+     * 
+     * @param id the unique identifier of the shift to delete
+     */
     public void delete(String id) {
         String sql = "DELETE FROM dbo.Shifts WHERE id = ?";
         DBContext db = new DBContext();

@@ -1,7 +1,9 @@
 package context;
 
+import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.Properties;
 
 /**
  * Standard DBContext class for MS SQL Server JDBC connection management.
@@ -12,11 +14,45 @@ public class DBContext {
     // ==========================================
     // DATABASE CONNECTION CONFIGURATION PARAMETERS
     // ==========================================
-    private final String serverName = "localhost";
-    private final String dbName = "ArtisanBrew";
-    private final String portNumber = "1433";
-    private final String userID = "sa";       // Default username is 'sa'
-    private final String password = "123";    // Default password
+    private String serverName;
+    private String dbName;
+    private String portNumber;
+    private String userID;
+    private String password;
+
+    public DBContext() {
+        loadProperties();
+    }
+
+    private void loadProperties() {
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("db.properties")) {
+            Properties prop = new Properties();
+            if (input == null) {
+                System.out.println("Sorry, unable to find db.properties. Falling back to default values.");
+                this.serverName = "localhost";
+                this.dbName = "ArtisanBrew";
+                this.portNumber = "1433";
+                this.userID = "sa";
+                this.password = "123";
+                return;
+            }
+
+            prop.load(input);
+            this.serverName = prop.getProperty("db.serverName", "localhost");
+            this.dbName = prop.getProperty("db.dbName", "ArtisanBrew");
+            this.portNumber = prop.getProperty("db.portNumber", "1433");
+            this.userID = prop.getProperty("db.userID", "sa");
+            this.password = prop.getProperty("db.password", "123");
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            this.serverName = "localhost";
+            this.dbName = "ArtisanBrew";
+            this.portNumber = "1433";
+            this.userID = "sa";
+            this.password = "123";
+        }
+    }
 
     /**
      * Obtains a Connection object connected to the MS SQL Server instance.

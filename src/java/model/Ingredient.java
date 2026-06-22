@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents an ingredient used in the coffee shop inventory.
+ */
 public class Ingredient {
     private String id;
     private String name;
@@ -8,8 +11,21 @@ public class Ingredient {
     private int minStock;
     private int importCost;
 
+    /**
+     * Default constructor.
+     */
     public Ingredient() {}
 
+    /**
+     * Constructs an Ingredient with specified values.
+     * 
+     * @param id the unique identifier of the ingredient
+     * @param name the name of the ingredient
+     * @param unit the unit of measurement (e.g., kg, ml)
+     * @param stock the current stock quantity
+     * @param minStock the minimum stock threshold
+     * @param importCost the cost of importing the ingredient
+     */
     public Ingredient(String id, String name, String unit, int stock, int minStock, int importCost) {
         this.id = id;
         this.name = name;

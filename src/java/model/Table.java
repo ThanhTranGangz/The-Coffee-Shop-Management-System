@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents a table in the coffee shop, including its location, capacity, and current status.
+ */
 public class Table {
     private String id;
     private String name;
@@ -9,12 +12,36 @@ public class Table {
     private String activeOrderId;
     private String tableCode;
 
+    /**
+     * Default constructor.
+     */
     public Table() {}
 
+    /**
+     * Constructs a Table without a specific table code.
+     * 
+     * @param id the table ID
+     * @param name the table name
+     * @param zone the zone or area of the table
+     * @param status the current status (e.g., empty, serving)
+     * @param capacity the seating capacity
+     * @param activeOrderId the ID of the active order, if any
+     */
     public Table(String id, String name, String zone, String status, int capacity, String activeOrderId) {
         this(id, name, zone, status, capacity, activeOrderId, null);
     }
 
+    /**
+     * Constructs a Table with all details including a table code.
+     * 
+     * @param id the table ID
+     * @param name the table name
+     * @param zone the zone or area of the table
+     * @param status the current status
+     * @param capacity the seating capacity
+     * @param activeOrderId the ID of the active order
+     * @param tableCode a unique code for the table
+     */
     public Table(String id, String name, String zone, String status, int capacity, String activeOrderId, String tableCode) {
         this.id = id;
         this.name = name;

@@ -3,6 +3,9 @@ package utils;
 import java.lang.reflect.Field;
 import java.util.*;
 
+/**
+ * Utility class for JSON serialization and deserialization.
+ */
 @SuppressWarnings("unchecked")
 public class JsonUtils {
 

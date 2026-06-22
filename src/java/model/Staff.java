@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents a staff member in the coffee shop system, detailing their roles and shifts.
+ */
 public class Staff {
     private int id;
     private String name;
@@ -12,11 +15,26 @@ public class Staff {
     private String status; // "Active", "Temp_Inactive", "Perm_Inactive", "Off_Duty"
     private boolean overtime; // true if allowed to work overtime outside their shift hours
 
+    /**
+     * Default constructor. Initializes status as Active and overtime as false.
+     */
     public Staff() {
         this.status = "Active";
         this.overtime = false;
     }
 
+    /**
+     * Constructs a Staff member with essential details.
+     * 
+     * @param id the staff ID
+     * @param name the staff name
+     * @param role the staff role
+     * @param pin the login pin
+     * @param shift the assigned shift
+     * @param active whether the staff is active
+     * @param username the login username
+     * @param password the login password
+     */
     public Staff(int id, String name, String role, String pin, String shift, boolean active, String username, String password) {
         this.id = id;
         this.name = name;
@@ -30,6 +48,20 @@ public class Staff {
         this.overtime = false;
     }
 
+    /**
+     * Constructs a Staff member with all details, including status and overtime.
+     * 
+     * @param id the staff ID
+     * @param name the staff name
+     * @param role the staff role
+     * @param pin the login pin
+     * @param shift the assigned shift
+     * @param active whether the staff is active
+     * @param username the login username
+     * @param password the login password
+     * @param status the staff status
+     * @param overtime whether overtime is allowed
+     */
     public Staff(int id, String name, String role, String pin, String shift, boolean active, String username, String password, String status, boolean overtime) {
         this.id = id;
         this.name = name;

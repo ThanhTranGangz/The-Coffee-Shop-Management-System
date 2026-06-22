@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents a discount or reward voucher that can be redeemed by members.
+ */
 public class Voucher {
     private String code;
     private String name;
@@ -7,8 +10,20 @@ public class Voucher {
     private int pointCost;
     private boolean active;
 
+    /**
+     * Default constructor.
+     */
     public Voucher() {}
 
+    /**
+     * Constructs a Voucher with full details.
+     * 
+     * @param code the voucher code
+     * @param name the name or description of the voucher
+     * @param discountAmount the discount amount in currency
+     * @param pointCost the cost in points to redeem
+     * @param active whether the voucher is currently active
+     */
     public Voucher(String code, String name, int discountAmount, int pointCost, boolean active) {
         this.code = code;
         this.name = name;

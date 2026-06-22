@@ -10,14 +10,26 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for managing vouchers.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class VoucherDAO {
     private List<Voucher> fallbackVouchers = createDefaultVouchers();
 
+    /**
+     * Constructs a new VoucherDAO, ensuring the table exists and defaults are seeded.
+     */
     public VoucherDAO() {
         ensureTable();
         seedDefaultsIfEmpty();
     }
 
+    /**
+     * Retrieves all vouchers from the database or fallback list.
+     * 
+     * @return a list of all vouchers
+     */
     public List<Voucher> getAll() {
         ensureTable();
         List<Voucher> list = new ArrayList<>();
@@ -37,6 +49,11 @@ public class VoucherDAO {
         return list.isEmpty() ? getFallbackVouchers() : list;
     }
 
+    /**
+     * Retrieves all active vouchers.
+     * 
+     * @return a list of active vouchers
+     */
     public List<Voucher> getActive() {
         List<Voucher> active = new ArrayList<>();
         for (Voucher voucher : getAll()) {
@@ -47,6 +64,12 @@ public class VoucherDAO {
         return active;
     }
 
+    /**
+     * Retrieves a specific voucher by its code.
+     * 
+     * @param code the unique code of the voucher
+     * @return the voucher if found, null otherwise
+     */
     public Voucher getByCode(String code) {
         if (code == null) {
             return null;
@@ -73,6 +96,11 @@ public class VoucherDAO {
         return null;
     }
 
+    /**
+     * Saves a new voucher or updates an existing one in the database.
+     * 
+     * @param voucher the voucher to save or update
+     */
     public void save(Voucher voucher) {
         ensureTable();
         String sql = "MERGE dbo.Vouchers AS target " +
@@ -95,6 +123,11 @@ public class VoucherDAO {
         saveFallback(voucher);
     }
 
+    /**
+     * Deletes a voucher from the database by its code.
+     * 
+     * @param code the unique code of the voucher to delete
+     */
     public void delete(String code) {
         ensureTable();
         String sql = "DELETE FROM dbo.Vouchers WHERE code = ?";

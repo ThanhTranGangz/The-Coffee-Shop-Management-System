@@ -10,9 +10,18 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for managing tables in the coffee shop.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class TableDAO {
     private List<Table> fallbackTables = createDefaultTables();
 
+    /**
+     * Retrieves all tables from the database or fallback list.
+     * 
+     * @return a list of all tables
+     */
     public List<Table> getAll() {
         List<Table> tables = new ArrayList<>();
         String sql = "SELECT id, name, zone, status, capacity, activeOrderId, tableCode FROM dbo.Tables";
@@ -45,6 +54,12 @@ public class TableDAO {
         return tables;
     }
 
+    /**
+     * Retrieves a specific table by its ID.
+     * 
+     * @param id the unique identifier of the table
+     * @return the table if found, null otherwise
+     */
     public Table getById(String id) {
         String sql = "SELECT id, name, zone, status, capacity, activeOrderId, tableCode FROM dbo.Tables WHERE id = ?";
         DBContext db = new DBContext();
@@ -74,6 +89,12 @@ public class TableDAO {
                 .orElse(null);
     }
 
+    /**
+     * Retrieves a specific table by its table code.
+     * 
+     * @param tableCode the unique code of the table
+     * @return the table if found, null otherwise
+     */
     public Table getByCode(String tableCode) {
         if (tableCode == null || tableCode.trim().isEmpty()) {
             return null;
@@ -108,6 +129,11 @@ public class TableDAO {
                 .orElse(null);
     }
 
+    /**
+     * Updates an existing table in the database.
+     * 
+     * @param table the table to update
+     */
     public void update(Table table) {
         ensureTableCodeColumn();
         table.setTableCode(normalizeTableCode(table.getId(), table.getTableCode()));
@@ -145,6 +171,11 @@ public class TableDAO {
         }
     }
 
+    /**
+     * Creates a new table in the database.
+     * 
+     * @param table the table to create
+     */
     public void create(Table table) {
         ensureTableCodeColumn();
         table.setTableCode(normalizeTableCode(table.getId(), table.getTableCode()));

@@ -3,6 +3,9 @@ package model;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Represents a loyalty member of the coffee shop.
+ */
 public class Member {
     private String phone;
     private String name;
@@ -13,12 +16,38 @@ public class Member {
     private String discount;
     private List<String> vouchers;
 
+    /**
+     * Default constructor.
+     */
     public Member() {}
 
+    /**
+     * Constructs a Member with basic information, initializing an empty voucher list.
+     * 
+     * @param phone the member's phone number
+     * @param name the member's name
+     * @param rank the member's loyalty rank
+     * @param points the accumulated points
+     * @param email the member's email address
+     * @param pref the member's preferences
+     * @param discount the applicable discount
+     */
     public Member(String phone, String name, String rank, int points, String email, String pref, String discount) {
         this(phone, name, rank, points, email, pref, discount, new ArrayList<String>());
     }
 
+    /**
+     * Constructs a Member with full information, including their vouchers.
+     * 
+     * @param phone the member's phone number
+     * @param name the member's name
+     * @param rank the member's loyalty rank
+     * @param points the accumulated points
+     * @param email the member's email address
+     * @param pref the member's preferences
+     * @param discount the applicable discount
+     * @param vouchers a list of voucher codes owned by the member
+     */
     public Member(String phone, String name, String rank, int points, String email, String pref, String discount, List<String> vouchers) {
         this.phone = phone;
         this.name = name;

@@ -10,9 +10,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Calendar;
 
+/**
+ * Data Access Object for managing staff members.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class StaffDAO {
     private List<Staff> fallbackStaff = new ArrayList<>();
 
+    /**
+     * Checks if a specific shift is currently active based on the time.
+     * 
+     * @param shiftText the shift text to check (e.g., "06:00 - 12:00")
+     * @return true if the shift is currently active, false otherwise
+     */
     public static boolean isShiftCurrentlyActive(String shiftText) {
         if (shiftText == null) return false;
         if (shiftText.contains("Toàn thời gian") || shiftText.toLowerCase().contains("all")) {
@@ -31,6 +41,11 @@ public class StaffDAO {
         return true;
     }
 
+    /**
+     * Retrieves all staff members from the database or fallback list.
+     * 
+     * @return a list of all staff members
+     */
     public List<Staff> getAll() {
         List<Staff> list = new ArrayList<>();
         String sql = "SELECT id, name, role, pin, shift, active, username, password, status, overtime FROM dbo.Staff";
@@ -76,6 +91,11 @@ public class StaffDAO {
         return list;
     }
 
+    /**
+     * Saves a new staff member or updates an existing one in the database.
+     * 
+     * @param staff the staff member to save or update
+     */
     public void save(Staff staff) {
         DBContext db = new DBContext();
         
@@ -148,6 +168,11 @@ public class StaffDAO {
         }
     }
 
+    /**
+     * Deletes a staff member from the database by their ID.
+     * 
+     * @param id the unique identifier of the staff member to delete
+     */
     public void delete(int id) {
         String sql = "DELETE FROM dbo.Staff WHERE id=?";
         DBContext db = new DBContext();
@@ -161,6 +186,11 @@ public class StaffDAO {
         getFallbackStaff().removeIf(s -> s.getId() == id);
     }
 
+    /**
+     * Retrieves the fallback memory cache of staff members.
+     * 
+     * @return the fallback list of staff members
+     */
     public List<Staff> getFallbackStaff() {
         return fallbackStaff;
     }

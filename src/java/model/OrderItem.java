@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents an individual item within an order, along with customizations and specific notes.
+ */
 public class OrderItem {
     private String id;
     private String menuItemId;
@@ -10,8 +13,23 @@ public class OrderItem {
     private String notes;
     private String status; // Pending, Preparing, Ready, Served
 
+    /**
+     * Default constructor.
+     */
     public OrderItem() {}
 
+    /**
+     * Constructs an OrderItem with full details.
+     * 
+     * @param id the item ID
+     * @param menuItemId the original menu item ID
+     * @param name the name of the item
+     * @param price the price of a single unit
+     * @param quantity the quantity ordered
+     * @param customization the selected customization options
+     * @param notes any special notes
+     * @param status the item preparation status
+     */
     public OrderItem(String id, String menuItemId, String name, int price, int quantity, CustomizationOptions customization, String notes, String status) {
         this.id = id;
         this.menuItemId = menuItemId;

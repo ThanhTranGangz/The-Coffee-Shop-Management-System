@@ -9,9 +9,18 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for managing inventory ingredients.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class InventoryDAO {
     private List<Ingredient> fallbackInventory = createDefaultInventory();
 
+    /**
+     * Retrieves all ingredients from the database or fallback list.
+     * 
+     * @return a list of all ingredients
+     */
     public List<Ingredient> getAll() {
         List<Ingredient> list = new ArrayList<>();
         String sql = "SELECT id, name, unit, stock, minStock, importCost FROM dbo.Inventory";
@@ -43,6 +52,12 @@ public class InventoryDAO {
         return list;
     }
 
+    /**
+     * Retrieves a specific ingredient by its ID.
+     * 
+     * @param id the unique identifier of the ingredient
+     * @return the ingredient if found, null otherwise
+     */
     public Ingredient getById(String id) {
         String sql = "SELECT id, name, unit, stock, minStock, importCost FROM dbo.Inventory WHERE id = ?";
         DBContext db = new DBContext();
@@ -71,6 +86,11 @@ public class InventoryDAO {
                 .orElse(null);
     }
 
+    /**
+     * Saves a new ingredient or updates an existing one in the database.
+     * 
+     * @param ing the ingredient to save or update
+     */
     public void save(Ingredient ing) {
         DBContext db = new DBContext();
         boolean exists = false;
@@ -133,6 +153,11 @@ public class InventoryDAO {
         }
     }
 
+    /**
+     * Deletes an ingredient from the database by its ID.
+     * 
+     * @param id the unique identifier of the ingredient to delete
+     */
     public void delete(String id) {
         String sql = "DELETE FROM dbo.Inventory WHERE id = ?";
         DBContext db = new DBContext();
@@ -146,6 +171,11 @@ public class InventoryDAO {
         getFallbackInventory().removeIf(i -> i.getId().equals(id));
     }
 
+    /**
+     * Retrieves the fallback memory cache of the inventory.
+     * 
+     * @return the fallback list of ingredients
+     */
     public List<Ingredient> getFallbackInventory() {
         if (fallbackInventory == null || fallbackInventory.isEmpty()) {
             fallbackInventory = createDefaultInventory();

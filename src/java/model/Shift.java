@@ -1,5 +1,8 @@
 package model;
 
+/**
+ * Represents a working shift for a staff member.
+ */
 public class Shift {
     private String id;
     private int staffId;
@@ -10,8 +13,23 @@ public class Shift {
     private String status;
     private String notes;
 
+    /**
+     * Default constructor.
+     */
     public Shift() {}
 
+    /**
+     * Constructs a Shift with full details.
+     * 
+     * @param id the shift ID
+     * @param staffId the staff member's ID
+     * @param staffName the staff member's name
+     * @param shiftDate the date of the shift
+     * @param shiftName the name or type of shift
+     * @param hours the hours worked
+     * @param status the status of the shift
+     * @param notes any remarks
+     */
     public Shift(String id, int staffId, String staffName, String shiftDate, String shiftName, String hours, String status, String notes) {
         this.id = id;
         this.staffId = staffId;

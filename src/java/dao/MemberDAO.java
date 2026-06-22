@@ -10,9 +10,18 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for managing members.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class MemberDAO {
     private List<Member> fallbackMembers = new ArrayList<>();
 
+    /**
+     * Retrieves all members from the database or fallback list.
+     * 
+     * @return a list of all members
+     */
     public List<Member> getAll() {
         ensureMemberColumns();
         List<Member> list = new ArrayList<>();
@@ -38,6 +47,12 @@ public class MemberDAO {
         return list;
     }
 
+    /**
+     * Retrieves a specific member by their phone number.
+     * 
+     * @param phone the phone number of the member
+     * @return the member if found, null otherwise
+     */
     public Member getByPhone(String phone) {
         ensureMemberColumns();
         String sql = "SELECT phone, name, rank, points, email, pref, discount, vouchers FROM dbo.Members WHERE phone=?";
@@ -60,6 +75,11 @@ public class MemberDAO {
                 .orElse(null);
     }
 
+    /**
+     * Saves a new member or updates an existing one in the database.
+     * 
+     * @param member the member to save or update
+     */
     public void save(Member member) {
         ensureMemberColumns();
         String sql = "MERGE dbo.Members AS target " +
@@ -99,6 +119,12 @@ public class MemberDAO {
         }
     }
 
+    /**
+     * Saves a member along with their password in the database.
+     * 
+     * @param member the member to save or update
+     * @param password the password for the member
+     */
     public void saveWithPassword(Member member, String password) {
         ensureMemberColumns();
         String sql = "MERGE dbo.Members AS target " +
@@ -125,6 +151,13 @@ public class MemberDAO {
         saveMemberInFallback(member);
     }
 
+    /**
+     * Authenticates a member using their phone number and password.
+     * 
+     * @param phone the phone number of the member
+     * @param password the password to verify
+     * @return the authenticated member if successful, null otherwise
+     */
     public Member authenticate(String phone, String password) {
         ensureMemberColumns();
         String sql = "SELECT phone, name, rank, points, email, pref, discount, vouchers FROM dbo.Members WHERE phone=? AND password=?";
@@ -151,6 +184,11 @@ public class MemberDAO {
                 .orElse(null);
     }
 
+    /**
+     * Deletes a member from the database by their phone number.
+     * 
+     * @param phone the phone number of the member to delete
+     */
     public void delete(String phone) {
         String sql = "DELETE FROM dbo.Members WHERE phone=?";
         DBContext db = new DBContext();
@@ -164,6 +202,11 @@ public class MemberDAO {
         getFallbackMembers().removeIf(m -> m.getPhone().equals(phone));
     }
 
+    /**
+     * Retrieves the fallback memory cache of members.
+     * 
+     * @return the fallback list of members
+     */
     public List<Member> getFallbackMembers() {
         return fallbackMembers;
     }

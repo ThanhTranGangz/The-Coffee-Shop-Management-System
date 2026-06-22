@@ -11,9 +11,18 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Data Access Object for managing orders.
+ * Handles database operations and provides a memory fallback mechanism.
+ */
 public class OrderDAO {
     private final List<Order> fallbackOrders = new ArrayList<>();
 
+    /**
+     * Retrieves all orders from the database or fallback list.
+     * 
+     * @return a list of all orders
+     */
     public List<Order> getAll() {
         List<Order> orders = new ArrayList<>();
         String sql = "SELECT id, tableId, tableName, orderNumber, status, createdAt, updatedAt, notes, totalAmount FROM dbo.Orders ORDER BY createdAt DESC";
@@ -47,6 +56,12 @@ public class OrderDAO {
         return orders;
     }
 
+    /**
+     * Retrieves a specific order by its ID.
+     * 
+     * @param id the unique identifier of the order
+     * @return the order if found, null otherwise
+     */
     public Order getById(String id) {
         String sql = "SELECT id, tableId, tableName, orderNumber, status, createdAt, updatedAt, notes, totalAmount FROM dbo.Orders WHERE id = ?";
         DBContext db = new DBContext();
@@ -79,6 +94,11 @@ public class OrderDAO {
                 .orElse(null);
     }
 
+    /**
+     * Creates a new order along with its order items in the database.
+     * 
+     * @param order the order to create
+     */
     public void create(Order order) {
         String insertOrderSql = "INSERT INTO dbo.Orders (id, tableId, tableName, orderNumber, status, createdAt, updatedAt, notes, totalAmount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         String insertItemSql = "INSERT INTO dbo.OrderItems (id, orderId, menuItemId, name, price, quantity, size, sugar, ice, notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -137,6 +157,11 @@ public class OrderDAO {
         fallbackOrders.add(order);
     }
 
+    /**
+     * Updates an existing order and recreates its order items in the database.
+     * 
+     * @param order the order to update
+     */
     public void update(Order order) {
         String updateOrderSql = "UPDATE dbo.Orders SET tableId = ?, tableName = ?, orderNumber = ?, status = ?, updatedAt = ?, notes = ?, totalAmount = ? WHERE id = ?";
         String deleteItemsSql = "DELETE FROM dbo.OrderItems WHERE orderId = ?";

@@ -10,6 +10,10 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Central state management service for the coffee shop system.
+ * Handles business logic, inventory tracking, order management, and real-time updates.
+ */
 public class BrewStateService {
     public static class RecipeRequirement {
         private String ingredientId;
@@ -55,6 +59,19 @@ public class BrewStateService {
     private final List<Expense> expenses = new ArrayList<>();
     private final Map<String, List<RecipeRequirement>> recipes = new HashMap<>();
 
+    /**
+     * Constructs the state service with necessary DAOs and handlers.
+     * 
+     * @param menuDAO data access for menu
+     * @param tableDAO data access for tables
+     * @param orderDAO data access for orders
+     * @param staffDAO data access for staff
+     * @param memberDAO data access for members
+     * @param inventoryDAO data access for inventory
+     * @param shiftDAO data access for shifts
+     * @param voucherDAO data access for vouchers
+     * @param webSocketHandler the websocket handler
+     */
     public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, dao.InventoryDAO inventoryDAO, dao.ShiftDAO shiftDAO, dao.VoucherDAO voucherDAO, BrewWebSocketHandler webSocketHandler) {
         this.menuDAO = menuDAO;
         this.tableDAO = tableDAO;

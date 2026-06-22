@@ -8,15 +8,29 @@ import jakarta.websocket.OnOpen;
 import jakarta.websocket.Session;
 import jakarta.websocket.server.ServerEndpoint;
 
+/**
+ * WebSocket endpoint for managing real-time connections with clients.
+ */
 @ServerEndpoint("/ws")
 public class BrewWebSocketEndpoint {
 
+    /**
+     * Handles new WebSocket connections.
+     * 
+     * @param session the new WebSocket session
+     */
     @OnOpen
     public void onOpen(Session session) {
         System.out.println("WebSocket connection opened: " + session.getId());
         AppContext.getInstance().getWebSocketHandler().addSession(session);
     }
 
+    /**
+     * Handles incoming WebSocket messages.
+     * 
+     * @param message the received message
+     * @param session the WebSocket session
+     */
     @OnMessage
     public void onMessage(String message, Session session) {
         System.out.println("WebSocket message received from " + session.getId() + ": " + message);
@@ -30,12 +44,23 @@ public class BrewWebSocketEndpoint {
         }
     }
 
+    /**
+     * Handles WebSocket connection closures.
+     * 
+     * @param session the closed WebSocket session
+     */
     @OnClose
     public void onClose(Session session) {
         System.out.println("WebSocket connection closed: " + session.getId());
         AppContext.getInstance().getWebSocketHandler().removeSession(session);
     }
 
+    /**
+     * Handles WebSocket errors.
+     * 
+     * @param throwable the error
+     * @param session the WebSocket session
+     */
     @OnError
     public void onError(Throwable throwable, Session session) {
         System.err.println("WebSocket error in session " + (session != null ? session.getId() : "null") + ": " + throwable.getMessage());

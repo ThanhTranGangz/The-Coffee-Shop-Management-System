@@ -14,6 +14,9 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * A servlet filter that enforces security rules and role-based access control.
+ */
 @WebFilter("/*")
 public class SecurityFilter implements Filter {
 
@@ -24,11 +27,26 @@ public class SecurityFilter implements Filter {
     private final List<String> guestOnlyPages = Arrays.asList("/member.jsp", "/menu.jsp", "/order-status.jsp");
     private final List<String> publicPages = Arrays.asList("/", "/index.html", "/staff.html", "/login.jsp", "/pin-login.jsp", "/member.jsp", "/menu.jsp", "/order-status.jsp");
 
+    /**
+     * Initializes the filter.
+     * 
+     * @param filterConfig the filter configuration
+     * @throws ServletException if an error occurs during initialization
+     */
     @Override
     public void init(FilterConfig filterConfig) throws ServletException {
         // Initialization if needed
     }
 
+    /**
+     * Processes requests to enforce access control based on user roles and session state.
+     * 
+     * @param request the servlet request
+     * @param response the servlet response
+     * @param chain the filter chain
+     * @throws IOException if an I/O error occurs
+     * @throws ServletException if a servlet error occurs
+     */
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
         HttpServletRequest req = (HttpServletRequest) request;
@@ -108,6 +126,9 @@ public class SecurityFilter implements Filter {
         chain.doFilter(request, response);
     }
 
+    /**
+     * Cleans up resources when the filter is destroyed.
+     */
     @Override
     public void destroy() {
         // Cleanup if needed
