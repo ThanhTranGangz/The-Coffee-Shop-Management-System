@@ -351,9 +351,9 @@
 
         function rotatePortal(direction) {
             if (direction === 'right') {
-                activePortal = (activePortal + portalOrder.length - 1) % portalOrder.length;
-            } else {
                 activePortal = (activePortal + 1) % portalOrder.length;
+            } else {
+                activePortal = (activePortal + portalOrder.length - 1) % portalOrder.length;
             }
             renderPortalCarousel();
         }
