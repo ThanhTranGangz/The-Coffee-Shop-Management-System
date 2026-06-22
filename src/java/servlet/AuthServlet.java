@@ -15,6 +15,8 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,7 +34,7 @@ public class AuthServlet extends HttpServlet {
         resp.setContentType("application/json");
         resp.setCharacterEncoding("UTF-8");
         resp.setHeader("Access-Control-Allow-Origin", "*");
-        resp.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+        resp.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         resp.setHeader("Access-Control-Allow-Headers", "Content-Type");
     }
 
@@ -40,6 +42,51 @@ public class AuthServlet extends HttpServlet {
     protected void doOptions(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         setJsonHeaders(resp);
         resp.setStatus(HttpServletResponse.SC_OK);
+    }
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        setJsonHeaders(resp);
+        String pathInfo = req.getPathInfo();
+
+        if ("/session".equals(pathInfo)) {
+            HttpSession session = req.getSession(false);
+            String role = session != null ? (String) session.getAttribute("auth_role") : null;
+            String user = session != null ? (String) session.getAttribute("auth_user") : null;
+            String username = session != null ? (String) session.getAttribute("auth_username") : null;
+            String memberPhone = session != null ? (String) session.getAttribute("member_phone") : null;
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("authenticated", role != null);
+            payload.put("role", role);
+            payload.put("user", user);
+            payload.put("username", username);
+            payload.put("memberAuthenticated", memberPhone != null);
+            payload.put("memberPhone", memberPhone);
+            if (memberPhone != null) {
+                model.Member member = stateService.getMemberByPhone(memberPhone);
+                payload.put("memberName", member != null ? member.getName() : memberPhone);
+            }
+            resp.getWriter().write(JsonUtils.toJson(payload));
+            return;
+        }
+
+        if ("/staff-options".equals(pathInfo)) {
+            List<Map<String, Object>> options = new ArrayList<>();
+            for (Staff s : stateService.getStaff()) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", s.getId());
+                item.put("name", s.getName());
+                item.put("username", s.getUsername());
+                item.put("role", s.getRole());
+                options.add(item);
+            }
+            resp.getWriter().write(JsonUtils.toJson(options));
+            return;
+        }
+
+        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        resp.getWriter().write("{\"error\": \"Endpoint not found.\"}");
     }
 
     @Override
@@ -81,7 +128,9 @@ public class AuthServlet extends HttpServlet {
 
         if (pin != null && !pin.isEmpty()) {
             for (Staff s : roster) {
-                if (pin.equals(s.getPin())) {
+                boolean samePin = pin.equals(s.getPin());
+                boolean sameUser = username == null || username.trim().isEmpty() || username.equals(s.getUsername());
+                if (samePin && sameUser) {
                     matched = s;
                     break;
                 }
@@ -92,6 +141,11 @@ public class AuthServlet extends HttpServlet {
                 return;
             }
         } else {
+            if (username == null || username.trim().isEmpty() || password == null) {
+                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                resp.getWriter().write("{\"error\": \"Vui lòng nhập đầy đủ tài khoản và mật khẩu.\"}");
+                return;
+            }
             for (Staff s : roster) {
                 if (username.equals(s.getUsername())) {
                     matched = s;
@@ -164,6 +218,8 @@ public class AuthServlet extends HttpServlet {
         HttpSession session = req.getSession(true);
         session.setAttribute("auth_role", matched.getRole());
         session.setAttribute("auth_user", matched.getName());
+        session.setAttribute("auth_username", matched.getUsername());
+        session.removeAttribute("member_phone");
         // Set explicitly long timeout for authenticated staff (12 hours)
         session.setMaxInactiveInterval(12 * 60 * 60);
 

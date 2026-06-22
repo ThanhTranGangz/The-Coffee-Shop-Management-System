@@ -12,7 +12,7 @@
                 extend: {
                     colors: {
                         coffee: {
-                            bg: '#F6F2E9',       /* Warm Ivory Eggshell */
+                            bg: '#FAF8F3',       /* Warm Ivory Eggshell */
                             dark: '#2B1B17',     /* Deep Roasted Espresso */
                             rust: '#A04423',     /* Premium Terracotta Red-Brown */
                             sand: '#E5DEC9',     /* Soft Muted Border */
@@ -28,8 +28,9 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             color: #2B1B17;
+            overflow-x: hidden;
         }
         .font-serif {
             font-family: 'Playfair Display', serif;
@@ -38,11 +39,169 @@
             font-family: 'JetBrains Mono', monospace;
         }
         .dot-grid-bg {
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             background-image: radial-gradient(#d3cbb6 1.2px, transparent 1.2px);
             background-size: 24px 24px;
         }
+        .portal-shell {
+            min-height: clamp(520px, 70vh, 680px);
+        }
+        .portal-stage {
+            height: clamp(430px, 58vh, 560px);
+            perspective: 1400px;
+            perspective-origin: 50% 44%;
+            touch-action: pan-y;
+        }
+        .portal-card {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: min(88vw, 520px);
+            min-height: 390px;
+            transform-style: preserve-3d;
+            transition: transform 620ms cubic-bezier(.2,.8,.2,1), opacity 620ms ease, filter 620ms ease, box-shadow 620ms ease;
+            will-change: transform, opacity, filter;
+        }
+        .portal-card[data-slot="center"] {
+            z-index: 30;
+            opacity: 1;
+            filter: none;
+            pointer-events: auto;
+            transform: translate(-50%, -50%) translateX(0) translateZ(120px) rotateY(0deg) scale(1);
+            box-shadow: 0 28px 80px rgba(43, 27, 23, .16);
+        }
+        .portal-card[data-slot="left"] {
+            z-index: 10;
+            opacity: .74;
+            filter: saturate(.75) blur(.2px);
+            pointer-events: auto;
+            transform: translate(-50%, -50%) translateX(clamp(-340px, -31vw, -230px)) translateZ(-170px) rotateY(22deg) scale(.78);
+            box-shadow: 0 18px 44px rgba(43, 27, 23, .09);
+        }
+        .portal-card[data-slot="right"] {
+            z-index: 10;
+            opacity: .74;
+            filter: saturate(.75) blur(.2px);
+            pointer-events: auto;
+            transform: translate(-50%, -50%) translateX(clamp(230px, 31vw, 340px)) translateZ(-170px) rotateY(-22deg) scale(.78);
+            box-shadow: 0 18px 44px rgba(43, 27, 23, .09);
+        }
+        .portal-card[data-slot="hidden"] {
+            z-index: 0;
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, -50%) translateY(28px) translateZ(-280px) scale(.64);
+        }
+        .portal-card[data-slot="left"] .portal-actions,
+        .portal-card[data-slot="right"] .portal-actions {
+            opacity: .25;
+            pointer-events: none;
+        }
+        .portal-turn-zone {
+            position: absolute;
+            top: 8%;
+            bottom: 8%;
+            width: min(22vw, 260px);
+            z-index: 20;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+        .portal-turn-zone.left {
+            left: 0;
+        }
+        .portal-turn-zone.right {
+            right: 0;
+        }
+        .portal-turn-zone::after {
+            content: "";
+            position: absolute;
+            inset: 36% 28%;
+            border-top: 2px solid rgba(160, 68, 35, .42);
+            border-left: 2px solid rgba(160, 68, 35, .42);
+            opacity: 0;
+            transition: opacity 180ms ease, transform 180ms ease;
+        }
+        .portal-turn-zone.left::after {
+            transform: rotate(-45deg) translateX(8px);
+        }
+        .portal-turn-zone.right::after {
+            transform: rotate(135deg) translateX(8px);
+        }
+        .portal-turn-zone:hover::after {
+            opacity: 1;
+            transform: rotate(var(--arrow-rotate, 135deg)) translateX(0);
+        }
+        .portal-turn-zone.left:hover::after {
+            --arrow-rotate: -45deg;
+        }
+        .portal-turn-zone.right:hover::after {
+            --arrow-rotate: 135deg;
+        }
+        .portal-dot[aria-current="true"] {
+            width: 2rem;
+            background: #A04423;
+        }
+        @media (max-width: 900px) {
+            .portal-shell {
+                min-height: 560px;
+            }
+            .portal-stage {
+                height: 500px;
+                overflow: hidden;
+            }
+            .portal-card {
+                width: min(90vw, 430px);
+                min-height: 410px;
+            }
+            .portal-card[data-slot="left"] {
+                opacity: .55;
+                transform: translate(-50%, -50%) translateX(-58vw) translateZ(-200px) rotateY(18deg) scale(.68);
+            }
+            .portal-card[data-slot="right"] {
+                opacity: .55;
+                transform: translate(-50%, -50%) translateX(58vw) translateZ(-200px) rotateY(-18deg) scale(.68);
+            }
+            .portal-turn-zone {
+                width: 28vw;
+            }
+        }
+        @media (max-width: 520px) {
+            .portal-online-badge {
+                display: none !important;
+            }
+            main {
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+            .portal-stage {
+                width: 100vw;
+                margin-left: 0;
+            }
+            .portal-card {
+                left: clamp(160px, 50vw, 215px);
+                width: min(320px, calc(100vw - 48px)) !important;
+                min-height: 435px;
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+            .portal-card > div:first-child > .flex {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: .45rem;
+            }
+            .portal-card[data-slot="center"] {
+                transform: translate(-50%, -50%) translateX(0) translateZ(90px) rotateY(0deg);
+            }
+            .portal-card[data-slot="left"] {
+                transform: translate(-50%, -50%) translateX(-68vw) translateZ(-210px) rotateY(16deg) scale(.64);
+            }
+            .portal-card[data-slot="right"] {
+                transform: translate(-50%, -50%) translateX(68vw) translateZ(-210px) rotateY(-16deg) scale(.64);
+            }
+        }
     </style>
+    <link rel="stylesheet" href="assets/css/pro-ui.css">
+    <script defer src="assets/js/ui-polish.js"></script>
 </head>
 <body class="min-h-screen flex flex-col dot-grid-bg relative selection:bg-coffee-rust/20 selection:text-coffee-rust">
 
@@ -55,7 +214,7 @@
                 </span>
             </a>
             <div class="flex items-center gap-3">
-                <div class="bg-emerald-50 text-emerald-800 border border-emerald-250/60 px-3 py-1 rounded-full text-xs flex items-center gap-1.5 font-bold">
+                <div class="portal-online-badge bg-emerald-50 text-emerald-800 border border-emerald-250/60 px-3 py-1 rounded-full text-xs flex items-center gap-1.5 font-bold">
                     <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
                     <span>Hệ thống trực tuyến</span>
                 </div>
@@ -71,71 +230,88 @@
     </nav>
 
     <!-- MAIN PORTAL CONTENT CONTAINER -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-center items-center py-12">
-        
-        <div class="text-center space-y-3 mb-10 max-w-xl">
-            <p class="text-[10px] text-coffee-milk uppercase font-bold tracking-[0.25em] font-mono">
-                THE COFFEE SHOP MANAGEMENT SYSTEM
-            </p>
-            <h1 class="text-6xl md:text-7xl font-serif font-extrabold text-coffee-dark tracking-tight">
-                nhà cà phê<span class="text-coffee-rust">.</span>
-            </h1>
-            <p class="text-sm md:text-base text-coffee-milk font-medium">
-                Hệ thống quản lý, đặt hàng trực tiếp và quản trị đồng bộ thời gian thực
-            </p>
-        </div>
-
-        <!-- Single Modular Access Card -->
-        <div class="flex flex-col gap-8 w-full max-w-lg mx-auto">
-            
-            <!-- CUSTOMER SIDE CARD -->
-            <div class="bg-[#FAF7EE] rounded-3xl p-6 sm:p-8 border border-coffee-sand shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-                <div class="space-y-6">
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl shadow-xs">
-                            ☕
-                        </div>
-                        <h2 class="text-2xl font-serif font-bold text-coffee-dark">Bạn là khách</h2>
-                    </div>
-
-                    <!-- 3 Steps -->
-                    <div class="space-y-4">
-                        <div class="flex items-start gap-3">
-                            <div class="w-6 h-6 rounded-full border border-coffee-sand/80 bg-white text-coffee-rust flex items-center justify-center font-serif text-xs font-bold shrink-0 mt-0.5">
-                                1
-                            </div>
-                            <p class="text-xs text-coffee-milk font-medium">Chọn bàn ngồi và xem thực đơn đồ uống</p>
-                        </div>
-                        <div class="flex items-start gap-3">
-                            <div class="w-6 h-6 rounded-full border border-coffee-sand/80 bg-white text-coffee-rust flex items-center justify-center font-serif text-xs font-bold shrink-0 mt-0.5">
-                                2
-                            </div>
-                            <p class="text-xs text-coffee-milk font-medium">Tùy biến dung tích, lượng đường, đá & gửi gọi món trực tiếp</p>
-                        </div>
-                        <div class="flex items-start gap-3">
-                            <div class="w-6 h-6 rounded-full border border-coffee-sand/80 bg-white text-coffee-rust flex items-center justify-center font-serif text-xs font-bold shrink-0 mt-0.5">
-                                3
-                            </div>
-                            <p class="text-xs text-coffee-milk font-medium">Thanh toán tại chỗ qua VietQR hoặc xuất hóa đơn quầy</p>
-                        </div>
-                    </div>
-
-                    <p class="text-[11px] text-coffee-milk/70 leading-relaxed pt-2">
-                        Đăng nhập tài khoản thành viên để áp thêm voucher, chiết khấu và tích lũy điểm thưởng!
-                    </p>
-                </div>
-
-                <div class="mt-8 space-y-3">
-                    <a href="menu.jsp" class="block w-full bg-coffee-rust text-white font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider hover:bg-coffee-rust/95 active:scale-[0.98] transition-all text-center shadow-sm">
-                        Xem Menu & Gọi món 📋
-                    </a>
-                    <a href="member.jsp" class="block w-full bg-white text-coffee-dark border border-coffee-sand hover:border-coffee-rust font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wider transition-all text-center">
-                        Tài Khoản Thành Viên 🎟️
-                    </a>
-                </div>
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-center py-8">
+        <section class="portal-shell w-full max-w-6xl mx-auto flex flex-col justify-center">
+            <div class="text-center mb-2 sm:mb-4">
+                <h1 class="text-4xl sm:text-5xl md:text-6xl font-serif font-extrabold text-coffee-dark tracking-tight">
+                    Hôm nay bạn ghé quán theo cách nào?
+                </h1>
             </div>
 
-        </div>
+            <div id="portal-stage" class="portal-stage relative w-full mx-auto" aria-live="polite">
+                <button type="button" class="portal-turn-zone left" aria-label="Xoay sang cổng bên trái" data-turn="left"></button>
+                <button type="button" class="portal-turn-zone right" aria-label="Xoay sang cổng bên phải" data-turn="right"></button>
+
+                <article class="portal-card bg-white rounded-3xl p-6 sm:p-8 border border-coffee-sand flex flex-col justify-between" data-portal-card="staff" tabindex="-1">
+                    <div>
+                        <div class="flex items-center justify-between gap-4">
+                            <p class="text-[10px] text-coffee-milk uppercase font-bold tracking-wide font-mono">Staff</p>
+                            <span class="text-[10px] text-coffee-rust uppercase font-bold tracking-wide font-mono">Bảo mật vai trò</span>
+                        </div>
+                        <h2 class="mt-4 text-3xl sm:text-4xl font-serif font-bold text-coffee-dark leading-tight">Cổng nhân viên</h2>
+                        <p class="mt-4 text-sm text-coffee-milk leading-6">
+                            Dành riêng cho phục vụ, pha chế và quản lý. Sau khi đăng nhập, hệ thống tự đưa bạn vào đúng giao diện theo vai trò.
+                        </p>
+                    </div>
+                    <div class="portal-actions mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 transition-opacity">
+                        <a href="login.jsp" class="block w-full bg-coffee-rust text-white font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wide hover:bg-coffee-rust/95 transition-all text-center shadow-sm">
+                            Đăng nhập
+                        </a>
+                        <a href="pin-login.jsp" class="block w-full bg-white text-coffee-dark border border-coffee-sand hover:border-coffee-rust font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wide transition-all text-center">
+                            Nhập PIN
+                        </a>
+                    </div>
+                </article>
+
+                <article class="portal-card bg-white rounded-3xl p-6 sm:p-8 border border-coffee-sand flex flex-col justify-between" data-portal-card="guest" tabindex="-1">
+                    <div>
+                        <div class="flex items-center justify-between gap-4">
+                            <p class="text-[10px] text-coffee-milk uppercase font-bold tracking-wide font-mono">Guest</p>
+                            <span class="text-[10px] text-coffee-rust uppercase font-bold tracking-wide font-mono">Không cần tài khoản</span>
+                        </div>
+                        <h2 class="mt-4 text-3xl sm:text-4xl font-serif font-bold text-coffee-dark leading-tight">Khách vãng lai</h2>
+                        <p class="mt-4 text-sm text-coffee-milk leading-6">
+                            Xem thực đơn, chọn bàn trước khi gọi món và tra cứu đúng đơn của mình bằng mã đơn. Luồng này dành cho khách chưa có tài khoản.
+                        </p>
+                    </div>
+                    <div class="portal-actions mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 transition-opacity">
+                        <a href="menu.jsp" class="block w-full bg-coffee-rust text-white font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wide hover:bg-coffee-rust/95 transition-all text-center shadow-sm">
+                            Mở thực đơn
+                        </a>
+                        <a href="order-status.jsp" class="block w-full bg-white text-coffee-dark border border-coffee-sand hover:border-coffee-rust font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wide transition-all text-center">
+                            Kiểm tra đơn
+                        </a>
+                    </div>
+                </article>
+
+                <article class="portal-card bg-white rounded-3xl p-6 sm:p-8 border border-coffee-sand flex flex-col justify-between" data-portal-card="member" tabindex="-1">
+                    <div>
+                        <div class="flex items-center justify-between gap-4">
+                            <p class="text-[10px] text-coffee-milk uppercase font-bold tracking-wide font-mono">Member</p>
+                            <span class="text-[10px] text-coffee-rust uppercase font-bold tracking-wide font-mono">Tích điểm & voucher</span>
+                        </div>
+                        <h2 class="mt-4 text-3xl sm:text-4xl font-serif font-bold text-coffee-dark leading-tight">Khách thành viên</h2>
+                        <p class="mt-4 text-sm text-coffee-milk leading-6">
+                            Đăng nhập hội viên để xem điểm tích lũy, đổi voucher và gọi món với ưu đãi gắn với tài khoản của mình.
+                        </p>
+                    </div>
+                    <div class="portal-actions mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3 transition-opacity">
+                        <a href="member.jsp" class="block w-full bg-coffee-rust text-white font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wide hover:bg-coffee-rust/95 transition-all text-center shadow-sm">
+                            Đăng nhập member
+                        </a>
+                        <a href="member.jsp?mode=register" class="block w-full bg-white text-coffee-dark border border-coffee-sand hover:border-coffee-rust font-bold py-3.5 px-4 rounded-xl text-xs uppercase tracking-wide transition-all text-center">
+                            Đăng ký
+                        </a>
+                    </div>
+                </article>
+            </div>
+
+            <div class="mt-1 flex items-center justify-center gap-2" aria-label="Chọn cổng truy cập">
+                <button type="button" class="portal-dot h-2 w-2 rounded-full bg-coffee-sand transition-all" data-jump="staff" aria-label="Cổng nhân viên"></button>
+                <button type="button" class="portal-dot h-2 w-2 rounded-full bg-coffee-sand transition-all" data-jump="guest" aria-label="Khách vãng lai"></button>
+                <button type="button" class="portal-dot h-2 w-2 rounded-full bg-coffee-sand transition-all" data-jump="member" aria-label="Khách thành viên"></button>
+            </div>
+        </section>
     </main>
 
     <footer class="py-6 border-t border-coffee-sand/70 bg-white/70 backdrop-blur-xs text-xs text-coffee-milk mt-auto">
@@ -150,14 +326,110 @@
     </footer>
 
     <script>
-        // Clear member/customer logins on loading index.html (màn hình chính)
-        localStorage.removeItem('member_phone');
-        localStorage.removeItem('member_name');
-        console.log("Auto-logged out member accounts upon returning to index.html");
-
         setInterval(() => {
             document.getElementById('nav-clock').innerText = new Date().toLocaleTimeString('vi-VN');
         }, 1000);
+
+        const portalOrder = ['staff', 'guest', 'member'];
+        let activePortal = 1;
+
+        function renderPortalCarousel() {
+            document.querySelectorAll('[data-portal-card]').forEach((card) => {
+                const index = portalOrder.indexOf(card.dataset.portalCard);
+                const offset = (index - activePortal + portalOrder.length) % portalOrder.length;
+                const slot = offset === 0 ? 'center' : offset === 1 ? 'right' : 'left';
+                card.dataset.slot = slot;
+                card.setAttribute('aria-hidden', slot === 'center' ? 'false' : 'true');
+                card.tabIndex = slot === 'center' ? 0 : -1;
+            });
+
+            document.querySelectorAll('[data-jump]').forEach((dot) => {
+                const selected = dot.dataset.jump === portalOrder[activePortal];
+                dot.setAttribute('aria-current', selected ? 'true' : 'false');
+            });
+        }
+
+        function rotatePortal(direction) {
+            if (direction === 'right') {
+                activePortal = (activePortal + 1) % portalOrder.length;
+            } else {
+                activePortal = (activePortal + portalOrder.length - 1) % portalOrder.length;
+            }
+            renderPortalCarousel();
+        }
+
+        document.querySelectorAll('[data-turn]').forEach((zone) => {
+            zone.addEventListener('click', () => rotatePortal(zone.dataset.turn));
+        });
+
+        document.querySelectorAll('[data-portal-card]').forEach((card) => {
+            card.addEventListener('click', (event) => {
+                if (card.dataset.slot === 'center') return;
+                event.preventDefault();
+                activePortal = portalOrder.indexOf(card.dataset.portalCard);
+                renderPortalCarousel();
+            });
+        });
+
+        document.querySelectorAll('[data-jump]').forEach((dot) => {
+            dot.addEventListener('click', () => {
+                activePortal = portalOrder.indexOf(dot.dataset.jump);
+                renderPortalCarousel();
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowRight') rotatePortal('right');
+            if (event.key === 'ArrowLeft') rotatePortal('left');
+        });
+
+        const portalStage = document.getElementById('portal-stage');
+        let swipeStartX = 0;
+        let swipeStartY = 0;
+        let swipeTracking = false;
+
+        function startPortalSwipe(x, y) {
+            swipeStartX = x;
+            swipeStartY = y;
+            swipeTracking = true;
+        }
+
+        function finishPortalSwipe(x, y) {
+            if (!swipeTracking) return;
+            swipeTracking = false;
+
+            const deltaX = x - swipeStartX;
+            const deltaY = y - swipeStartY;
+            if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) {
+                return;
+            }
+
+            rotatePortal(deltaX < 0 ? 'right' : 'left');
+        }
+
+        if (portalStage) {
+            portalStage.addEventListener('touchstart', (event) => {
+                const touch = event.changedTouches[0];
+                if (touch) startPortalSwipe(touch.clientX, touch.clientY);
+            }, { passive: true });
+
+            portalStage.addEventListener('touchend', (event) => {
+                const touch = event.changedTouches[0];
+                if (touch) finishPortalSwipe(touch.clientX, touch.clientY);
+            }, { passive: true });
+
+            portalStage.addEventListener('pointerdown', (event) => {
+                if (event.pointerType === 'mouse') return;
+                startPortalSwipe(event.clientX, event.clientY);
+            });
+
+            portalStage.addEventListener('pointerup', (event) => {
+                if (event.pointerType === 'mouse') return;
+                finishPortalSwipe(event.clientX, event.clientY);
+            });
+        }
+
+        renderPortalCarousel();
     </script>
 </body>
 </html>

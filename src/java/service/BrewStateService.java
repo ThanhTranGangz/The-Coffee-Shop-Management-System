@@ -29,33 +29,52 @@ public class BrewStateService {
     private final OrderDAO orderDAO;
     private final dao.StaffDAO staffDAO;
     private final dao.MemberDAO memberDAO;
+    private final dao.ShiftDAO shiftDAO;
     private final BrewWebSocketHandler webSocketHandler;
     private final AtomicInteger orderCounter = new AtomicInteger(100);
     private boolean shopClosed = false;
+    private boolean timeLimitUnlocked = false;
+    private final List<Map<String, Object>> paymentEvents = new ArrayList<>();
+    private Map<String, Object> currentPosShift = null;
+    private int posShiftCounter = 1;
 
     public synchronized boolean isShopClosed() { return shopClosed; }
     public synchronized void setShopClosed(boolean closed) {
         this.shopClosed = closed;
         notifyStateChange();
     }
+    public synchronized boolean isTimeLimitUnlocked() { return timeLimitUnlocked; }
+    public synchronized void setTimeLimitUnlocked(boolean unlocked) {
+        this.timeLimitUnlocked = unlocked;
+        notifyStateChange();
+    }
 
+    private final dao.InventoryDAO inventoryDAO;
     private final List<Ingredient> inventory = new ArrayList<>();
     private final List<Expense> expenses = new ArrayList<>();
     private final Map<String, List<RecipeRequirement>> recipes = new HashMap<>();
 
-    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, BrewWebSocketHandler webSocketHandler) {
+    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, dao.InventoryDAO inventoryDAO, dao.ShiftDAO shiftDAO, BrewWebSocketHandler webSocketHandler) {
         this.menuDAO = menuDAO;
         this.tableDAO = tableDAO;
         this.orderDAO = orderDAO;
         this.staffDAO = staffDAO;
         this.memberDAO = memberDAO;
+        this.inventoryDAO = inventoryDAO;
+        this.shiftDAO = shiftDAO;
         this.webSocketHandler = webSocketHandler;
         
         // Initialize Inventory and Recipe models
         initInventoryAndRecipes();
 
-        // Seed initial order for Table 3 to make the app look dynamic out of the box
+        // Keep runtime counters and old demo data consistent across Tomcat restarts.
+        repairStoredOrders();
+        syncOrderCounterFromStoredOrders();
+
+        // Seed only once on an empty database so restarts do not create duplicate orders.
         seedInitialOrder();
+        repairStoredOrders();
+        syncOrderCounterFromStoredOrders();
     }
 
     private void initInventoryAndRecipes() {
@@ -70,23 +89,21 @@ public class BrewStateService {
         recipes.put("m8", Arrays.asList(new RecipeRequirement("i9", 1)));
         recipes.put("m9", Arrays.asList(new RecipeRequirement("i10", 1)));
 
-        // Init initial stock values
-        inventory.add(new Ingredient("i1", "Hạt cà phê nguyên chất", "g", 1500, 300, 50));
-        inventory.add(new Ingredient("i2", "Sữa đặc đặc sánh", "g", 1000, 200, 40));
-        inventory.add(new Ingredient("i3", "Sữa tươi tiệt trùng", "ml", 2000, 500, 20));
-        inventory.add(new Ingredient("i4", "Kem béo muối biển", "ml", 80, 150, 80));
-        inventory.add(new Ingredient("i5", "Siro đào thơm mát", "ml", 600, 100, 60));
-        inventory.add(new Ingredient("i6", "Sả tươi thơm nồng", "nhánh", 20, 5, 1000));
-        inventory.add(new Ingredient("i7", "Bột Trà xanh Matcha Uji", "g", 0, 100, 200));
-        inventory.add(new Ingredient("i8", "Lá trà Ô long khô", "g", 500, 100, 100));
-        inventory.add(new Ingredient("i9", "Vỏ bánh sừng bò sấy", "cái", 15, 4, 15000));
-        inventory.add(new Ingredient("i10", "Bánh Tiramisu cắt sẵn", "lát", 1, 3, 25000));
+        // Load inventory from our SQL Server Database
+        inventory.clear();
+        List<Ingredient> dbInventory = inventoryDAO.getAll();
+        if (dbInventory != null) {
+            inventory.addAll(dbInventory);
+        }
     }
 
     private void seedInitialOrder() {
         try {
+            if (!orderDAO.getAll().isEmpty()) {
+                return;
+            }
             Table table = tableDAO.getById("t3");
-            if (table != null) {
+            if (table != null && table.getActiveOrderId() == null) {
                 List<Map<String, Object>> seedItems = new ArrayList<>();
                 
                 Map<String, Object> item1 = new HashMap<>();
@@ -119,12 +136,76 @@ public class BrewStateService {
         }
     }
 
+    private void syncOrderCounterFromStoredOrders() {
+        int maxOrderNumber = 100;
+        for (Order order : orderDAO.getAll()) {
+            maxOrderNumber = Math.max(maxOrderNumber, order.getOrderNumber());
+        }
+        orderCounter.set(maxOrderNumber);
+    }
+
+    private void repairStoredOrders() {
+        List<Order> orders = new ArrayList<>(orderDAO.getAll());
+        if (orders.isEmpty()) {
+            return;
+        }
+
+        orders.sort(Comparator.comparing(Order::getCreatedAt, Comparator.nullsLast(String::compareTo)));
+        Set<Integer> usedNumbers = new HashSet<>();
+        int nextNumber = 100;
+        for (Order order : orders) {
+            nextNumber = Math.max(nextNumber, order.getOrderNumber());
+        }
+
+        for (Order order : orders) {
+            boolean changed = false;
+            int number = order.getOrderNumber();
+            if (number <= 0 || usedNumbers.contains(number)) {
+                do {
+                    nextNumber++;
+                } while (usedNumbers.contains(nextNumber));
+                order.setOrderNumber(nextNumber);
+                changed = true;
+            }
+            usedNumbers.add(order.getOrderNumber());
+
+            int itemsTotal = calculateItemsTotal(order.getItems());
+            if (itemsTotal > 0 && order.getTotalAmount() < 0) {
+                order.setTotalAmount(itemsTotal);
+                changed = true;
+            } else if (itemsTotal > 0 && order.getTotalAmount() == 0 && !looksLikeDiscountedOrder(order)) {
+                order.setTotalAmount(itemsTotal);
+                changed = true;
+            }
+
+            if (changed) {
+                orderDAO.update(order);
+            }
+        }
+    }
+
+    private boolean looksLikeDiscountedOrder(Order order) {
+        String notes = order.getNotes() == null ? "" : order.getNotes().toLowerCase(Locale.ROOT);
+        return notes.contains("voucher") || notes.contains("promo") || notes.contains("discount") || notes.contains("chiết khấu") || notes.contains("khuyến mãi");
+    }
+
+    private int calculateItemsTotal(List<OrderItem> items) {
+        int total = 0;
+        if (items == null) {
+            return total;
+        }
+        for (OrderItem item : items) {
+            total += item.getPrice() * item.getQuantity();
+        }
+        return total;
+    }
+
     public boolean checkIngredientsSufficient(String menuItemId, int quantity) {
         List<RecipeRequirement> recipe = recipes.get(menuItemId);
         if (recipe == null) return true;
         for (RecipeRequirement req : recipe) {
             Ingredient ing = getIngredientById(req.getIngredientId());
-            if (ing == null) continue;
+            if (ing == null) return false;
             if (ing.getStock() < req.getQuantityPerUnit() * quantity) {
                 return false;
             }
@@ -165,6 +246,7 @@ public class BrewStateService {
                 int lineCost = ing.getImportCost() * quantity;
                 totalCost += lineCost;
                 ing.setStock(ing.getStock() + quantity);
+                inventoryDAO.save(ing);
                 summaryDetails.add("+" + quantity + " " + ing.getUnit() + " " + ing.getName());
             }
         }
@@ -199,14 +281,264 @@ public class BrewStateService {
         return tableDAO.getAll();
     }
 
+    public Table getTableByCode(String tableCode) {
+        return tableDAO.getByCode(tableCode);
+    }
+
+    public synchronized Table createTable(String name, String zone, int capacity) {
+        String id = "t" + System.currentTimeMillis();
+        String status = "empty";
+        String tableCode = generateTableCode();
+        Table table = new Table(id, name, zone, status, Math.max(1, capacity), null, tableCode);
+        tableDAO.create(table);
+        notifyStateChange();
+        return table;
+    }
+
+    private String generateTableCode() {
+        String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        Random random = new Random();
+        String code;
+        boolean exists;
+        do {
+            StringBuilder sb = new StringBuilder("TBL-");
+            for (int i = 0; i < 6; i++) {
+                sb.append(alphabet.charAt(random.nextInt(alphabet.length())));
+            }
+            code = sb.toString();
+            exists = tableDAO.getByCode(code) != null;
+        } while (exists);
+        return code;
+    }
+
     public List<Order> getOrders() {
         return orderDAO.getAll();
+    }
+
+    public Order getOrderByNumber(int orderNumber) {
+        for (Order order : orderDAO.getAll()) {
+            if (order.getOrderNumber() == orderNumber) {
+                return order;
+            }
+        }
+        return null;
+    }
+
+    public Order getOrderById(String orderId) {
+        if (orderId == null || orderId.trim().isEmpty()) {
+            return null;
+        }
+        return orderDAO.getById(orderId);
+    }
+
+    public List<Shift> getShifts() {
+        return shiftDAO.getAll();
+    }
+
+    public void saveShift(Shift shift) {
+        shiftDAO.save(shift);
+        notifyStateChange();
+    }
+
+    public void deleteShift(String id) {
+        shiftDAO.delete(id);
+        notifyStateChange();
+    }
+
+    public synchronized Map<String, Object> getPosShiftSnapshot() {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("shift", currentPosShift);
+        payload.put("events", new ArrayList<>(paymentEvents));
+        return payload;
+    }
+
+    public synchronized Map<String, Object> openPosShift(String cashierName, int openingCash) {
+        if (currentPosShift != null && "OPEN".equals(currentPosShift.get("status"))) {
+            return currentPosShift;
+        }
+
+        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+        currentPosShift = new LinkedHashMap<>();
+        currentPosShift.put("id", "shift-pos-" + (posShiftCounter++));
+        currentPosShift.put("status", "OPEN");
+        currentPosShift.put("cashierName", cashierName == null || cashierName.trim().isEmpty() ? "Thu ngân" : cashierName.trim());
+        currentPosShift.put("openedAt", timestamp);
+        currentPosShift.put("closedAt", null);
+        currentPosShift.put("openingCash", Math.max(0, openingCash));
+        currentPosShift.put("closingCash", 0);
+        currentPosShift.put("paidOrders", 0);
+        currentPosShift.put("totalRevenue", 0);
+        currentPosShift.put("cashTotal", 0);
+        currentPosShift.put("bankTotal", 0);
+        currentPosShift.put("cardTotal", 0);
+        currentPosShift.put("notes", "");
+        notifyStateChange();
+        return currentPosShift;
+    }
+
+    public synchronized Map<String, Object> closePosShift(int closingCash, String notes) {
+        if (currentPosShift == null || !"OPEN".equals(currentPosShift.get("status"))) {
+            throw new IllegalStateException("Chưa có ca thu ngân nào đang mở.");
+        }
+
+        int openingCash = toInt(currentPosShift.get("openingCash"));
+        int cashTotal = toInt(currentPosShift.get("cashTotal"));
+        int expectedCash = openingCash + cashTotal;
+        String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+
+        currentPosShift.put("status", "CLOSED");
+        currentPosShift.put("closedAt", timestamp);
+        currentPosShift.put("closingCash", Math.max(0, closingCash));
+        currentPosShift.put("expectedCash", expectedCash);
+        currentPosShift.put("cashDifference", Math.max(0, closingCash) - expectedCash);
+        currentPosShift.put("notes", notes == null ? "" : notes);
+        notifyStateChange();
+        return currentPosShift;
+    }
+
+    public synchronized Map<String, Object> confirmPayment(String orderId, String method, int amount, String reference, String actor) {
+        Order order = orderDAO.getById(orderId);
+        if (order == null) {
+            throw new IllegalArgumentException("Không tìm thấy đơn cần thanh toán.");
+        }
+
+        int expectedAmount = order.getTotalAmount();
+        int paidAmount = amount <= 0 ? expectedAmount : amount;
+        if (paidAmount < expectedAmount) {
+            throw new IllegalArgumentException("Số tiền thanh toán thấp hơn tổng hóa đơn.");
+        }
+
+        String normalizedMethod = normalizePaymentMethod(method);
+        if (!"Served".equalsIgnoreCase(order.getStatus())) {
+            Order checkedOrder = order.getTableId() == null ? null : checkoutTable(order.getTableId());
+            if (checkedOrder == null) {
+                updateOrderStatus(orderId, "Served");
+            }
+            order = orderDAO.getById(orderId);
+            if (order == null) {
+                throw new IllegalStateException("Không đọc lại được đơn sau khi chốt thanh toán.");
+            }
+        }
+
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("id", "pay-" + UUID.randomUUID().toString().substring(0, 8));
+        event.put("orderId", orderId);
+        event.put("orderNumber", order.getOrderNumber());
+        event.put("tableId", order.getTableId());
+        event.put("tableName", order.getTableName());
+        event.put("method", normalizedMethod);
+        event.put("amount", paidAmount);
+        event.put("expectedAmount", expectedAmount);
+        event.put("changeAmount", Math.max(0, paidAmount - expectedAmount));
+        event.put("reference", reference == null || reference.trim().isEmpty() ? "POS-" + order.getOrderNumber() : reference.trim());
+        event.put("actor", actor == null || actor.trim().isEmpty() ? "POS" : actor.trim());
+        event.put("status", "SUCCESS");
+        event.put("createdAt", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+        paymentEvents.add(0, event);
+        if (paymentEvents.size() > 100) {
+            paymentEvents.remove(paymentEvents.size() - 1);
+        }
+
+        applyPaymentToCurrentShift(normalizedMethod, expectedAmount);
+        notifyStateChange();
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("payment", event);
+        payload.put("order", order);
+        payload.put("shift", currentPosShift);
+        return payload;
+    }
+
+    public synchronized Map<String, Object> handleBankWebhook(String orderId, int amount, String reference, String bankTrace) {
+        if (orderId == null || orderId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Webhook ngân hàng thiếu orderId.");
+        }
+        String webhookRef = reference == null || reference.trim().isEmpty()
+                ? "BANK-" + UUID.randomUUID().toString().substring(0, 8)
+                : reference.trim();
+        if (bankTrace != null && !bankTrace.trim().isEmpty()) {
+            webhookRef += " / " + bankTrace.trim();
+        }
+        return confirmPayment(orderId.trim(), "BANK", amount, webhookRef, "BANK_WEBHOOK");
+    }
+
+    public synchronized Map<String, Object> splitBill(String orderId, int parts) {
+        Order order = orderDAO.getById(orderId);
+        if (order == null) {
+            throw new IllegalArgumentException("Không tìm thấy đơn cần tách bill.");
+        }
+        int validParts = Math.max(1, Math.min(parts, 20));
+        int total = order.getTotalAmount();
+        int base = total / validParts;
+        int remainder = total % validParts;
+
+        List<Map<String, Object>> shares = new ArrayList<>();
+        for (int i = 1; i <= validParts; i++) {
+            Map<String, Object> share = new LinkedHashMap<>();
+            share.put("name", "Khách " + i);
+            share.put("amount", base + (i <= remainder ? 1 : 0));
+            shares.add(share);
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("orderId", orderId);
+        payload.put("orderNumber", order.getOrderNumber());
+        payload.put("tableName", order.getTableName());
+        payload.put("totalAmount", total);
+        payload.put("parts", validParts);
+        payload.put("shares", shares);
+        return payload;
+    }
+
+    private void applyPaymentToCurrentShift(String method, int amount) {
+        if (currentPosShift == null || !"OPEN".equals(currentPosShift.get("status"))) {
+            openPosShift("Thu ngân tự động", 0);
+        }
+        currentPosShift.put("paidOrders", toInt(currentPosShift.get("paidOrders")) + 1);
+        currentPosShift.put("totalRevenue", toInt(currentPosShift.get("totalRevenue")) + amount);
+        if ("CASH".equals(method)) {
+            currentPosShift.put("cashTotal", toInt(currentPosShift.get("cashTotal")) + amount);
+        } else if ("CARD".equals(method)) {
+            currentPosShift.put("cardTotal", toInt(currentPosShift.get("cardTotal")) + amount);
+        } else {
+            currentPosShift.put("bankTotal", toInt(currentPosShift.get("bankTotal")) + amount);
+        }
+    }
+
+    private String normalizePaymentMethod(String method) {
+        if (method == null) return "CASH";
+        String normalized = method.trim().toUpperCase();
+        if ("VIETQR".equals(normalized) || "BANK".equals(normalized) || "TRANSFER".equals(normalized)) {
+            return "BANK";
+        }
+        if ("CARD".equals(normalized)) {
+            return "CARD";
+        }
+        return "CASH";
+    }
+
+    private int toInt(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt(((String) value).trim());
+            } catch (NumberFormatException ignored) {
+                return 0;
+            }
+        }
+        return 0;
     }
 
     /**
      * Places a new order for a table
      */
     public synchronized Order placeOrder(String tableId, List<Map<String, Object>> rawItems, String notes) {
+        return placeOrder(tableId, rawItems, notes, 0);
+    }
+
+    public synchronized Order placeOrder(String tableId, List<Map<String, Object>> rawItems, String notes, int discountAmount) {
         Table table = tableDAO.getById(tableId);
         if (table == null) {
             throw new IllegalArgumentException("Table " + tableId + " not found.");
@@ -216,11 +548,16 @@ public class BrewStateService {
         for (Map<String, Object> rawItem : rawItems) {
             String menuItemId = (String) rawItem.get("menuItemId");
             MenuItem menuItem = menuDAO.getById(menuItemId);
-            if (menuItem == null) continue;
+            if (menuItem == null) {
+                throw new IllegalArgumentException("Menu item " + menuItemId + " not found.");
+            }
 
             int quantity = 1;
             if (rawItem.get("quantity") instanceof Number) {
                 quantity = ((Number) rawItem.get("quantity")).intValue();
+            }
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("Quantity must be greater than zero.");
             }
 
             if (!checkIngredientsSufficient(menuItemId, quantity)) {
@@ -242,6 +579,7 @@ public class BrewStateService {
                     Ingredient ing = getIngredientById(req.getIngredientId());
                     if (ing != null) {
                         ing.setStock(Math.max(0, ing.getStock() - req.getQuantityPerUnit() * quantity));
+                        inventoryDAO.save(ing);
                     }
                 }
             }
@@ -256,11 +594,16 @@ public class BrewStateService {
         for (Map<String, Object> rawItem : rawItems) {
             String menuItemId = (String) rawItem.get("menuItemId");
             MenuItem menuItem = menuDAO.getById(menuItemId);
-            if (menuItem == null) continue;
+            if (menuItem == null) {
+                throw new IllegalArgumentException("Menu item " + menuItemId + " not found.");
+            }
 
             int quantity = 1;
             if (rawItem.get("quantity") instanceof Number) {
                 quantity = ((Number) rawItem.get("quantity")).intValue();
+            }
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("Quantity must be greater than zero.");
             }
 
             // Parse optional customizations
@@ -291,6 +634,14 @@ public class BrewStateService {
             ));
         }
 
+        if (orderItems.isEmpty()) {
+            throw new IllegalArgumentException("Order must contain at least one valid menu item.");
+        }
+
+        if (discountAmount > 0) {
+            totalAmount = Math.max(0, totalAmount - discountAmount);
+        }
+
         Order order = new Order(
             orderId, tableId, table.getName(), orderCounter.incrementAndGet(),
             orderItems, "Pending", timestamp, timestamp, notes, totalAmount
@@ -314,7 +665,9 @@ public class BrewStateService {
      */
     public synchronized void updateItemStatus(String orderId, String itemId, String newStatus) {
         Order order = orderDAO.getById(orderId);
-        if (order == null) return;
+        if (order == null) {
+            throw new IllegalArgumentException("Không tìm thấy đơn cần cập nhật.");
+        }
 
         boolean itemUpdated = false;
         for (OrderItem item : order.getItems()) {
@@ -325,24 +678,26 @@ public class BrewStateService {
             }
         }
 
-        if (itemUpdated) {
-            recalculateAggregatedOrderStatus(order);
-            order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-            orderDAO.update(order);
-            
-            // Update table status sync if needed
-            Table table = tableDAO.getById(order.getTableId());
-            if (table != null) {
-                if ("Ready".equalsIgnoreCase(order.getStatus())) {
-                    table.setStatus("ready_to_serve");
-                } else if ("Served".equalsIgnoreCase(order.getStatus())) {
-                    table.setStatus("serving");
-                }
-                tableDAO.update(table);
-            }
-
-            notifyStateChange();
+        if (!itemUpdated) {
+            throw new IllegalArgumentException("Không tìm thấy món trong đơn cần cập nhật.");
         }
+
+        recalculateAggregatedOrderStatus(order);
+        order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+        orderDAO.update(order);
+        
+        // Update table status sync if needed
+        Table table = tableDAO.getById(order.getTableId());
+        if (table != null) {
+            if ("Ready".equalsIgnoreCase(order.getStatus())) {
+                table.setStatus("ready_to_serve");
+            } else if ("Served".equalsIgnoreCase(order.getStatus())) {
+                table.setStatus("served_confirm");
+            }
+            tableDAO.update(table);
+        }
+
+        notifyStateChange();
     }
 
     /**
@@ -350,7 +705,9 @@ public class BrewStateService {
      */
     public synchronized void updateOrderStatus(String orderId, String newStatus) {
         Order order = orderDAO.getById(orderId);
-        if (order == null) return;
+        if (order == null) {
+            throw new IllegalArgumentException("Không tìm thấy đơn cần cập nhật.");
+        }
 
         order.setStatus(newStatus);
         order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
@@ -365,6 +722,8 @@ public class BrewStateService {
         if (table != null) {
             if ("Ready".equalsIgnoreCase(newStatus)) {
                 table.setStatus("ready_to_serve");
+            } else if ("Served".equalsIgnoreCase(newStatus)) {
+                table.setStatus("served_confirm");
             } else {
                 table.setStatus("serving");
             }
@@ -559,6 +918,55 @@ public class BrewStateService {
         return order;
     }
 
+    public synchronized Table confirmTableServed(String tableId) {
+        Table table = tableDAO.getById(tableId);
+        if (table == null) {
+            throw new IllegalArgumentException("Table " + tableId + " not found.");
+        }
+
+        if (table.getActiveOrderId() != null) {
+            Order order = orderDAO.getById(table.getActiveOrderId());
+            if (order != null) {
+                order.setStatus("Served");
+                for (OrderItem item : order.getItems()) {
+                    item.setStatus("Served");
+                }
+                order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+                orderDAO.update(order);
+            }
+        }
+
+        table.setStatus("dirty");
+        tableDAO.update(table);
+        notifyStateChange();
+        return table;
+    }
+
+    public synchronized Table cleanTable(String tableId) {
+        Table table = tableDAO.getById(tableId);
+        if (table == null) {
+            throw new IllegalArgumentException("Table " + tableId + " not found.");
+        }
+
+        if (table.getActiveOrderId() != null) {
+            Order order = orderDAO.getById(table.getActiveOrderId());
+            if (order != null && !"Served".equalsIgnoreCase(order.getStatus())) {
+                order.setStatus("Served");
+                for (OrderItem item : order.getItems()) {
+                    item.setStatus("Served");
+                }
+                order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+                orderDAO.update(order);
+            }
+        }
+
+        table.setStatus("empty");
+        table.setActiveOrderId(null);
+        tableDAO.update(table);
+        notifyStateChange();
+        return table;
+    }
+
     private void notifyStateChange() {
         if (webSocketHandler != null) {
             // Simple robust JSON broadcast payload
@@ -590,14 +998,95 @@ public class BrewStateService {
         return memberDAO.getByPhone(phone);
     }
 
+    public synchronized Member authenticateMember(String phone, String password) {
+        if (phone == null || password == null) {
+            return null;
+        }
+        return memberDAO.authenticate(phone.trim(), password);
+    }
+
     public synchronized void saveMember(Member m) {
         memberDAO.save(m);
+        notifyStateChange();
+    }
+
+    public synchronized void saveMember(Member m, String password) {
+        memberDAO.saveWithPassword(m, password);
         notifyStateChange();
     }
 
     public synchronized void deleteMember(String phone) {
         memberDAO.delete(phone);
         notifyStateChange();
+    }
+
+    public int getVoucherValue(String code) {
+        if ("CAFE15".equals(code)) return 15000;
+        if ("CAFE30".equals(code)) return 30000;
+        if ("CAFE50".equals(code)) return 50000;
+        if ("CAFE100".equals(code)) return 100000;
+        return 0;
+    }
+
+    public int getVoucherCost(String code) {
+        if ("CAFE15".equals(code)) return 100;
+        if ("CAFE30".equals(code)) return 200;
+        if ("CAFE50".equals(code)) return 300;
+        if ("CAFE100".equals(code)) return 500;
+        return 0;
+    }
+
+    public synchronized void recordMemberOrder(String phone, String voucherCode, int paidAmount) {
+        if (phone == null || phone.trim().isEmpty()) {
+            return;
+        }
+        Member member = memberDAO.getByPhone(phone.trim());
+        if (member == null) {
+            return;
+        }
+
+        if (voucherCode != null && !voucherCode.trim().isEmpty() && member.getVouchers().contains(voucherCode)) {
+            member.getVouchers().remove(voucherCode);
+        }
+
+        if (paidAmount > 0) {
+            int earnedPoints = Math.max(1, paidAmount / 10000);
+            member.setPoints(member.getPoints() + earnedPoints);
+            member.setRank(rankForPoints(member.getPoints()));
+        }
+
+        memberDAO.save(member);
+        notifyStateChange();
+    }
+
+    public synchronized boolean redeemVoucher(String phone, String code) {
+        if (phone == null || code == null) {
+            return false;
+        }
+        int cost = getVoucherCost(code);
+        if (cost <= 0) {
+            return false;
+        }
+
+        Member member = memberDAO.getByPhone(phone.trim());
+        if (member == null || member.getPoints() < cost) {
+            return false;
+        }
+
+        member.setPoints(member.getPoints() - cost);
+        member.setRank(rankForPoints(member.getPoints()));
+        if (!member.getVouchers().contains(code)) {
+            member.getVouchers().add(code);
+        }
+        memberDAO.save(member);
+        notifyStateChange();
+        return true;
+    }
+
+    private String rankForPoints(int points) {
+        if (points >= 700) return "Platinum";
+        if (points >= 300) return "Gold";
+        return "Silver";
     }
 
     // ==================== HISTORICAL FINANCIAL DATA ====================

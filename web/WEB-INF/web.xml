@@ -5,6 +5,16 @@
          version="6.0">
     
     <display-name>The-Coffee-Shop-Management-System</display-name>
+
+    <request-character-encoding>UTF-8</request-character-encoding>
+    <response-character-encoding>UTF-8</response-character-encoding>
+
+    <jsp-config>
+        <jsp-property-group>
+            <url-pattern>*.jsp</url-pattern>
+            <page-encoding>UTF-8</page-encoding>
+        </jsp-property-group>
+    </jsp-config>
     
     <servlet>
         <servlet-name>BrewApiServlet</servlet-name>
@@ -17,8 +27,7 @@
     </servlet-mapping>
 
     <session-config>
-        <!-- Default timeout for unauthenticated sessions (e.g. customers on public pages) -->
-        <session-timeout>10</session-timeout>
+        <session-timeout>30</session-timeout>
     </session-config>
     
     <welcome-file-list>

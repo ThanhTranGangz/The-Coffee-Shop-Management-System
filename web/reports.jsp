@@ -1,10 +1,10 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nhà cà phê. — hệ thống quản lý chuẩn jsp</title>
-    <!-- Tailwind CSS CDN -->
+    <title>nhà cà phê. — quản lý quán</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -12,12 +12,12 @@
                 extend: {
                     colors: {
                         coffee: {
-                            bg: '#F6F2E9',       /* Warm Ivory Eggshell */
-                            dark: '#2B1B17',     /* Deep Roasted Espresso */
-                            rust: '#A04423',     /* Premium Terracotta Red-Brown */
-                            sand: '#E5DEC9',     /* Soft Muted Border */
-                            light: '#FAF7EE',    /* Soft Off-white Ivory */
-                            milk: '#8E7D6F'      /* Elegant Milk Brew Accent */
+                            bg: '#F6F2E9',       
+                            dark: '#2B1B17',     
+                            rust: '#A04423',     
+                            sand: '#E5DEC9',     
+                            light: '#FAF7EE',    
+                            milk: '#8E7D6F'      
                         }
                     }
                 }
@@ -37,13 +37,13 @@
         .font-mono {
             font-family: 'JetBrains Mono', monospace;
         }
-        /* Grid background matching screenshot */
+        
         .dot-grid-bg {
             background-color: #F6F2E9;
             background-image: radial-gradient(#d3cbb6 1.2px, transparent 1.2px);
             background-size: 24px 24px;
         }
-        /* Custom scrollbar */
+        
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -60,8 +60,88 @@
             background: rgba(160, 68, 35, 0.5);
             border-radius: 99px;
         }
+        .reports-admin-nav {
+            display: none;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.3rem;
+            border: 1px solid rgba(229, 222, 201, 0.9);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            box-shadow: 0 10px 30px rgba(43, 27, 23, 0.06);
+            backdrop-filter: blur(14px);
+            max-width: min(54vw, 680px);
+            overflow: visible;
+        }
+        @media (min-width: 1280px) {
+            .reports-admin-nav {
+                display: flex;
+            }
+        }
+        .reports-admin-link,
+        .reports-admin-menu-button {
+            min-height: 34px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.5rem 0.82rem;
+            border-radius: 999px;
+            color: #8E7D6F;
+            font-size: 0.72rem;
+            font-weight: 800;
+            line-height: 1;
+            white-space: nowrap;
+            transition: background 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+        }
+        .reports-admin-link:hover,
+        .reports-admin-menu-button:hover {
+            color: #2B1B17;
+            background: rgba(250, 247, 238, 0.95);
+            transform: translateY(-1px);
+        }
+        .reports-admin-link.is-active {
+            color: #FAF7EE;
+            background: #2B1B17;
+            box-shadow: 0 8px 18px rgba(43, 27, 23, 0.16);
+        }
+        .reports-admin-menu {
+            min-width: 230px;
+            border-radius: 14px;
+            border: 1px solid #E5DEC9;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: 0 18px 40px rgba(43, 27, 23, 0.12);
+            padding: 0.45rem;
+        }
+        .reports-admin-menu a {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            padding: 0.62rem 0.72rem;
+            border-radius: 10px;
+            color: #2B1B17;
+            font-size: 0.76rem;
+            font-weight: 700;
+        }
+        .reports-admin-menu a:hover {
+            background: #FAF7EE;
+            color: #A04423;
+        }
+        .reports-mobile-menu {
+            border: 1px solid #E5DEC9;
+            background: rgba(255, 255, 255, 0.92);
+            border-radius: 999px;
+            padding: 0.5rem 0.85rem;
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: #2B1B17;
+        }
+        @media (max-width: 1279px) {
+            .reports-nav-support {
+                display: none !important;
+            }
+        }
     </style>
-    <!-- Dynamic role-based navigation and security guard -->
     <script>
         (function() {
             var role = localStorage.getItem('auth_role') || '';
@@ -74,7 +154,21 @@
             var baristaPages = ['kds.jsp'];
             var managerPages = ['dashboard.jsp', 'reports.jsp', 'staff-management.jsp', 'inventory.jsp'];
 
-            // Security guard removed, now handled by SecurityFilter
+            if (role && waiterPages.indexOf(page) !== -1 && role !== 'waiter' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Phục vụ / Wait station!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (role && baristaPages.indexOf(page) !== -1 && role !== 'barista' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Quầy pha chế (KDS)!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (role && managerPages.indexOf(page) !== -1 && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Bảng điều khiển Quản lý!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -86,85 +180,84 @@
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
                             '<a href="menu.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'menu.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Khách gọi món</a>' +
-                            '<a href="order-status.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'order-status.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Kiểm tra đơn nước 🔍</a>' +
-                            '<a href="member.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'member.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Khách Thành Viên 🎟️</a>';
+                            '<a href="order-status.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'order-status.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Kiểm tra đơn nước</a>' +
+                            '<a href="member.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'member.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Khách thành viên</a>';
                     } else if (role === 'waiter') {
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors">Trang chủ</a>' +
-                            '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors font-semibold">Wait Station 📟</a>' +
-                            '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors">Danh sách Order 📋</a>' +
-                            '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors">In mã QR Bàn 🖨️</a>';
+                            '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors font-semibold">Wait station</a>' +
+                            '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors">Danh sách order</a>' +
+                            '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors">In mã QR bàn</a>';
                     } else if (role === 'barista') {
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors">Trang chủ</a>' +
-                            '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors font-semibold">Kitchen KDS 🧑‍🍳</a>';
+                            '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors font-semibold">KDS pha chế</a>';
                     } else if (role === 'manager') {
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors">Trang chủ</a>' +
-                            '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors">📊 Dashboard</a>' +
-                            '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors">📈 Doanh số</a>' +
-                            '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors">🧑‍🤝‍🧑 Nhân sự</a>' +
-                            '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors">📦 Kho hàng</a>' +
+                            '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors">Dashboard</a>' +
+                            '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors">Doanh số</a>' +
+                            '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors">Nhân sự</a>' +
+                            '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors">Kho hàng</a>' +
                            '<div class="relative group">' +
                                '<button class="bg-coffee-light hover:bg-coffee-sand/30 text-coffee-dark border border-coffee-sand px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer">' +
                                    '<span>Thao tác trực</span>' +
                                    '<svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>' +
                                '</button>' +
                                '<div class="absolute left-0 mt-1 w-52 bg-white border border-coffee-sand rounded-xl shadow-lg py-1.5 hidden group-hover:block z-50">' +
-                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
+                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
                                 
-                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
-                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📟 Wait Station floor</a>' +
-                                   '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">🧑‍🍳 Kitchen KDS screen</a>' +
-                                   '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📋 Danh sách Order</a>' +
-                                   '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🖨️ In mã QR Bàn</a>' +
-                                   '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">☕ Giao diện Khách</a>' +
+                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
+                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Wait station</a>' +
+                                   '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">KDS pha chế</a>' +
+                                   '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Danh sách order</a>' +
+                                   '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">In mã QR bàn</a>' +
+                                   '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Giao diện khách</a>' +
                                '</div>' +
                            '</div>';
                     }
                 } else if (role === 'waiter' || waiterPages.indexOf(page) !== -1) {
                     navHtml = 
                         '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
-                        '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'waitstation.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Wait Station 📟</a>' +
-                        '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-orders.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Danh sách Order 📋</a>' +
-                        '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'table-qr.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">In mã QR Bàn 🖨️</a>';
+                        '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'waitstation.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Wait station</a>' +
+                        '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-orders.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Danh sách order</a>' +
+                        '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'table-qr.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">In mã QR bàn</a>';
                 } else if (role === 'barista' || baristaPages.indexOf(page) !== -1) {
                     navHtml = 
                         '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
-                        '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'kds.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Kitchen KDS 🧑‍🍳</a>';
+                        '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'kds.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">KDS pha chế</a>';
                 } else if (role === 'manager' || managerPages.indexOf(page) !== -1) {
                     navHtml = 
                         '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
-                        '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'dashboard.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">📊 Dashboard</a>' +
-                        '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'reports.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">📈 Doanh số</a>' +
-                        '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-management.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">🧑‍🤝‍🧑 Nhân sự</a>' +
-                        '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'inventory.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">📦 Kho hàng</a>' +
+                        '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'dashboard.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Dashboard</a>' +
+                        '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'reports.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Doanh số</a>' +
+                        '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-management.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Nhân sự</a>' +
+                        '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'inventory.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Kho hàng</a>' +
                         '<div class="relative group">' +
                             '<button class="bg-coffee-light hover:bg-coffee-sand/30 text-coffee-dark border border-coffee-sand px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer">' +
                                 '<span>Thao tác trực</span>' +
                                 '<svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>' +
                             '</button>' +
                             '<div class="absolute left-0 mt-1 w-52 bg-white border border-coffee-sand rounded-xl shadow-lg py-1.5 hidden group-hover:block z-50">' +
-                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
+                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
                                 
-                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
-                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📟 Wait Station floor</a>' +
-                                '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">🧑‍🍳 Kitchen KDS screen</a>' +
-                                '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📋 Danh sách Order</a>' +
-                                '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🖨️ In mã QR Bàn</a>' +
-                                '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">☕ Giao diện Khách</a>' +
+                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
+                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Wait station</a>' +
+                                '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">KDS pha chế</a>' +
+                                '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Danh sách order</a>' +
+                                '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">In mã QR bàn</a>' +
+                                '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Giao diện khách</a>' +
                             '</div>' +
                         '</div>';
                 }
                 navContainer.innerHTML = navHtml;
 
-                // Render badge and logout button (only for staff pages or logged in)
                 var rightNavArea = document.querySelector('nav div.flex.items-center.gap-3 div.flex.items-center.gap-1\\.5') || document.querySelector('nav div.flex.items-center.gap-3');
                 if (rightNavArea && role) {
                     var roleBadge = '';
-                    if (role === 'manager') roleBadge = '💼 Quản lý';
-                    else if (role === 'waiter') roleBadge = '📟 Phục vụ';
-                    else if (role === 'barista') roleBadge = '🧑‍🍳 Pha chế';
+                    if (role === 'manager') roleBadge = 'Quản lý';
+                    else if (role === 'waiter') roleBadge = 'Phục vụ';
+                    else if (role === 'barista') roleBadge = 'Pha chế';
 
                     var badgeHtml = 
                         '<div class="flex items-center gap-2">' +
@@ -173,7 +266,7 @@
                                 '<span>' + roleBadge + ': ' + user + '</span>' +
                             '</div>' +
                             '<button onclick="handleLocalLogout()" class="text-xs font-bold px-2 py-1.5 bg-red-50 hover:bg-red-500 hover:text-white border border-red-200 text-red-600 rounded-xl shadow-xs transition-all cursor-pointer">' +
-                                'Đăng xuất ↩' +
+                                'Đăng xuất' +
                             '</button>' +
                         '</div>';
 
@@ -193,77 +286,99 @@
             });
         })();
 
-        async function handleLocalLogout() {
+        function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS! Chuyển hướng về cổng portal.');
-            window.location.href = 'staff.html';
+            window.location.href = 'index.html';
         }
     </script>
+    <link rel="stylesheet" href="assets/css/pro-ui.css">
+    <script defer src="assets/js/ui-polish.js"></script>
 </head>
 <body class="min-h-screen flex flex-col dot-grid-bg relative selection:bg-coffee-rust/20 selection:text-coffee-rust">
 
-    <!-- TOP NAVIGATION BAR -->
     <nav class="border-b border-coffee-sand/70 bg-coffee-bg/90 backdrop-blur sticky top-0 z-40 px-6 py-4 transition-all">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             
-            <!-- Logo Brand -->
             <a href="index.html" class="flex items-center gap-2 group">
                 <span class="text-2xl font-serif font-extrabold tracking-tight text-coffee-dark select-none">
                     nhà cà phê<span class="text-coffee-rust">.</span>
                 </span>
             </a>
 
-            <!-- Dropdown Menu / Quick Links Header mapping all pages -->
-            <div class="hidden lg:flex items-center gap-4 text-xs font-medium">
-                <a href="index.html" class="hover:text-coffee-rust transition-colors text-coffee-milk">Trang chủ</a>
-                <a href="menu.jsp" class="hover:text-coffee-rust transition-colors text-coffee-dark font-bold">Khách gọi món</a>
-                <a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors text-coffee-milk">Wait Station</a>
-                <a href="kds.jsp" class="hover:text-coffee-rust transition-colors text-coffee-milk">Kitchen KDS</a>
-                
-                <!-- Quick jump selector -->
+            <div id="reports-admin-nav" class="reports-admin-nav">
+                <a href="dashboard.jsp" class="reports-admin-link">
+                    <span>⌂</span>
+                    <span>Dashboard</span>
+                </a>
+                <a href="reports.jsp" class="reports-admin-link is-active">
+                    <span>↗</span>
+                    <span>Doanh số</span>
+                </a>
+                <a href="staff-management.jsp" class="reports-admin-link">
+                    <span>◎</span>
+                    <span>Nhân sự</span>
+                </a>
+                <a href="inventory.jsp" class="reports-admin-link">
+                    <span>▦</span>
+                    <span>Kho hàng</span>
+                </a>
                 <div class="relative group">
-                    <button class="bg-coffee-light hover:bg-coffee-sand/30 text-coffee-dark border border-coffee-sand px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer">
-                        <span>Chức năng khác</span>
-                        <svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                    <button type="button" class="reports-admin-menu-button">
+                        <span>⋯</span>
+                        <span>Vận hành</span>
+                        <svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
                     </button>
-                    <div class="absolute left-0 mt-1 w-52 bg-white border border-coffee-sand rounded-xl shadow-lg py-1.5 hidden group-hover:block z-50">
-                        <a href="dashboard.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📊 Dashboard panel</a>
-                        <a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>
-                        <a href="reports.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📈 Báo cáo doanh số</a>
-                        <a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📋 Danh sách Order</a>
-                        <a href="staff-management.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🧑‍🤝‍🧑 Quản lý nhân sự</a>
-                        <a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🖨️ In mã QR Bàn</a>
-                        <a href="member.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🎟️ Khách Thành Viên</a>
-                        <a href="order-status.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🔍 Kiểm tra đơn nước</a>
+                    <div class="reports-admin-menu absolute left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block z-50">
+                        <a href="waitstation.jsp"><span>Wait station</span><span>→</span></a>
+                        <a href="pos-payment.jsp"><span>Thu ngân POS</span><span>→</span></a>
+                        <a href="kds.jsp"><span>KDS pha chế</span><span>→</span></a>
+                        <a href="staff-orders.jsp"><span>Danh sách order</span><span>→</span></a>
+                        <a href="table-qr.jsp"><span>In mã QR bàn</span><span>→</span></a>
                     </div>
                 </div>
             </div>
 
-            <!-- Status Indicator and Navigation -->
+            <div class="relative group xl:hidden">
+                <button type="button" class="reports-mobile-menu flex items-center gap-2">
+                    <span>↗</span>
+                    <span>Doanh số</span>
+                    <svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                <div class="reports-admin-menu absolute left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block z-50">
+                    <a href="dashboard.jsp"><span>Dashboard</span><span>→</span></a>
+                    <a href="reports.jsp"><span>Doanh số</span><span>✓</span></a>
+                    <a href="staff-management.jsp"><span>Nhân sự</span><span>→</span></a>
+                    <a href="inventory.jsp"><span>Kho hàng</span><span>→</span></a>
+                    <a href="waitstation.jsp"><span>Wait station</span><span>→</span></a>
+                    <a href="kds.jsp"><span>KDS pha chế</span><span>→</span></a>
+                </div>
+            </div>
+
             <div class="flex items-center gap-3">
                 
-                <!-- Live Sync Node Indicator -->
-                <div id="connection-status">
+                <div id="connection-status" class="reports-nav-support">
                     <div class="bg-amber-50 text-amber-800 border border-amber-200/50 px-3 py-1 rounded-full text-xs flex items-center gap-1.5 font-medium">
                         <span class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
                         <span>Đang kết nối...</span>
                     </div>
                 </div>
 
-                <!-- Clock -->
-                <div class="hidden md:flex bg-coffee-light border border-coffee-sand/60 px-3 py-1 rounded-full items-center gap-1.5 font-mono text-xs text-coffee-dark font-medium">
+                <div class="reports-nav-support hidden md:flex bg-coffee-light border border-coffee-sand/60 px-3 py-1 rounded-full items-center gap-1.5 font-mono text-xs text-coffee-dark font-medium">
                     <svg class="w-3.5 h-3.5 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span id="nav-clock">--:--:--</span>
                 </div>
 
-                <!-- Active View info badge -->
-                <div class="flex items-center gap-1.5">
+                <div class="reports-nav-support flex items-center gap-1.5">
                     <a href="javascript:history.back()" class="text-xs font-bold px-3 py-1.5 bg-white hover:bg-coffee-rust hover:text-white border border-coffee-sand rounded-xl shadow-xs transition-all pointer">
-                        Quay lại ↩
+                        Quay lại
                     </a>
                 </div>
 
@@ -271,7 +386,6 @@
         </div>
     </nav>
 
-    <!-- LIVE POP-UP FLASH BANNERS -->
     <div id="flash-banner-container" class="hidden fixed bottom-6 right-6 z-50 max-w-sm w-full animate-bounce">
         <div id="flash-banner" class="bg-coffee-dark text-white border border-coffee-rust/50 px-4 py-3 rounded-2xl flex items-center gap-2.5 shadow-xl">
             <div class="w-8 h-8 rounded-full bg-coffee-rust flex items-center justify-center shrink-0">
@@ -283,17 +397,15 @@
         </div>
     </div>
 
-    <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
 <div class="space-y-6">
-    <!-- Summary header -->
     <div class="bg-white border border-coffee-sand/70 p-5 rounded-3xl shadow-xs flex justify-between items-center">
         <div>
             <h2 class="text-xl font-serif italic font-bold text-coffee-dark flex items-center gap-2">
                 <span>📈</span> Báo cáo Doanh thu & Thống kê sản phẩm
             </h2>
-            <p class="text-xs text-coffee-milk font-medium">Bản phân tích nhanh thị hiếu khách hàng và doanh số bán được cập nhật thời gian thực.</p>
+            <p class="text-xs text-coffee-milk font-medium">Doanh thu và sản phẩm bán chạy.</p>
         </div>
         <div class="flex gap-2">
             <button onclick="window.print()" class="bg-white text-coffee-dark border border-coffee-sand px-3 py-1.5 rounded-xl text-xs font-bold font-mono hover:border-coffee-rust transition-colors cursor-pointer">
@@ -302,22 +414,17 @@
         </div>
     </div>
 
-    <!-- Analytics grids -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
-        <!-- SVG Graphic chart cards (Left Columns) -->
         <div class="lg:col-span-2 space-y-6">
             
-            <!-- Category breakdown bars -->
             <div class="bg-white border border-coffee-sand rounded-3xl p-6 shadow-sm space-y-5">
                 <div>
                      <h3 class="font-serif italic font-bold text-base text-coffee-dark">Doanh số theo nhóm sản phẩm</h3>
-                     <p class="text-[10px] text-coffee-milk">Tổng số lượng cốc nước đã chế sẵn dọn bàn ra cho khách</p>
+                     <p class="text-[10px] text-coffee-milk">Theo số món đã phục vụ.</p>
                 </div>
 
-                <!-- Custom styled visual bars -->
                 <div class="space-y-4">
-                    <!-- Coffee -->
                     <div class="space-y-1.5">
                         <div class="flex justify-between items-center text-xs font-medium">
                             <span class="text-coffee-dark font-bold">☕ Cà phê truyền thống</span>
@@ -328,7 +435,6 @@
                         </div>
                     </div>
 
-                    <!-- Tea -->
                     <div class="space-y-1.5">
                         <div class="flex justify-between items-center text-xs font-medium">
                             <span class="text-coffee-dark font-bold">🍵 Trà phin mộc hoa quả</span>
@@ -339,7 +445,6 @@
                         </div>
                     </div>
 
-                    <!-- Specialty -->
                     <div class="space-y-1.5">
                         <div class="flex justify-between items-center text-xs font-medium">
                             <span class="text-coffee-dark font-bold">🥤 Đặc sản sữa quầy bar</span>
@@ -350,7 +455,6 @@
                         </div>
                     </div>
 
-                    <!-- Pastry -->
                     <div class="space-y-1.5">
                         <div class="flex justify-between items-center text-xs font-medium">
                             <span class="text-coffee-dark font-bold">🥐 Bánh ngọt lò nướng Pháp</span>
@@ -363,41 +467,35 @@
                 </div>
             </div>
 
-            <!-- Heat map table yields -->
             <div class="bg-white border border-coffee-sand rounded-3xl p-6 shadow-sm space-y-4">
                 <div>
                      <h3 class="font-serif italic font-bold text-base text-coffee-dark">Hiệu quả khai thác khu vực ngồi</h3>
-                     <p class="text-[10px] text-coffee-milk">Tổng số lượt hóa đơn phát sinh theo từng khu vực sân vườn/phòng trệt</p>
+                     <p class="text-[10px] text-coffee-milk">Theo khu vực bàn.</p>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="zone-perf-holder">
-                    <!-- Loaded dynamic stats cards -->
                 </div>
             </div>
 
         </div>
 
-        <!-- Hot selling products (Right Columns) -->
         <div class="bg-white border border-coffee-sand rounded-3xl p-5 shadow-xs space-y-4">
             <h4 class="font-serif italic font-bold text-base text-coffee-dark border-b border-coffee-light pb-2">Đồ uống bán chạy nhất ca</h4>
             <div id="hot-seller-list" class="space-y-3.5">
-                <!-- Dynamic hot loaders -->
             </div>
         </div>
 
     </div>
 
-    <!-- ==================== HISTORICAL FINANCIAL STATS ==================== -->
     <div class="bg-white border border-coffee-sand rounded-3xl p-6 shadow-sm space-y-6 mt-6">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-coffee-light pb-4">
             <div>
                  <h3 class="font-serif italic font-bold text-lg text-coffee-dark flex items-center gap-2">
                      <span>📊</span> Báo cáo Doanh số & Tài chính lịch sử
                  </h3>
-                 <p class="text-[10px] text-coffee-milk">Thống kê so sánh doanh thu, chi phí vận hành và thực tế Lãi/Lỗ/Hòa vốn của quán</p>
+                 <p class="text-[10px] text-coffee-milk">Doanh thu, chi phí và lợi nhuận.</p>
             </div>
             
-            <!-- Selector tab items -->
             <div class="flex gap-2 bg-coffee-light p-1 rounded-xl border border-coffee-sand/50">
                 <button btn-year="2024" onclick="setHistoricalYear(2024)" class="px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer bg-white text-coffee-dark shadow-3xs" id="btn-year-2024">
                     Năm 2024
@@ -408,7 +506,6 @@
             </div>
         </div>
 
-        <!-- Metric summaries -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div class="p-4 rounded-2xl bg-amber-50 border border-coffee-sand/40 space-y-1">
                 <span class="text-[9px] uppercase tracking-wider font-mono font-bold text-coffee-milk">Tổng doanh thu cả năm</span>
@@ -431,7 +528,6 @@
             </div>
         </div>
 
-        <!-- Monthly detail table -->
         <div class="border border-coffee-sand/40 rounded-2xl overflow-hidden mt-4 bg-white">
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
@@ -445,7 +541,6 @@
                         </tr>
                     </thead>
                     <tbody id="historical-table-body" class="divide-y divide-coffee-sand/15 font-medium text-xs">
-                        <!-- Loaded dynamically via JavaScript using the API -->
                     </tbody>
                 </table>
             </div>
@@ -468,10 +563,10 @@
     async function loadReports() {
         try {
             const [rMenu, rTables, rOrders, rHist] = await Promise.all([
-                fetch('/api/menu'),
-                fetch('/api/tables'),
-                fetch('/api/orders'),
-                fetch('/api/reports/historical')
+                fetch('api/menu'),
+                fetch('api/tables'),
+                fetch('api/orders'),
+                fetch('api/reports/historical')
             ]);
             if (rMenu.ok) menu = await rMenu.json();
             if (rTables.ok) tables = await rTables.json();
@@ -488,7 +583,6 @@
     function setHistoricalYear(year) {
         selectedHistoricalYear = year;
         
-        // Update tab buttons styles
         const btn2024 = document.getElementById('btn-year-2024');
         const btn2025 = document.getElementById('btn-year-2025');
         
@@ -538,20 +632,19 @@
             
             tbody.innerHTML += `
                 <tr class="hover:bg-coffee-light/25 transition-colors">
-                    <td class="py-3.5 px-4 font-bold text-coffee-dark">Tháng ${r.month} / ${r.year}</td>
-                    <td class="py-3.5 px-4 text-coffee-dark font-mono font-semibold">${formatVND(r.revenue)}</td>
-                    <td class="py-3.5 px-4 text-coffee-milk font-mono">${formatVND(r.expenses)}</td>
-                    <td class="py-3.5 px-4 font-mono font-bold ${r.profit >= 0 ? 'text-coffee-rust' : 'text-red-650'}">${formatVND(r.profit)}</td>
+                    <td class="py-3.5 px-4 font-bold text-coffee-dark">Tháng \${r.month} / \${r.year}</td>
+                    <td class="py-3.5 px-4 text-coffee-dark font-mono font-semibold">\${formatVND(r.revenue)}</td>
+                    <td class="py-3.5 px-4 text-coffee-milk font-mono">\${formatVND(r.expenses)}</td>
+                    <td class="py-3.5 px-4 font-mono font-bold \${r.profit >= 0 ? 'text-coffee-rust' : 'text-red-650'}">\${formatVND(r.profit)}</td>
                     <td class="py-3.5 px-4 text-center">
-                        <span class="text-[9.5px] font-bold px-2.5 py-0.5 rounded-full ${badgeClass}">
-                            ${labelText}
+                        <span class="text-[9.5px] font-bold px-2.5 py-0.5 rounded-full \${badgeClass}">
+                            \${labelText}
                         </span>
                     </td>
                 </tr>
             `;
         });
         
-        // Update summary cards
         document.getElementById('hist-total-revenue').innerText = formatVND(totalRev);
         document.getElementById('hist-total-expenses').innerText = formatVND(totalExp);
         
@@ -573,7 +666,6 @@
     }
 
     function generateAnalytics() {
-        // Filter only paid order tickets
         const paidTickets = orders.filter(o => o.status === 'Served');
 
         let catCounts = { Coffee: 0, Tea: 0, Specialty: 0, Pastry: 0 };
@@ -593,13 +685,11 @@
 
                     catRevenues[cat] = (catRevenues[cat] || 0) + (singlePrice * it.quantity);
 
-                    // Item freq
                     itemFrequency[it.name] = (itemFrequency[it.name] || 0) + it.quantity;
                 }
             });
         });
 
-        // Update categories bars
         const maxSales = Math.max(1, catCounts.Coffee, catCounts.Tea, catCounts.Specialty, catCounts.Pastry);
         
         ['Coffee', 'Tea', 'Specialty', 'Pastry'].forEach(cat => {
@@ -608,11 +698,10 @@
             const p = Math.max(10, Math.round((count / maxSales) * 100));
 
             const idStr = cat.toLowerCase();
-            document.getElementById(`label-sales-${idStr}`).innerText = `${count} món (${formatVND(money)})`;
-            document.getElementById(`bar-sales-${idStr}`).style.width = `${p}%`;
+            document.getElementById(`label-sales-\${idStr}`).innerText = `\${count} món (\${formatVND(money)})`;
+            document.getElementById(`bar-sales-\${idStr}`).style.width = `\${p}%`;
         });
 
-        // Zones occupancy analytics
         let zoneStats = {
             'Ground Floor': { count: 0, revenue: 0, name: 'Khu Nhà Trệt' },
             'Terrace': { count: 0, revenue: 0, name: 'Khu Sân Vườn' },
@@ -633,14 +722,13 @@
             const z = zoneStats[key];
             zonePerfBox.innerHTML += `
                 <div class="bg-coffee-light/60 border border-coffee-sand/70 rounded-2xl p-4 text-xs font-medium text-center space-y-1">
-                    <span class="text-coffee-milk uppercase tracking-wider font-mono text-[9px] font-bold block">${z.name}</span>
-                    <p class="text-base font-serif font-bold text-coffee-dark mt-1">${z.count} hóa đơn</p>
-                    <p class="text-[11px] font-mono font-bold text-coffee-rust">${formatVND(z.revenue)}</p>
+                    <span class="text-coffee-milk uppercase tracking-wider font-mono text-[9px] font-bold block">\${z.name}</span>
+                    <p class="text-base font-serif font-bold text-coffee-dark mt-1">\${z.count} hóa đơn</p>
+                    <p class="text-[11px] font-mono font-bold text-coffee-rust">\${formatVND(z.revenue)}</p>
                 </div>
             `;
         });
 
-        // Lead item frequency lists (Hot sellers)
         const sortedItems = Object.keys(itemFrequency).map(name => ({
             name, quantity: itemFrequency[name]
         })).sort((a,b) => b.quantity - a.quantity);
@@ -660,11 +748,11 @@
             hotList.innerHTML += `
                 <div class="flex items-center gap-3 bg-coffee-light/40 border border-coffee-sand/50 p-2.5 rounded-xl text-xs font-medium justify-between shadow-3xs">
                     <div class="flex items-center gap-2">
-                        <span class="w-5 h-5 rounded-full bg-coffee-rust text-white flex items-center justify-center font-bold text-[10px] font-mono shrink-0">${idx+1}</span>
-                        <span class="text-coffee-dark font-bold">${it.name}</span>
+                        <span class="w-5 h-5 rounded-full bg-coffee-rust text-white flex items-center justify-center font-bold text-[10px] font-mono shrink-0">\${idx+1}</span>
+                        <span class="text-coffee-dark font-bold">\${it.name}</span>
                     </div>
                     <span class="font-mono text-coffee-rust font-bold bg-white px-2 py-0.5 border border-coffee-sand rounded-md shrink-0">
-                        ${it.quantity} ly đã nạp
+                        \${it.quantity} ly đã nạp
                     </span>
                 </div>
             `;
@@ -676,7 +764,6 @@
 
     </main>
 
-    <!-- ==================== FOOTER SYSTEM INFORMATION ==================== -->
     <footer class="mt-auto py-6 border-t border-coffee-sand/70 bg-white/70 backdrop-blur-xs text-xs text-coffee-milk">
         <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p class="font-serif italic font-bold text-sm text-coffee-dark">
@@ -688,16 +775,13 @@
         </div>
     </footer>
 
-    <!-- GLOBAL TIMEOUT AND TIMEKEEPING -->
     <script>
-        // Update nav clock live
         if (document.getElementById('nav-clock')) {
             setInterval(() => {
                 document.getElementById('nav-clock').innerText = new Date().toLocaleTimeString('vi-VN');
             }, 1000);
         }
 
-        // Global toast notifier helper
         function flashNotify(msg) {
             const holder = document.getElementById('flash-banner-container');
             const target = document.getElementById('flash-message');

@@ -1,5 +1,8 @@
 package model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class Member {
     private String phone;
     private String name;
@@ -8,10 +11,15 @@ public class Member {
     private String email;
     private String pref;
     private String discount;
+    private List<String> vouchers;
 
     public Member() {}
 
     public Member(String phone, String name, String rank, int points, String email, String pref, String discount) {
+        this(phone, name, rank, points, email, pref, discount, new ArrayList<String>());
+    }
+
+    public Member(String phone, String name, String rank, int points, String email, String pref, String discount, List<String> vouchers) {
         this.phone = phone;
         this.name = name;
         this.rank = rank;
@@ -19,6 +27,7 @@ public class Member {
         this.email = email;
         this.pref = pref;
         this.discount = discount;
+        this.vouchers = vouchers != null ? vouchers : new ArrayList<String>();
     }
 
     public String getPhone() { return phone; }
@@ -41,4 +50,7 @@ public class Member {
 
     public String getDiscount() { return discount; }
     public void setDiscount(String discount) { this.discount = discount; }
+
+    public List<String> getVouchers() { return vouchers; }
+    public void setVouchers(List<String> vouchers) { this.vouchers = vouchers != null ? vouchers : new ArrayList<String>(); }
 }

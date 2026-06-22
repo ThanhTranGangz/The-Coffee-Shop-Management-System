@@ -7,16 +7,22 @@ public class Table {
     private String status; // empty, serving, ready_to_serve
     private int capacity;
     private String activeOrderId;
+    private String tableCode;
 
     public Table() {}
 
     public Table(String id, String name, String zone, String status, int capacity, String activeOrderId) {
+        this(id, name, zone, status, capacity, activeOrderId, null);
+    }
+
+    public Table(String id, String name, String zone, String status, int capacity, String activeOrderId, String tableCode) {
         this.id = id;
         this.name = name;
         this.zone = zone;
         this.status = status;
         this.capacity = capacity;
         this.activeOrderId = activeOrderId;
+        this.tableCode = tableCode;
     }
 
     // Getters and Setters
@@ -37,4 +43,7 @@ public class Table {
 
     public String getActiveOrderId() { return activeOrderId; }
     public void setActiveOrderId(String activeOrderId) { this.activeOrderId = activeOrderId; }
+
+    public String getTableCode() { return tableCode; }
+    public void setTableCode(String tableCode) { this.tableCode = tableCode; }
 }

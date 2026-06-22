@@ -1,10 +1,10 @@
+<%@ page contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nhà cà phê. — hệ thống quản lý chuẩn jsp</title>
-    <!-- Tailwind CSS CDN -->
+    <title>nhà cà phê. — quản lý quán</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -12,12 +12,12 @@
                 extend: {
                     colors: {
                         coffee: {
-                            bg: '#F6F2E9',       /* Warm Ivory Eggshell */
-                            dark: '#2B1B17',     /* Deep Roasted Espresso */
-                            rust: '#A04423',     /* Premium Terracotta Red-Brown */
-                            sand: '#E5DEC9',     /* Soft Muted Border */
-                            light: '#FAF7EE',    /* Soft Off-white Ivory */
-                            milk: '#8E7D6F'      /* Elegant Milk Brew Accent */
+                            bg: '#FAF8F3',       
+                            dark: '#2B1B17',     
+                            rust: '#A04423',     
+                            sand: '#E5DEC9',     
+                            light: '#FAF7EE',    
+                            milk: '#8E7D6F'      
                         }
                     }
                 }
@@ -28,7 +28,7 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             color: #2B1B17;
         }
         .font-serif {
@@ -37,13 +37,13 @@
         .font-mono {
             font-family: 'JetBrains Mono', monospace;
         }
-        /* Grid background matching screenshot */
+        
         .dot-grid-bg {
-            background-color: #F6F2E9;
+            background-color: #FAF8F3;
             background-image: radial-gradient(#d3cbb6 1.2px, transparent 1.2px);
             background-size: 24px 24px;
         }
-        /* Custom scrollbar */
+        
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -61,7 +61,6 @@
             border-radius: 99px;
         }
     </style>
-    <!-- Dynamic role-based navigation and security guard -->
     <script>
         (function() {
             var role = localStorage.getItem('auth_role') || '';
@@ -74,7 +73,21 @@
             var baristaPages = ['kds.jsp'];
             var managerPages = ['dashboard.jsp', 'reports.jsp', 'staff-management.jsp', 'inventory.jsp'];
 
-            // Security guard removed, now handled by SecurityFilter
+            if (role && waiterPages.indexOf(page) !== -1 && role !== 'waiter' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Phục vụ / Wait station!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (role && baristaPages.indexOf(page) !== -1 && role !== 'barista' && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Quầy pha chế (KDS)!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
+            if (role && managerPages.indexOf(page) !== -1 && role !== 'manager') {
+                try { alert('Cảnh báo bảo mật: Bạn không có quyền truy cập khu vực Bảng điều khiển Quản lý!'); } catch(e) { console.warn(e); }
+                window.location.href = 'login.jsp';
+                return;
+            }
 
             document.addEventListener("DOMContentLoaded", function() {
                 var navContainer = document.querySelector('nav div.hidden.lg\\:flex');
@@ -86,85 +99,84 @@
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
                             '<a href="menu.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'menu.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Khách gọi món</a>' +
-                            '<a href="order-status.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'order-status.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Kiểm tra đơn nước 🔍</a>' +
-                            '<a href="member.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'member.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Khách Thành Viên 🎟️</a>';
+                            '<a href="order-status.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'order-status.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Kiểm tra đơn nước</a>' +
+                            '<a href="member.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'member.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Khách thành viên</a>';
                     } else if (role === 'waiter') {
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors">Trang chủ</a>' +
-                            '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors font-semibold">Wait Station 📟</a>' +
-                            '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors">Danh sách Order 📋</a>' +
-                            '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors">In mã QR Bàn 🖨️</a>';
+                            '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors font-semibold">Wait station</a>' +
+                            '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors">Danh sách order</a>' +
+                            '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors">In mã QR bàn</a>';
                     } else if (role === 'barista') {
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors">Trang chủ</a>' +
-                            '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors font-semibold">Kitchen KDS 🧑‍🍳</a>';
+                            '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors font-semibold">KDS pha chế</a>';
                     } else if (role === 'manager') {
                         navHtml = 
                             '<a href="index.html" class="hover:text-coffee-rust transition-colors">Trang chủ</a>' +
-                            '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors">📊 Dashboard</a>' +
-                            '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors">📈 Doanh số</a>' +
-                            '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors">🧑‍🤝‍🧑 Nhân sự</a>' +
-                            '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors">📦 Kho hàng</a>' +
+                            '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors">Dashboard</a>' +
+                            '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors">Doanh số</a>' +
+                            '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors">Nhân sự</a>' +
+                            '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors">Kho hàng</a>' +
                            '<div class="relative group">' +
                                '<button class="bg-coffee-light hover:bg-coffee-sand/30 text-coffee-dark border border-coffee-sand px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer">' +
                                    '<span>Thao tác trực</span>' +
                                    '<svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>' +
                                '</button>' +
                                '<div class="absolute left-0 mt-1 w-52 bg-white border border-coffee-sand rounded-xl shadow-lg py-1.5 hidden group-hover:block z-50">' +
-                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
+                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
                                 
-                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
-                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📟 Wait Station floor</a>' +
-                                   '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">🧑‍🍳 Kitchen KDS screen</a>' +
-                                   '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📋 Danh sách Order</a>' +
-                                   '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🖨️ In mã QR Bàn</a>' +
-                                   '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">☕ Giao diện Khách</a>' +
+                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
+                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Wait station</a>' +
+                                   '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">KDS pha chế</a>' +
+                                   '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Danh sách order</a>' +
+                                   '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">In mã QR bàn</a>' +
+                                   '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Giao diện khách</a>' +
                                '</div>' +
                            '</div>';
                     }
                 } else if (role === 'waiter' || waiterPages.indexOf(page) !== -1) {
                     navHtml = 
                         '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
-                        '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'waitstation.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Wait Station 📟</a>' +
-                        '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-orders.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Danh sách Order 📋</a>' +
-                        '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'table-qr.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">In mã QR Bàn 🖨️</a>';
+                        '<a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'waitstation.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Wait station</a>' +
+                        '<a href="staff-orders.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-orders.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Danh sách order</a>' +
+                        '<a href="table-qr.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'table-qr.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">In mã QR bàn</a>';
                 } else if (role === 'barista' || baristaPages.indexOf(page) !== -1) {
                     navHtml = 
                         '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
-                        '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'kds.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Kitchen KDS 🧑‍🍳</a>';
+                        '<a href="kds.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'kds.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">KDS pha chế</a>';
                 } else if (role === 'manager' || managerPages.indexOf(page) !== -1) {
                     navHtml = 
                         '<a href="index.html" class="hover:text-coffee-rust transition-colors ' + (page === 'index.html' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Trang chủ</a>' +
-                        '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'dashboard.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">📊 Dashboard</a>' +
-                        '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'reports.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">📈 Doanh số</a>' +
-                        '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-management.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">🧑‍🤝‍🧑 Nhân sự</a>' +
-                        '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'inventory.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">📦 Kho hàng</a>' +
+                        '<a href="dashboard.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'dashboard.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + ' font-semibold">Dashboard</a>' +
+                        '<a href="reports.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'reports.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Doanh số</a>' +
+                        '<a href="staff-management.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'staff-management.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Nhân sự</a>' +
+                        '<a href="inventory.jsp" class="hover:text-coffee-rust transition-colors ' + (page === 'inventory.jsp' ? 'text-coffee-dark font-bold' : 'text-coffee-milk') + '">Kho hàng</a>' +
                         '<div class="relative group">' +
                             '<button class="bg-coffee-light hover:bg-coffee-sand/30 text-coffee-dark border border-coffee-sand px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer">' +
                                 '<span>Thao tác trực</span>' +
                                 '<svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>' +
                             '</button>' +
                             '<div class="absolute left-0 mt-1 w-52 bg-white border border-coffee-sand rounded-xl shadow-lg py-1.5 hidden group-hover:block z-50">' +
-                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
+                                '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
                                 
-                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📦 Kho nguyên liệu</a>' +
-                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">📟 Wait Station floor</a>' +
-                                '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">🧑‍🍳 Kitchen KDS screen</a>' +
-                                '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📋 Danh sách Order</a>' +
-                                '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🖨️ In mã QR Bàn</a>' +
-                                '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">☕ Giao diện Khách</a>' +
+                                    '<a href="inventory.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Kho nguyên liệu</a>' +
+                                    '<a href="waitstation.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">Wait station</a>' +
+                                '<a href="kds.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors font-semibold">KDS pha chế</a>' +
+                                '<a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Danh sách order</a>' +
+                                '<a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">In mã QR bàn</a>' +
+                                '<a href="menu.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Giao diện khách</a>' +
                             '</div>' +
                         '</div>';
                 }
                 navContainer.innerHTML = navHtml;
 
-                // Render badge and logout button (only for staff pages or logged in)
                 var rightNavArea = document.querySelector('nav div.flex.items-center.gap-3 div.flex.items-center.gap-1\\.5') || document.querySelector('nav div.flex.items-center.gap-3');
                 if (rightNavArea && role) {
                     var roleBadge = '';
-                    if (role === 'manager') roleBadge = '💼 Quản lý';
-                    else if (role === 'waiter') roleBadge = '📟 Phục vụ';
-                    else if (role === 'barista') roleBadge = '🧑‍🍳 Pha chế';
+                    if (role === 'manager') roleBadge = 'Quản lý';
+                    else if (role === 'waiter') roleBadge = 'Phục vụ';
+                    else if (role === 'barista') roleBadge = 'Pha chế';
 
                     var badgeHtml = 
                         '<div class="flex items-center gap-2">' +
@@ -173,7 +185,7 @@
                                 '<span>' + roleBadge + ': ' + user + '</span>' +
                             '</div>' +
                             '<button onclick="handleLocalLogout()" class="text-xs font-bold px-2 py-1.5 bg-red-50 hover:bg-red-500 hover:text-white border border-red-200 text-red-600 rounded-xl shadow-xs transition-all cursor-pointer">' +
-                                'Đăng xuất ↩' +
+                                'Đăng xuất' +
                             '</button>' +
                         '</div>';
 
@@ -193,57 +205,52 @@
             });
         })();
 
-        async function handleLocalLogout() {
+        function handleLocalLogout() {
             localStorage.removeItem('auth_role');
             localStorage.removeItem('auth_user');
-            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch(e) {}
             alert('Đã đăng xuất tài khoản làm việc POS! Chuyển hướng về cổng portal.');
-            window.location.href = 'staff.html';
+            window.location.href = 'index.html';
         }
     </script>
+    <link rel="stylesheet" href="assets/css/pro-ui.css">
+    <script defer src="assets/js/ui-polish.js"></script>
 </head>
 <body class="min-h-screen flex flex-col dot-grid-bg relative selection:bg-coffee-rust/20 selection:text-coffee-rust">
 
-    <!-- TOP NAVIGATION BAR -->
     <nav class="border-b border-coffee-sand/70 bg-coffee-bg/90 backdrop-blur sticky top-0 z-40 px-6 py-4 transition-all">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
             
-            <!-- Logo Brand -->
             <a href="index.html" class="flex items-center gap-2 group">
                 <span class="text-2xl font-serif font-extrabold tracking-tight text-coffee-dark select-none">
                     nhà cà phê<span class="text-coffee-rust">.</span>
                 </span>
             </a>
 
-            <!-- Dropdown Menu / Quick Links Header mapping all pages -->
             <div class="hidden lg:flex items-center gap-4 text-xs font-medium">
                 <a href="index.html" class="hover:text-coffee-rust transition-colors text-coffee-milk">Trang chủ</a>
                 <a href="menu.jsp" class="hover:text-coffee-rust transition-colors text-coffee-dark font-bold">Khách gọi món</a>
-                <a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors text-coffee-milk">Wait Station</a>
-                <a href="kds.jsp" class="hover:text-coffee-rust transition-colors text-coffee-milk">Kitchen KDS</a>
+                <a href="waitstation.jsp" class="hover:text-coffee-rust transition-colors text-coffee-milk">Wait station</a>
+                <a href="kds.jsp" class="hover:text-coffee-rust transition-colors text-coffee-milk">KDS pha chế</a>
                 
-                <!-- Quick jump selector -->
                 <div class="relative group">
                     <button class="bg-coffee-light hover:bg-coffee-sand/30 text-coffee-dark border border-coffee-sand px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer">
                         <span>Chức năng khác</span>
                         <svg class="w-3 h-3 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     <div class="absolute left-0 mt-1 w-52 bg-white border border-coffee-sand rounded-xl shadow-lg py-1.5 hidden group-hover:block z-50">
-                        <a href="dashboard.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📊 Dashboard panel</a>
-                        <a href="reports.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📈 Báo cáo doanh số</a>
-                        <a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">📋 Danh sách Order</a>
-                        <a href="staff-management.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🧑‍🤝‍🧑 Quản lý nhân sự</a>
-                        <a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🖨️ In mã QR Bàn</a>
-                        <a href="member.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🎟️ Khách Thành Viên</a>
-                        <a href="order-status.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">🔍 Kiểm tra đơn nước</a>
+                        <a href="dashboard.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Dashboard</a>
+                        <a href="reports.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Báo cáo doanh số</a>
+                        <a href="staff-orders.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Danh sách order</a>
+                        <a href="staff-management.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Quản lý nhân sự</a>
+                        <a href="table-qr.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">In mã QR bàn</a>
+                        <a href="member.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Khách thành viên</a>
+                        <a href="order-status.jsp" class="block px-4 py-2 hover:bg-coffee-light text-coffee-dark hover:text-coffee-rust transition-colors">Kiểm tra đơn nước</a>
                     </div>
                 </div>
             </div>
 
-            <!-- Status Indicator and Navigation -->
             <div class="flex items-center gap-3">
                 
-                <!-- Live Sync Node Indicator -->
                 <div id="connection-status">
                     <div class="bg-amber-50 text-amber-800 border border-amber-200/50 px-3 py-1 rounded-full text-xs flex items-center gap-1.5 font-medium">
                         <span class="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
@@ -251,7 +258,6 @@
                     </div>
                 </div>
 
-                <!-- Clock -->
                 <div class="hidden md:flex bg-coffee-light border border-coffee-sand/60 px-3 py-1 rounded-full items-center gap-1.5 font-mono text-xs text-coffee-dark font-medium">
                     <svg class="w-3.5 h-3.5 text-coffee-rust" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -259,10 +265,9 @@
                     <span id="nav-clock">--:--:--</span>
                 </div>
 
-                <!-- Active View info badge -->
                 <div class="flex items-center gap-1.5">
                     <a href="javascript:history.back()" class="text-xs font-bold px-3 py-1.5 bg-white hover:bg-coffee-rust hover:text-white border border-coffee-sand rounded-xl shadow-xs transition-all pointer">
-                        Quay lại ↩
+                        Quay lại
                     </a>
                 </div>
 
@@ -270,7 +275,6 @@
         </div>
     </nav>
 
-    <!-- LIVE POP-UP FLASH BANNERS -->
     <div id="flash-banner-container" class="hidden fixed bottom-6 right-6 z-50 max-w-sm w-full animate-bounce">
         <div id="flash-banner" class="bg-coffee-dark text-white border border-coffee-rust/50 px-4 py-3 rounded-2xl flex items-center gap-2.5 shadow-xl">
             <div class="w-8 h-8 rounded-full bg-coffee-rust flex items-center justify-center shrink-0">
@@ -282,10 +286,8 @@
         </div>
     </div>
 
-    <!-- MAIN PORTAL CONTENT CONTAINER -->
     <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col justify-start">
 
-<!-- Top-level move/merge warning action bar -->
 <div id="transfer-action-banner" class="hidden bg-amber-500 text-white font-bold p-3.5 rounded-2xl flex items-center justify-between text-xs animate-bounce shadow-md mb-4 max-w-4xl mx-auto">
     <div class="flex items-center gap-2">
         <span class="text-lg">🚚</span>
@@ -297,12 +299,9 @@
     </button>
 </div>
 
-<!-- Grid layouts for tables and side inspections -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
     
-    <!-- Tables Floor boards: Left Columns -->
     <div class="lg:col-span-2 space-y-4">
-        <!-- Zone filters row -->
         <div class="flex items-center justify-between bg-white border border-coffee-sand p-3 rounded-2xl shadow-xs">
             <span class="text-xs font-bold text-coffee-dark px-2 uppercase tracking-wide">Sơ đồ tầng lầu:</span>
             <div id="zone-filter-container" class="flex gap-1 text-[11px] font-bold">
@@ -313,12 +312,9 @@
             </div>
         </div>
 
-        <!-- Desk cards grids -->
         <div id="wait-tables-container" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            <!-- Loaded from API -->
         </div>
 
-        <!-- Stable color indicator legends -->
         <div class="flex items-center gap-6 justify-center bg-white p-3 rounded-xl border border-coffee-sand/70 text-[10px] font-bold uppercase text-coffee-milk">
             <div class="flex items-center gap-1.5">
                 <span class="w-3 h-3 rounded-md bg-white border border-coffee-sand inline-block"></span>
@@ -339,26 +335,21 @@
         </div>
     </div>
 
-    <!-- Active billing inspecting drawer: Right Column -->
     <div class="bg-white border border-coffee-sand rounded-3xl p-5 shadow-xs lg:sticky lg:top-24 max-h-[75vh] flex flex-col justify-between overflow-hidden">
         
-        <!-- Inspection placeholders when nothing is active -->
         <div id="wait-placeholder" class="py-16 text-center text-coffee-milk space-y-2">
             <span class="text-4xl text-coffee-sand">📋</span>
             <h4 class="font-serif italic font-bold text-coffee-dark text-base">Chưa chọn bàn phục vụ</h4>
-            <p class="text-xs">Bấm chọn một bàn bất kỳ trên sơ đồ để xem thông tin hóa đơn, gọi nước bổ sung, đổi bàn hoặc dọn dẹp kết hóa đơn.</p>
+            <p class="text-xs">Chọn bàn để xem đơn và thao tác phục vụ.</p>
         </div>
 
-        <!-- Active details -->
         <div id="wait-active" class="hidden h-full flex flex-col justify-between overflow-hidden space-y-4">
-            <!-- Populated from Javascript on table selected -->
         </div>
 
     </div>
 
 </div>
 
-<!-- SUPPLEMENTARY GUEST ORDER PLACEMENT DRAWER -->
 <div id="order-placement-drawer" class="fixed inset-0 bg-coffee-dark/40 z-50 flex justify-end hidden opacity-0 transition-all duration-300">
     <div class="w-full max-w-lg bg-coffee-bg h-full flex flex-col shadow-2xl p-6 transition-all transform translate-x-full">
         
@@ -374,26 +365,21 @@
 
         <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 overflow-hidden">
             
-            <!-- catalog (Left) -->
             <div class="flex flex-col h-full overflow-hidden border-r border-coffee-sand/50 pr-2">
                 <div class="space-y-2 mb-2">
                     <div class="flex flex-wrap gap-1" id="drawer-categories-holder">
-                        <!-- Filled statically -->
                     </div>
                     <input type="text" id="drawer-search-input" oninput="drawDrawerMenuList()" placeholder="Tìm đồ uống..." class="w-full text-xs px-3 py-2 bg-white border border-coffee-sand rounded-xl focus:outline-none focus:border-coffee-rust">
                 </div>
 
                 <div id="drawer-menu-container" class="flex-1 overflow-y-auto space-y-2.5">
-                    <!-- Cards -->
                 </div>
             </div>
 
-            <!-- compile ticket (Right) -->
             <div class="flex flex-col h-full overflow-hidden">
                 <h4 class="text-[10px] uppercase font-bold tracking-wider text-coffee-rust border-b border-coffee-sand pb-2 mb-2">Gọi món bổ sung</h4>
                 
                 <div id="drawer-cart-container" class="flex-1 overflow-y-auto space-y-3 pr-1">
-                    <!-- Items -->
                 </div>
 
                 <div class="border-t border-coffee-sand pt-3 mt-2 space-y-2.5">
@@ -418,7 +404,6 @@
     </div>
 </div>
 
-<!-- Checkout Confirmation Modal Overlay -->
 <div id="checkout-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
     <div class="bg-white border-2 border-coffee-sand rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fade-in">
         <div class="flex justify-between items-center border-b border-coffee-sand/50 pb-3">
@@ -479,7 +464,6 @@
     </div>
 </div>
 
-<!-- Serve Item Verification Modal Overlay -->
 <div id="serve-confirm-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
     <div class="bg-white border-2 border-coffee-sand rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-fade-in text-coffee-dark">
         <div class="flex justify-between items-center border-b border-coffee-sand/50 pb-3">
@@ -489,7 +473,6 @@
             <button onclick="closeServeConfirmationModal()" class="text-coffee-milk hover:text-coffee-rust text-xs font-bold font-mono">✕ Đóng</button>
         </div>
         
-        <!-- Order details panel -->
         <div class="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 space-y-3">
             <div class="flex justify-between items-center text-xs">
                 <span class="text-amber-800 font-bold uppercase tracking-wider font-mono">Món nước cần giao:</span>
@@ -502,7 +485,6 @@
             </div>
         </div>
 
-        <!-- Verification Steps -->
         <div class="space-y-3">
             <div class="text-xs text-coffee-milk font-medium flex items-center gap-1.5">
                 <span class="w-5 h-5 rounded-full bg-coffee-rust text-white flex items-center justify-center text-[10px] font-bold">1</span>
@@ -510,13 +492,10 @@
             </div>
             
             <div id="verification-tables-grid" class="grid grid-cols-4 gap-2 max-h-[160px] overflow-y-auto p-1 bg-coffee-light rounded-2xl border border-coffee-sand/60">
-                <!-- Tables grid goes here -->
             </div>
         </div>
 
-        <!-- Message Alert Area -->
         <div id="verification-alert-area" class="hidden p-3 rounded-2xl text-xs flex items-center gap-2.5 transition-all">
-            <!-- Warning/Success message will go here dynamically -->
         </div>
 
         <div class="pt-2 flex gap-2">
@@ -568,15 +547,13 @@
 
         let baseSum = 0;
         activeOrder.items.forEach(it => {
-            let singlePrice = it.price;
-            const sizeChar = it.customization ? it.customization.size : 'M';
-            if (sizeChar === 'L') singlePrice += 6000;
-            else if (sizeChar === 'S') singlePrice = Math.max(10000, singlePrice - 4000);
+            const singlePrice = Number(it.price || 0);
             baseSum += singlePrice * it.quantity;
         });
 
-        const taxVal = Math.round(baseSum * 0.08);
-        const grandTotal = baseSum + taxVal;
+        const storedTotal = Number(activeOrder.totalAmount);
+        const taxVal = 0;
+        const grandTotal = Number.isFinite(storedTotal) ? Math.max(0, storedTotal) : baseSum;
 
         document.getElementById('chk-base-sum').innerText = formatVND(baseSum);
         document.getElementById('chk-tax-sum').innerText = formatVND(taxVal);
@@ -607,10 +584,25 @@
         if (!checkoutTableId) return;
         
         try {
-            const resp = await fetch(`/api/tables/${checkoutTableId}/checkout`, { method: 'POST' });
+            const activeOrder = orders.find(o => o.tableId === checkoutTableId && o.status !== 'Served');
+            if (!activeOrder) {
+                alert('Không tìm thấy hoá đơn cần thu tiền.');
+                return;
+            }
+            const resp = await fetch('api/payments/confirm', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderId: activeOrder.id,
+                    method: checkoutPaymentMethod,
+                    amount: Number(activeOrder.totalAmount || 0),
+                    reference: `WAITER-\${activeOrder.orderNumber}`
+                })
+            });
             if (resp.ok) {
                 const methodLabel = checkoutPaymentMethod === 'Cash' ? 'Tiền mặt' : checkoutPaymentMethod === 'VietQR' ? 'Chuyển khoản VietQR' : 'Quẹt thẻ';
-                const msg = `💸 Thu tiền qua [${methodLabel}] dọn dẹp bàn thành công!`;
+                const msg = `💸 Thu tiền qua [\${methodLabel}] dọn dẹp bàn thành công!`;
                 alert(msg);
                 flashNotify(msg);
                 closeCheckoutModal();
@@ -685,7 +677,7 @@
                 <span class="text-base">✓</span>
                 <div>
                     <strong class="block">HOÀN TOÀN CHÍNH XÁC!</strong>
-                    <span>Bạn đã định vị đúng bàn phục vụ <strong>${serveState.correctTableName}</strong>. Bấm nút bên dưới để lên đồ!</span>
+                    <span>Bạn đã định vị đúng bàn phục vụ <strong>\${serveState.correctTableName}</strong>. Bấm nút bên dưới để lên đồ!</span>
                 </div>
             `;
             submitBtn.disabled = false;
@@ -698,7 +690,7 @@
                 <span class="text-base">⚠️</span>
                 <div>
                     <strong class="block">CẢNH BÁO SAI BÀN!</strong>
-                    <span>Món này thuộc về khách ở <strong>${serveState.correctTableName}</strong>, không phải bàn <strong>${selectedName}</strong> bạn vừa chọn! Hãy đem món đến đúng bàn của khách hàng.</span>
+                    <span>Món này thuộc về khách ở <strong>\${serveState.correctTableName}</strong>, không phải bàn <strong>\${selectedName}</strong> bạn vừa chọn! Hãy đem món đến đúng bàn của khách hàng.</span>
                 </div>
             `;
             submitBtn.disabled = true;
@@ -712,14 +704,14 @@
         }
 
         try {
-            const response = await fetch(`/api/orders/${serveState.orderId}/items/${serveState.itemId}`, {
+            const response = await fetch(`api/orders/\${serveState.orderId}/items/\${serveState.itemId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'Served' })
             });
 
             if (response.ok) {
-                flashNotify(`🛎️ Đã phục vụ thành công: ${serveState.itemName} x${serveState.itemQty} lên đúng ${serveState.correctTableName} ✓`);
+                flashNotify(`🛎️ Đã phục vụ thành công: \${serveState.itemName} x\${serveState.itemQty} lên đúng \${serveState.correctTableName} ✓`);
                 closeServeConfirmationModal();
                 fetchStateCore();
             } else {
@@ -751,9 +743,9 @@
             
             const tblZoneName = t.zone === 'Ground Floor' ? 'Khu Trệt' : t.zone === 'Terrace' ? 'Sân vườn' : 'Khu lửng';
             container.innerHTML += `
-                <button onclick="selectVerificationTable('${t.id}')" class="p-2 py-2.5 rounded-xl text-center text-xs transition-all cursor-pointer ${btnClass}">
-                    <div class="font-sans font-bold text-nowrap">${t.name}</div>
-                    <div class="text-[8px] opacity-75 font-mono">${tblZoneName}</div>
+                <button onclick="selectVerificationTable('\${t.id}')" class="p-2 py-2.5 rounded-xl text-center text-xs transition-all cursor-pointer \${btnClass}">
+                    <div class="font-sans font-bold text-nowrap">\${t.name}</div>
+                    <div class="text-[8px] opacity-75 font-mono">\${tblZoneName}</div>
                 </button>
             `;
         });
@@ -762,9 +754,9 @@
     async function fetchStateCore() {
         try {
             const [rMenu, rTables, rOrders] = await Promise.all([
-                fetch('/api/menu'),
-                fetch('/api/tables'),
-                fetch('/api/orders')
+                fetch('api/menu'),
+                fetch('api/tables'),
+                fetch('api/orders')
             ]);
             if (rMenu.ok) menu = await rMenu.json();
             if (rTables.ok) tables = await rTables.json();
@@ -779,7 +771,7 @@
 
     function setupWebSocket() {
         const sockProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const endpoint = `${sockProtocol}//${window.location.host}/ws`;
+        const endpoint = `\${sockProtocol}//\${window.location.host}\${window.location.pathname.substring(0, window.location.pathname.lastIndexOf("/"))}/ws`;
         socket = new WebSocket(endpoint);
 
         socket.onopen = () => {
@@ -876,18 +868,18 @@
             const zoneLabel = table.zone === 'Ground Floor' ? 'Khu Trệt' : table.zone === 'Terrace' ? 'Sân Vườn' : 'Khu Lửng';
 
             target.innerHTML += `
-                <div onclick="selectWaiterTable('${table.id}')" class="border rounded-2xl p-4 flex flex-col justify-between h-40 transition-all duration-150 cursor-pointer ${colorStyles}">
+                <div onclick="selectWaiterTable('\${table.id}')" class="border rounded-2xl p-4 flex flex-col justify-between h-40 transition-all duration-150 cursor-pointer \${colorStyles}">
                     <div>
-                        <span class="text-[9px] uppercase font-bold tracking-wider opacity-60 font-mono">${zoneLabel}</span>
-                        <h4 class="font-serif font-bold italic text-base leading-tight mt-0.5 text-coffee-dark">${table.name}</h4>
+                        <span class="text-[9px] uppercase font-bold tracking-wider opacity-60 font-mono">\${zoneLabel}</span>
+                        <h4 class="font-serif font-bold italic text-base leading-tight mt-0.5 text-coffee-dark">\${table.name}</h4>
                     </div>
                     
                     <div class="flex items-center justify-between text-xs mt-3">
                         <span class="text-[11px] text-coffee-milk font-mono font-medium">
-                            Ghế: ${table.capacity}
+                            Ghế: \${table.capacity}
                         </span>
-                        <span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono ${statusBadge}">
-                            ${statusLabel}
+                        <span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider font-mono \${statusBadge}">
+                            \${statusLabel}
                         </span>
                     </div>
                 </div>
@@ -973,8 +965,8 @@
                         : 'bg-coffee-rust/80 hover:bg-coffee-rust text-white';
                     
                     actionBtnHtml = `
-                        <button onclick="openServeConfirmationModal('${orderObj.id}', '${it.id}', '${it.name.replace(/'/g, "\\'")}', ${it.quantity}, '${table.id}', '${table.name}')" 
-                                class="text-[10px] font-semibold px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-3xs hover:scale-105 ${btnStyle}">
+                        <button onclick="openServeConfirmationModal('\${orderObj.id}', '\${it.id}', '\${it.name.replace(/'/g, "\\'")}', \${it.quantity}, '\${table.id}', '\${table.name}')" 
+                                class="text-[10px] font-semibold px-2 py-1 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-3xs hover:scale-105 \${btnStyle}">
                             🛎️ Giao món
                         </button>
                     `;
@@ -983,15 +975,15 @@
                 checklistHtml += `
                     <div class="flex justify-between items-center bg-white border border-coffee-sand/70 rounded-xl px-2.5 py-1.5 text-xs font-medium">
                         <div class="space-y-0.5">
-                            <p class="font-bold text-coffee-dark">${it.name} <span class="font-mono text-coffee-rust">x${it.quantity}</span></p>
-                            <p class="text-[9.5px] text-coffee-milk">Sz: ${it.customization ? it.customization.size : 'M'} \u2022 Đ:${it.customization ? it.customization.sugar : '100%'} \u2022 Đá:${it.customization ? it.customization.ice : '105%'}</p>
-                            ${it.notes ? `<p class="text-[9px] text-coffee-rust italic">"${it.notes}"</p>` : ''}
+                            <p class="font-bold text-coffee-dark">\${it.name} <span class="font-mono text-coffee-rust">x\${it.quantity}</span></p>
+                            <p class="text-[9.5px] text-coffee-milk">Sz: \${it.customization ? it.customization.size : 'M'} \u2022 Đ:\${it.customization ? it.customization.sugar : '100%'} \u2022 Đá:\${it.customization ? it.customization.ice : '105%'}</p>
+                            \${it.notes ? `<p class="text-[9px] text-coffee-rust italic">"\${it.notes}"</p>` : ''}
                         </div>
                         <div class="flex flex-col items-end gap-1.5">
-                            <span class="text-[8.5px] font-mono uppercase font-bold px-1.5 py-0.5 rounded-full ${badgeClass}">
-                                ${vietnameseItemStatus}
+                            <span class="text-[8.5px] font-mono uppercase font-bold px-1.5 py-0.5 rounded-full \${badgeClass}">
+                                \${vietnameseItemStatus}
                             </span>
-                            ${actionBtnHtml}
+                            \${actionBtnHtml}
                         </div>
                     </div>
                 `;
@@ -1011,23 +1003,23 @@
                 <div class="overflow-y-auto space-y-4 pr-1">
                     <div class="flex justify-between items-center border-b border-coffee-sand/70 pb-2.5">
                         <div>
-                            <span class="text-[9px] uppercase font-bold tracking-wider text-coffee-milk font-mono">${tblZoneVi}</span>
-                            <h3 class="font-serif italic font-bold text-lg text-coffee-dark leading-tight">${table.name}</h3>
+                            <span class="text-[9px] uppercase font-bold tracking-wider text-coffee-milk font-mono">\${tblZoneVi}</span>
+                            <h3 class="font-serif italic font-bold text-lg text-coffee-dark leading-tight">\${table.name}</h3>
                         </div>
                         <span class="text-xs font-bold font-mono bg-coffee-light border border-coffee-sand text-coffee-dark px-2.5 py-1 rounded-lg">
-                            Tổng ghế: ${table.capacity}
+                            Tổng ghế: \${table.capacity}
                         </span>
                     </div>
 
-                    ${orderObj ? `
+                    \${orderObj ? `
                         <div class="bg-coffee-light border border-coffee-sand/65 rounded-xl p-3 text-[11px] space-y-1 text-coffee-dark">
                             <div class="flex justify-between font-mono">
                                 <span class="text-coffee-milk">ID VẬN ĐƠN</span>
-                                <span class="font-bold text-coffee-dark">#${orderObj.orderNumber}</span>
+                                <span class="font-bold text-coffee-dark">#\${orderObj.orderNumber}</span>
                             </div>
                             <div class="flex justify-between font-mono">
                                 <span class="text-coffee-milk">TRẠNG THÁI</span>
-                                <span class="font-bold text-coffee-rust uppercase">${table.status === 'served_confirm' ? 'HOÀN TẤT (CHỜ XÁC NHẬN PHỤC VỤ)' : isPastOrder ? 'ĐÃ PHỤC VỤ (CHỜ DỌN)' : (orderObj.status === 'Pending' ? 'Chờ quầy' : orderObj.status === 'Preparing' ? 'Pha chế' : 'Sẵn sàng')}</span>
+                                <span class="font-bold text-coffee-rust uppercase">\${table.status === 'served_confirm' ? 'HOÀN TẤT (CHỜ XÁC NHẬN PHỤC VỤ)' : isPastOrder ? 'ĐÃ PHỤC VỤ (CHỜ DỌN)' : (orderObj.status === 'Pending' ? 'Chờ quầy' : orderObj.status === 'Preparing' ? 'Pha chế' : 'Sẵn sàng')}</span>
                             </div>
                         </div>
                     ` : ''}
@@ -1035,14 +1027,13 @@
                     <div class="space-y-1.5">
                         <h5 class="text-[9px] uppercase font-bold tracking-wider text-coffee-milk font-mono">DANH MỤC THỨC UỐNG ĐẶT GỌI</h5>
                         <div class="space-y-1.5 max-h-[170px] overflow-y-auto">
-                            ${checklistHtml}
+                            \${checklistHtml}
                         </div>
                     </div>
                 </div>
 
-                <!-- Control Buttons -->
                 <div class="border-t border-coffee-sand/70 pt-3 space-y-2.5">
-                    ${orderObj && !isPastOrder ? `
+                    \${orderObj && !isPastOrder ? `
                     <div class="grid grid-cols-2 gap-2">
                         <button onclick="triggerTransfer('move')" class="bg-white border border-coffee-sand hover:bg-coffee-rust/5 text-coffee-dark hover:border-coffee-rust text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 font-bold transition-all cursor-pointer">
                             🚚 Đổi bàn
@@ -1053,31 +1044,31 @@
                     </div>
                     ` : ''}
 
-                    ${orderObj && !isPastOrder ? `
+                    \${orderObj && !isPastOrder ? `
                         <div class="bg-coffee-light border border-coffee-sand/80 px-3 py-2 rounded-xl flex justify-between items-center text-xs">
                             <span class="font-bold text-coffee-milk">Hóa đơn bàn:</span>
-                            <span class="font-mono font-bold text-xs text-coffee-rust">${formatVND(orderObj.totalAmount)}</span>
+                            <span class="font-mono font-bold text-xs text-coffee-rust">\${formatVND(orderObj.totalAmount)}</span>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <button onclick="openStaffOrderDrawer()" class="bg-[#FAF7EE] border border-coffee-sand hover:border-coffee-rust text-xs py-2.5 rounded-xl font-bold transition-all cursor-pointer">
                                 ＋ Gọi thêm món
                             </button>
-                            <a href="order-summary.jsp?tableId=${table.id}" class="bg-white border border-coffee-sand hover:border-coffee-rust text-coffee-dark text-xs py-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer">
+                            <a href="order-summary.jsp?tableId=\${table.id}" class="bg-white border border-coffee-sand hover:border-coffee-rust text-coffee-dark text-xs py-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1 cursor-pointer">
                                 📄 In Hoá Đơn
                             </a>
                         </div>
                         <div class="pt-0.5">
-                            <button onclick="openCheckoutModal('${table.id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs uppercase tracking-wider">
+                            <button onclick="openCheckoutModal('\${table.id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2.5 rounded-xl font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs uppercase tracking-wider">
                                 💸 Xác nhận thu tiền nhanh
                             </button>
                         </div>
                     ` : `
-                        ${table.status === 'served_confirm' ? `
-                            <button onclick="confirmServedCorrectTable('${table.id}')" class="w-full bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm animate-pulse">
+                        \${table.status === 'served_confirm' ? `
+                            <button onclick="confirmServedCorrectTable('\${table.id}')" class="w-full bg-amber-500 hover:bg-amber-600 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm animate-pulse">
                                 🍽️ Xác nhận đã phục vụ đúng bàn
                             </button>
                         ` : table.status === 'dirty' ? `
-                            <button onclick="cleanTable('${table.id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm">
+                            <button onclick="cleanTable('\${table.id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-2 shadow-sm">
                                 🧹 Xác nhận đã dọn bàn xong
                             </button>
                         ` : `
@@ -1110,7 +1101,7 @@
 
     async function postMoveTable(src, dst) {
         try {
-            const response = await fetch('/api/tables/move', {
+            const response = await fetch('api/tables/move', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sourceTableId: src, targetTableId: dst })
@@ -1119,7 +1110,7 @@
                 flashNotify('🚚 Đã điều phối chuyển bàn tiệc thành công!');
             } else {
                 const error = await response.json();
-                alert(error.error || 'Yêu cầu chuyển đổi bị hệ thống bác bỏ.');
+                alert(error.error || 'Yêu cầu chuyển đổi không hợp lệ.');
             }
         } catch (err) {
             console.error(err);
@@ -1128,7 +1119,7 @@
 
     async function postMergeTables(src, dst) {
         try {
-            const response = await fetch('/api/tables/merge', {
+            const response = await fetch('api/tables/merge', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sourceTableId: src, targetTableId: dst })
@@ -1146,7 +1137,7 @@
 
     async function confirmServedCorrectTable(tableId) {
         try {
-            const response = await fetch(`/api/tables/${tableId}/confirm-served`, {
+            const response = await fetch(`api/tables/\${tableId}/confirm-served`, {
                 method: 'POST'
             });
             if (response.ok) {
@@ -1162,7 +1153,7 @@
 
     async function cleanTable(tableId) {
         try {
-            const response = await fetch(`/api/tables/${tableId}/clean`, {
+            const response = await fetch(`api/tables/\${tableId}/clean`, {
                 method: 'POST'
             });
             if (response.ok) {
@@ -1177,10 +1168,9 @@
         }
     }
 
-    // Supplementary drawer functions
     function openStaffOrderDrawer() {
         const table = tables.find(t => t.id === selectedTableId);
-        document.getElementById('drawer-title').innerText = `Gọi món mới - ${table.name}`;
+        document.getElementById('drawer-title').innerText = `Gọi món mới - \${table.name}`;
         
         cartItems = [];
         document.getElementById('drawer-order-notes').value = '';
@@ -1191,8 +1181,8 @@
             const isSel = drawerCategory === item;
             const viewName = item === 'All' ? 'Tất cả' : item === 'Coffee' ? 'Cà phê' : item === 'Tea' ? 'Trà phin' : item === 'Specialty' ? 'Đặc sản' : 'Bánh';
             catHolder.innerHTML += `
-                <button onclick="setDrawerCategory('${item}')" class="text-[10px] font-bold px-2 py-1 rounded-md border transition-all cursor-pointer ${isSel ? 'bg-coffee-rust text-white border-transparent' : 'bg-white border-coffee-sand text-coffee-milk hover:border-coffee-rust'}">
-                    ${viewName}
+                <button onclick="setDrawerCategory('\${item}')" class="text-[10px] font-bold px-2 py-1 rounded-md border transition-all cursor-pointer \${isSel ? 'bg-coffee-rust text-white border-transparent' : 'bg-white border-coffee-sand text-coffee-milk hover:border-coffee-rust'}">
+                    \${viewName}
                 </button>
             `;
         });
@@ -1236,11 +1226,11 @@
 
         list.forEach(it => {
             container.innerHTML += `
-                <div onclick="addDrawerItem('${it.id}')" class="bg-white border border-coffee-sand hover:border-coffee-rust rounded-xl p-3 flex justify-between items-start cursor-pointer text-xs group transition-all">
+                <div onclick="addDrawerItem('\${it.id}')" class="bg-white border border-coffee-sand hover:border-coffee-rust rounded-xl p-3 flex justify-between items-start cursor-pointer text-xs group transition-all">
                     <div class="space-y-0.5">
-                        <h5 class="font-bold text-coffee-dark group-hover:text-coffee-rust transition-colors leading-tight">${it.name}</h5>
-                        <p class="text-[10px] text-coffee-milk line-clamp-2 leading-snug">${it.description}</p>
-                        <span class="font-mono font-bold text-coffee-rust block mt-1">${formatVND(it.price)}</span>
+                        <h5 class="font-bold text-coffee-dark group-hover:text-coffee-rust transition-colors leading-tight">\${it.name}</h5>
+                        <p class="text-[10px] text-coffee-milk line-clamp-2 leading-snug">\${it.description}</p>
+                        <span class="font-mono font-bold text-coffee-rust block mt-1">\${formatVND(it.price)}</span>
                     </div>
                 </div>
             `;
@@ -1293,18 +1283,18 @@
             if (c.menuItem.category !== 'Pastry') {
                 customLiquid = `
                     <div class="grid grid-cols-2 gap-1 px-1">
-                        <select onchange="updateStaffCustom(${idx}, 'sugar', this.value)" class="text-[10px] bg-white border border-coffee-sand rounded font-bold outline-none leading-none p-1">
-                            <option value="100%" ${c.customization.sugar === '100%' ? 'selected' : ''}>Đường 100%</option>
-                            <option value="70%" ${c.customization.sugar === '70%' ? 'selected' : ''}>Đường 70%</option>
-                            <option value="50%" ${c.customization.sugar === '50%' ? 'selected' : ''}>Đường 50%</option>
-                            <option value="30%" ${c.customization.sugar === '30%' ? 'selected' : ''}>Đường 30%</option>
-                            <option value="0%" ${c.customization.sugar === '0%' ? 'selected' : ''}>Không đường</option>
+                        <select onchange="updateStaffCustom(\${idx}, 'sugar', this.value)" class="text-[10px] bg-white border border-coffee-sand rounded font-bold outline-none leading-none p-1">
+                            <option value="100%" \${c.customization.sugar === '100%' ? 'selected' : ''}>Đường 100%</option>
+                            <option value="70%" \${c.customization.sugar === '70%' ? 'selected' : ''}>Đường 70%</option>
+                            <option value="50%" \${c.customization.sugar === '50%' ? 'selected' : ''}>Đường 50%</option>
+                            <option value="30%" \${c.customization.sugar === '30%' ? 'selected' : ''}>Đường 30%</option>
+                            <option value="0%" \${c.customization.sugar === '0%' ? 'selected' : ''}>Không đường</option>
                         </select>
-                        <select onchange="updateStaffCustom(${idx}, 'ice', this.value)" class="text-[10px] bg-white border border-coffee-sand rounded font-bold outline-none leading-none p-1">
-                            <option value="100%" ${c.customization.ice === '100%' ? 'selected' : ''}>Đá 100%</option>
-                            <option value="50%" ${c.customization.ice === '50%' ? 'selected' : ''}>Đá 50%</option>
-                            <option value="30%" ${c.customization.ice === '30%' ? 'selected' : ''}>Đá 30%</option>
-                            <option value="Ấm" ${c.customization.ice === 'Ấm' ? 'selected' : ''}>Nước Ấm</option>
+                        <select onchange="updateStaffCustom(\${idx}, 'ice', this.value)" class="text-[10px] bg-white border border-coffee-sand rounded font-bold outline-none leading-none p-1">
+                            <option value="100%" \${c.customization.ice === '100%' ? 'selected' : ''}>Đá 100%</option>
+                            <option value="50%" \${c.customization.ice === '50%' ? 'selected' : ''}>Đá 50%</option>
+                            <option value="30%" \${c.customization.ice === '30%' ? 'selected' : ''}>Đá 30%</option>
+                            <option value="Ấm" \${c.customization.ice === 'Ấm' ? 'selected' : ''}>Nước Ấm</option>
                         </select>
                     </div>
                 `;
@@ -1314,31 +1304,31 @@
                 <div class="bg-coffee-light border border-coffee-sand/70 rounded-xl p-3 text-xs space-y-1.5 flex flex-col">
                     <div class="flex justify-between items-start gap-1">
                         <div>
-                            <h6 class="font-bold text-coffee-dark leading-tight">${c.menuItem.name}</h6>
-                            <p class="text-[10px] text-coffee-rust font-mono">${formatVND(itemSub)}</p>
+                            <h6 class="font-bold text-coffee-dark leading-tight">\${c.menuItem.name}</h6>
+                            <p class="text-[10px] text-coffee-rust font-mono">\${formatVND(itemSub)}</p>
                         </div>
-                        <button onclick="removeDrawerCartItem(${idx})" class="p-1 text-[13px] text-coffee-milk hover:text-coffee-rust cursor-pointer">
+                        <button onclick="removeDrawerCartItem(\${idx})" class="p-1 text-[13px] text-coffee-milk hover:text-coffee-rust cursor-pointer">
                             🗑️
                         </button>
                     </div>
 
                     <div class="flex items-center gap-1.5">
                         <span class="text-[9px] font-bold text-coffee-milk">Size:</span>
-                        ${c.menuItem.availableSizes.map(sz => `
-                            <button onclick="updateStaffCustom(${idx}, 'size', '${sz}')" class="px-1.5 py-0.5 border text-[9px] font-bold rounded cursor-pointer ${c.customization.size === sz ? 'bg-coffee-rust border-transparent text-white shadow-3xs' : 'bg-white border-coffee-sand text-coffee-milk'}">
-                                ${sz}
+                        \${c.menuItem.availableSizes.map(sz => `
+                            <button onclick="updateStaffCustom(\${idx}, 'size', '\${sz}')" class="px-1.5 py-0.5 border text-[9px] font-bold rounded cursor-pointer \${c.customization.size === sz ? 'bg-coffee-rust border-transparent text-white shadow-3xs' : 'bg-white border-coffee-sand text-coffee-milk'}">
+                                \${sz}
                             </button>
                         `).join('')}
                     </div>
 
-                    ${customLiquid}
+                    \${customLiquid}
 
                     <div class="flex items-center justify-between border-t border-coffee-sand/20 pt-1.5">
-                        <input type="text" oninput="updateStaffNotes(${idx}, this.value)" placeholder="Vị ngọt, ít tôm..." value="${c.notes}" class="flex-1 text-[10px] bg-white border border-coffee-sand rounded-lg px-2 py-0.5 outline-none focus:border-coffee-rust">
+                        <input type="text" oninput="updateStaffNotes(\${idx}, this.value)" placeholder="Vị ngọt, ít tôm..." value="\${c.notes}" class="flex-1 text-[10px] bg-white border border-coffee-sand rounded-lg px-2 py-0.5 outline-none focus:border-coffee-rust">
                         <div class="flex items-center gap-1 ml-2">
-                            <button onclick="updateStaffQty(${idx}, -1)" class="w-5 h-5 bg-white border border-coffee-sand rounded font-bold text-xs flex items-center justify-center">-</button>
-                            <span class="font-mono text-xs w-4 text-center font-bold">${c.quantity}</span>
-                            <button onclick="updateStaffQty(${idx}, 1)" class="w-5 h-5 bg-white border border-coffee-sand rounded font-bold text-xs flex items-center justify-center">+</button>
+                            <button onclick="updateStaffQty(\${idx}, -1)" class="w-5 h-5 bg-white border border-coffee-sand rounded font-bold text-xs flex items-center justify-center">-</button>
+                            <span class="font-mono text-xs w-4 text-center font-bold">\${c.quantity}</span>
+                            <button onclick="updateStaffQty(\${idx}, 1)" class="w-5 h-5 bg-white border border-coffee-sand rounded font-bold text-xs flex items-center justify-center">+</button>
                         </div>
                     </div>
                 </div>
@@ -1392,7 +1382,7 @@
         const comment = document.getElementById('drawer-order-notes').value;
 
         try {
-            const response = await fetch('/api/orders', {
+            const response = await fetch('api/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1417,7 +1407,6 @@
 
     setupWebSocket();
 
-    // Check if redirecting from order summary after payment success
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('paymentSuccess') === '1') {
         flashNotify('💸 Thanh toán thành công!');
@@ -1427,7 +1416,6 @@
 
     </main>
 
-    <!-- ==================== FOOTER SYSTEM INFORMATION ==================== -->
     <footer class="mt-auto py-6 border-t border-coffee-sand/70 bg-white/70 backdrop-blur-xs text-xs text-coffee-milk">
         <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p class="font-serif italic font-bold text-sm text-coffee-dark">
@@ -1439,16 +1427,13 @@
         </div>
     </footer>
 
-    <!-- GLOBAL TIMEOUT AND TIMEKEEPING -->
     <script>
-        // Update nav clock live
         if (document.getElementById('nav-clock')) {
             setInterval(() => {
                 document.getElementById('nav-clock').innerText = new Date().toLocaleTimeString('vi-VN');
             }, 1000);
         }
 
-        // Global toast notifier helper
         function flashNotify(msg) {
             const holder = document.getElementById('flash-banner-container');
             const target = document.getElementById('flash-message');

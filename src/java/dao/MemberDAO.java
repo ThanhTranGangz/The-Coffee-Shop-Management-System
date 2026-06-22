@@ -6,33 +6,29 @@ import model.Member;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MemberDAO {
-    private List<Member> fallbackMembers;
+    private List<Member> fallbackMembers = new ArrayList<>();
 
     public List<Member> getAll() {
+        ensureMemberColumns();
         List<Member> list = new ArrayList<>();
-        String sql = "SELECT phone, name, rank, points, email, pref, discount FROM dbo.Members";
+        String sql = "SELECT phone, name, rank, points, email, pref, discount, vouchers FROM dbo.Members";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql);
              ResultSet rs = st.executeQuery()) {
             
             while (rs.next()) {
-                list.add(new Member(
-                    rs.getString("phone"),
-                    rs.getString("name"),
-                    rs.getString("rank"),
-                    rs.getInt("points"),
-                    rs.getString("email"),
-                    rs.getString("pref"),
-                    rs.getString("discount")
-                ));
+                list.add(readMember(rs));
             }
+            // Sync fallback memory context
+            fallbackMembers = new ArrayList<>(list);
         } catch (Exception e) {
-            System.err.println("Database fetch failed in MemberDAO.getAll(), falling back: " + e.getMessage());
+            System.err.println("Database fetch failed in MemberDAO.getAll(), falling back to cache: " + e.getMessage());
             return getFallbackMembers();
         }
         
@@ -43,26 +39,19 @@ public class MemberDAO {
     }
 
     public Member getByPhone(String phone) {
-        String sql = "SELECT phone, name, rank, points, email, pref, discount FROM dbo.Members WHERE phone=?";
+        ensureMemberColumns();
+        String sql = "SELECT phone, name, rank, points, email, pref, discount, vouchers FROM dbo.Members WHERE phone=?";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
             st.setString(1, phone);
             try (ResultSet rs = st.executeQuery()) {
                 if (rs.next()) {
-                    return new Member(
-                        rs.getString("phone"),
-                        rs.getString("name"),
-                        rs.getString("rank"),
-                        rs.getInt("points"),
-                        rs.getString("email"),
-                        rs.getString("pref"),
-                        rs.getString("discount")
-                    );
+                    return readMember(rs);
                 }
             }
         } catch (Exception e) {
-            System.err.println("Database getByPhone failed in MemberDAO.getByPhone(), searching memory...");
+            System.err.println("Database getByPhone failed in MemberDAO.getByPhone(), searching cached fallback...");
         }
 
         return getFallbackMembers().stream()
@@ -72,8 +61,12 @@ public class MemberDAO {
     }
 
     public void save(Member member) {
-        String sql = "INSERT INTO dbo.Members (phone, name, rank, points, email, pref, discount) VALUES (?, ?, ?, ?, ?, ?, ?) " +
-                     "ON DUPLICATE KEY UPDATE name=?, rank=?, points=?, email=?, pref=?, discount=?";
+        ensureMemberColumns();
+        String sql = "MERGE dbo.Members AS target " +
+                     "USING (SELECT ? AS phone, ? AS name, ? AS rank, ? AS points, ? AS email, ? AS pref, ? AS discount, ? AS vouchers) AS source " +
+                     "ON target.phone = source.phone " +
+                     "WHEN MATCHED THEN UPDATE SET name = source.name, rank = source.rank, points = source.points, email = source.email, pref = source.pref, discount = source.discount, vouchers = source.vouchers " +
+                     "WHEN NOT MATCHED THEN INSERT (phone, name, rank, points, email, pref, discount, vouchers) VALUES (source.phone, source.name, source.rank, source.points, source.email, source.pref, source.discount, source.vouchers);";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
@@ -84,16 +77,10 @@ public class MemberDAO {
             st.setString(5, member.getEmail());
             st.setString(6, member.getPref());
             st.setString(7, member.getDiscount());
-            
-            st.setString(8, member.getName());
-            st.setString(9, member.getRank());
-            st.setInt(10, member.getPoints());
-            st.setString(11, member.getEmail());
-            st.setString(12, member.getPref());
-            st.setString(13, member.getDiscount());
+            st.setString(8, joinVouchers(member.getVouchers()));
             st.executeUpdate();
         } catch (Exception e) {
-            System.err.println("Database save failed in MemberDAO.save(), updating memory fallback...");
+            System.err.println("Database save failed in MemberDAO.save(), updating memory fallback: " + e.getMessage());
         }
 
         // Keep fallback context updated
@@ -112,6 +99,58 @@ public class MemberDAO {
         }
     }
 
+    public void saveWithPassword(Member member, String password) {
+        ensureMemberColumns();
+        String sql = "MERGE dbo.Members AS target " +
+                     "USING (SELECT ? AS phone, ? AS name, ? AS rank, ? AS points, ? AS email, ? AS pref, ? AS discount, ? AS vouchers, ? AS password) AS source " +
+                     "ON target.phone = source.phone " +
+                     "WHEN MATCHED THEN UPDATE SET name = source.name, rank = source.rank, points = source.points, email = source.email, pref = source.pref, discount = source.discount, vouchers = source.vouchers, password = CASE WHEN source.password IS NULL OR source.password = '' THEN target.password ELSE source.password END " +
+                     "WHEN NOT MATCHED THEN INSERT (phone, name, rank, points, email, pref, discount, vouchers, password) VALUES (source.phone, source.name, source.rank, source.points, source.email, source.pref, source.discount, source.vouchers, source.password);";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, member.getPhone());
+            st.setString(2, member.getName());
+            st.setString(3, member.getRank());
+            st.setInt(4, member.getPoints());
+            st.setString(5, member.getEmail());
+            st.setString(6, member.getPref());
+            st.setString(7, member.getDiscount());
+            st.setString(8, joinVouchers(member.getVouchers()));
+            st.setString(9, password != null ? password : "123456");
+            st.executeUpdate();
+        } catch (Exception e) {
+            System.err.println("Database saveWithPassword failed in MemberDAO.saveWithPassword(), updating memory fallback: " + e.getMessage());
+        }
+        saveMemberInFallback(member);
+    }
+
+    public Member authenticate(String phone, String password) {
+        ensureMemberColumns();
+        String sql = "SELECT phone, name, rank, points, email, pref, discount, vouchers FROM dbo.Members WHERE phone=? AND password=?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, phone);
+            st.setString(2, password);
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next()) {
+                    return readMember(rs);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Database authenticate failed in MemberDAO.authenticate(), checking fallback members...");
+        }
+
+        if (!"123456".equals(password)) {
+            return null;
+        }
+        return getFallbackMembers().stream()
+                .filter(m -> m.getPhone().equals(phone))
+                .findFirst()
+                .orElse(null);
+    }
+
     public void delete(String phone) {
         String sql = "DELETE FROM dbo.Members WHERE phone=?";
         DBContext db = new DBContext();
@@ -126,12 +165,81 @@ public class MemberDAO {
     }
 
     public List<Member> getFallbackMembers() {
-        if (fallbackMembers == null) {
-            fallbackMembers = new ArrayList<>();
-            fallbackMembers.add(new Member("0909123456", "Trần Thị Thuỷ Tiên", "Platinum", 740, "thuytien@gmail.com", "Espresso", "Giảm 15% tổng hoá đơn"));
-            fallbackMembers.add(new Member("0901234567", "Lê Hoàng Phong", "Gold", 320, "hoangphong@gmail.com", "Tea", "Giảm 10% tổng hoá đơn"));
-            fallbackMembers.add(new Member("0987654321", "Nguyễn Minh Quân", "Silver", 120, "minhquan@gmail.com", "Special", "Giảm 5% tổng hoá đơn"));
-        }
         return fallbackMembers;
+    }
+
+    private void ensureMemberColumns() {
+        DBContext db = new DBContext();
+        String sql = "IF COL_LENGTH('dbo.Members', 'password') IS NULL " +
+                     "ALTER TABLE dbo.Members ADD password VARCHAR(255) NOT NULL CONSTRAINT DF_Members_password DEFAULT '123456'; " +
+                     "IF COL_LENGTH('dbo.Members', 'vouchers') IS NULL " +
+                     "ALTER TABLE dbo.Members ADD vouchers NVARCHAR(MAX) NULL;";
+        try (Connection con = db.getConnection();
+             Statement st = con.createStatement()) {
+            st.execute(sql);
+        } catch (Exception e) {
+            System.err.println("MemberDAO.ensureMemberColumns skipped: " + e.getMessage());
+        }
+    }
+
+    private Member readMember(ResultSet rs) throws Exception {
+        return new Member(
+            rs.getString("phone"),
+            rs.getString("name"),
+            rs.getString("rank"),
+            rs.getInt("points"),
+            rs.getString("email"),
+            rs.getString("pref"),
+            rs.getString("discount"),
+            parseVouchers(rs.getString("vouchers"))
+        );
+    }
+
+    private List<String> parseVouchers(String raw) {
+        List<String> vouchers = new ArrayList<>();
+        if (raw == null || raw.trim().isEmpty()) {
+            return vouchers;
+        }
+        String[] parts = raw.split(",");
+        for (String part : parts) {
+            String code = part.trim();
+            if (!code.isEmpty() && !vouchers.contains(code)) {
+                vouchers.add(code);
+            }
+        }
+        return vouchers;
+    }
+
+    private String joinVouchers(List<String> vouchers) {
+        if (vouchers == null || vouchers.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String voucher : vouchers) {
+            if (voucher == null || voucher.trim().isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(",");
+            }
+            sb.append(voucher.trim());
+        }
+        return sb.toString();
+    }
+
+    private void saveMemberInFallback(Member member) {
+        List<Member> current = getFallbackMembers();
+        int idx = -1;
+        for (int i = 0; i < current.size(); i++) {
+            if (current.get(i).getPhone().equals(member.getPhone())) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx != -1) {
+            current.set(idx, member);
+        } else {
+            current.add(member);
+        }
     }
 }

@@ -9,12 +9,15 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class BrewApiServlet extends HttpServlet {
+    private static final String BANK_WEBHOOK_TOKEN = "bank-webhook-token";
     private BrewStateService stateService;
 
     @Override
@@ -29,7 +32,7 @@ public class BrewApiServlet extends HttpServlet {
         // Assist testing and local setup integrations with CORS headers
         resp.setHeader("Access-Control-Allow-Origin", "*");
         resp.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-        resp.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        resp.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Bank-Webhook-Token");
     }
 
     @Override
@@ -59,6 +62,28 @@ public class BrewApiServlet extends HttpServlet {
             case "/orders":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getOrders()));
                 break;
+            case "/orders/lookup":
+                Order foundOrder = null;
+                String orderId = req.getParameter("id");
+                String orderNumber = req.getParameter("orderNumber");
+                if (orderId != null && !orderId.trim().isEmpty()) {
+                    foundOrder = stateService.getOrderById(orderId.trim());
+                }
+                if (foundOrder == null && orderNumber != null && !orderNumber.trim().isEmpty()) {
+                    try {
+                        String cleanOrderNumber = orderNumber.trim().replace("#", "");
+                        foundOrder = stateService.getOrderByNumber(Integer.parseInt(cleanOrderNumber));
+                    } catch (NumberFormatException ignored) {
+                        foundOrder = null;
+                    }
+                }
+                if (foundOrder != null) {
+                    resp.getWriter().write(JsonUtils.toJson(foundOrder));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                    resp.getWriter().write("{\"error\": \"Không tìm thấy đơn theo mã đã nhập.\"}");
+                }
+                break;
             case "/inventory":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getInventory()));
                 break;
@@ -67,6 +92,9 @@ public class BrewApiServlet extends HttpServlet {
                 break;
             case "/staff":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getStaff()));
+                break;
+            case "/shifts":
+                resp.getWriter().write(JsonUtils.toJson(stateService.getShifts()));
                 break;
             case "/members":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getMembers()));
@@ -90,7 +118,10 @@ public class BrewApiServlet extends HttpServlet {
                 resp.getWriter().write(JsonUtils.toJson(stateService.getHistoricalReports()));
                 break;
             case "/shop/status":
-                resp.getWriter().write("{\"closed\": " + stateService.isShopClosed() + "}");
+                resp.getWriter().write("{\"closed\": " + stateService.isShopClosed() + ", \"timeLimitUnlocked\": " + stateService.isTimeLimitUnlocked() + "}");
+                break;
+            case "/pos/shift":
+                resp.getWriter().write(JsonUtils.toJson(stateService.getPosShiftSnapshot()));
                 break;
             default:
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -115,7 +146,8 @@ public class BrewApiServlet extends HttpServlet {
         try {
             if (pathInfo.equals("/orders")) {
                 int currentHour = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).getHour();
-                if (stateService.isShopClosed() || currentHour >= 22 || currentHour < 6) {
+                boolean outsideOrderingHours = currentHour >= 22 || currentHour < 6;
+                if (stateService.isShopClosed() || (!stateService.isTimeLimitUnlocked() && outsideOrderingHours)) {
                     resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                     resp.getWriter().write("{\"error\": \"Quầy đang tạm đóng cửa nhận đơn (Hệ thống ngắt sau 22:00 tối hoặc ngưng nhận bởi quản lý).\"}");
                     return;
@@ -123,8 +155,21 @@ public class BrewApiServlet extends HttpServlet {
 
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 String tableId = (String) reqMap.get("tableId");
+                String tableCode = (String) reqMap.get("tableCode");
                 List<Map<String, Object>> items = (List<Map<String, Object>>) reqMap.get("items");
                 String notes = (String) reqMap.getOrDefault("notes", "");
+                String memberPhone = (String) reqMap.get("memberPhone");
+                String appliedVoucherCode = (String) reqMap.get("appliedVoucherCode");
+                HttpSession memberSession = req.getSession(false);
+                String sessionMemberPhone = memberSession != null ? (String) memberSession.getAttribute("member_phone") : null;
+                boolean validMemberSession = memberPhone != null && memberPhone.equals(sessionMemberPhone);
+
+                if ((tableId == null || tableId.trim().isEmpty()) && tableCode != null) {
+                    Table codedTable = stateService.getTableByCode(tableCode);
+                    if (codedTable != null) {
+                        tableId = codedTable.getId();
+                    }
+                }
 
                 if (tableId == null || items == null || items.isEmpty()) {
                     resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -132,9 +177,95 @@ public class BrewApiServlet extends HttpServlet {
                     return;
                 }
 
-                Order newOrder = stateService.placeOrder(tableId, items, notes);
+                int discountAmount = 0;
+                if (validMemberSession && appliedVoucherCode != null && !appliedVoucherCode.trim().isEmpty()) {
+                    Member member = stateService.getMemberByPhone(memberPhone);
+                    if (member != null && member.getVouchers().contains(appliedVoucherCode)) {
+                        discountAmount = stateService.getVoucherValue(appliedVoucherCode);
+                    }
+                }
+
+                String orderNotes = notes == null ? "" : notes;
+                if (discountAmount > 0 && appliedVoucherCode != null && !appliedVoucherCode.trim().isEmpty()) {
+                    String voucherNote = "Voucher " + appliedVoucherCode.trim() + " chiết khấu " + discountAmount + " VND";
+                    orderNotes = orderNotes.trim().isEmpty() ? voucherNote : orderNotes + " | " + voucherNote;
+                }
+
+                Order newOrder = stateService.placeOrder(tableId, items, orderNotes, discountAmount);
+                if (validMemberSession) {
+                    stateService.recordMemberOrder(memberPhone, appliedVoucherCode, newOrder.getTotalAmount());
+                }
                 resp.setStatus(HttpServletResponse.SC_CREATED);
                 resp.getWriter().write(JsonUtils.toJson(newOrder));
+
+            } else if (pathInfo.equals("/pos/shift/open")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String cashierName = (String) reqMap.getOrDefault("cashierName", getSessionUser(req));
+                int openingCash = readInt(reqMap.get("openingCash"), 0);
+                resp.getWriter().write(JsonUtils.toJson(stateService.openPosShift(cashierName, openingCash)));
+
+            } else if (pathInfo.equals("/pos/shift/close")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                int closingCash = readInt(reqMap.get("closingCash"), 0);
+                String notes = (String) reqMap.getOrDefault("notes", "");
+                resp.getWriter().write(JsonUtils.toJson(stateService.closePosShift(closingCash, notes)));
+
+            } else if (pathInfo.equals("/payments/confirm")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String orderId = (String) reqMap.get("orderId");
+                String method = (String) reqMap.getOrDefault("method", "Cash");
+                int amount = readInt(reqMap.get("amount"), 0);
+                String reference = (String) reqMap.getOrDefault("reference", "");
+                if (orderId == null || orderId.trim().isEmpty()) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Thiếu mã đơn cần thanh toán.\"}");
+                    return;
+                }
+                resp.getWriter().write(JsonUtils.toJson(stateService.confirmPayment(orderId.trim(), method, amount, reference, getSessionUser(req))));
+
+            } else if (pathInfo.equals("/payments/webhook")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String token = req.getHeader("X-Bank-Webhook-Token");
+                if (token == null || token.trim().isEmpty()) {
+                    token = (String) reqMap.get("token");
+                }
+                if (!BANK_WEBHOOK_TOKEN.equals(token)) {
+                    resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    resp.getWriter().write("{\"error\": \"Webhook thanh toán thiếu hoặc sai token xác thực.\"}");
+                    return;
+                }
+                String orderId = (String) reqMap.get("orderId");
+                int amount = readInt(reqMap.get("amount"), 0);
+                String reference = (String) reqMap.getOrDefault("reference", "");
+                String bankTrace = (String) reqMap.getOrDefault("bankTrace", "");
+                resp.getWriter().write(JsonUtils.toJson(stateService.handleBankWebhook(orderId, amount, reference, bankTrace)));
+
+            } else if (pathInfo.startsWith("/orders/") && pathInfo.endsWith("/split-bill")) {
+                String[] parts = pathInfo.split("/");
+                if (parts.length >= 3) {
+                    Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                    int splitParts = readInt(reqMap.get("parts"), 2);
+                    resp.getWriter().write(JsonUtils.toJson(stateService.splitBill(parts[2], splitParts)));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Malformatted split-bill endpoint.\"}");
+                }
+
+            } else if (pathInfo.equals("/tables")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String tableName = (String) reqMap.get("name");
+                String tableZone = (String) reqMap.getOrDefault("zone", "Ground Floor");
+                int capacity = readInt(reqMap.get("capacity"), 4);
+
+                if (tableName == null || tableName.trim().isEmpty()) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Tên bàn không được để trống.\"}");
+                    return;
+                }
+
+                Table createdTable = stateService.createTable(tableName.trim(), tableZone, capacity);
+                resp.setStatus(HttpServletResponse.SC_CREATED);
+                resp.getWriter().write(JsonUtils.toJson(createdTable));
 
             } else if (pathInfo.equals("/tables/move")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
@@ -179,6 +310,24 @@ public class BrewApiServlet extends HttpServlet {
                     resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                     resp.getWriter().write("{\"error\": \"Malformatted checkout endpoint.\"}");
                 }
+            } else if (pathInfo.startsWith("/tables/") && pathInfo.endsWith("/confirm-served")) {
+                String[] parts = pathInfo.split("/");
+                if (parts.length >= 3) {
+                    Table table = stateService.confirmTableServed(parts[2]);
+                    resp.getWriter().write(JsonUtils.toJson(table));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Malformatted confirm-served endpoint.\"}");
+                }
+            } else if (pathInfo.startsWith("/tables/") && pathInfo.endsWith("/clean")) {
+                String[] parts = pathInfo.split("/");
+                if (parts.length >= 3) {
+                    Table table = stateService.cleanTable(parts[2]);
+                    resp.getWriter().write(JsonUtils.toJson(table));
+                } else {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Malformatted clean endpoint.\"}");
+                }
             } else if (pathInfo.equals("/inventory/import")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 List<Map<String, Object>> imports = (List<Map<String, Object>>) reqMap.get("imports");
@@ -210,14 +359,94 @@ public class BrewApiServlet extends HttpServlet {
                 String status = sMap.containsKey("status") && sMap.get("status") != null ? (String) sMap.get("status") : "Active";
                 boolean overtime = sMap.containsKey("overtime") && sMap.get("overtime") != null ? (Boolean) sMap.get("overtime") : false;
 
+                // Restrict manager modifications
+                List<Staff> roster = stateService.getStaff();
+                boolean isExistingManager = false;
+                for (Staff existing : roster) {
+                    if (existing.getId() == id && "manager".equalsIgnoreCase(existing.getRole())) {
+                        isExistingManager = true;
+                        break;
+                    }
+                }
+
+                if (isExistingManager) {
+                    role = "manager";
+                    active = true;
+                    status = "Active";
+                } else if ("manager".equalsIgnoreCase(role)) {
+                    role = "waiter"; // Prevent duplicate manager creation
+                }
+
                 Staff staff = new Staff(id, name, role, pin, shift, active, username, password, status, overtime);
                 stateService.saveStaff(staff);
                 resp.getWriter().write(JsonUtils.toJson(staff));
             } else if (pathInfo.equals("/staff/delete")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 int id = ((Number) reqMap.get("id")).intValue();
+                
+                // Block manager deletion
+                List<Staff> roster = stateService.getStaff();
+                boolean isManager = false;
+                for (Staff existing : roster) {
+                    if (existing.getId() == id && "manager".equalsIgnoreCase(existing.getRole())) {
+                        isManager = true;
+                        break;
+                    }
+                }
+                
+                if (isManager) {
+                    resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    resp.getWriter().write("{\"error\": \"Cannot delete system manager!\"}");
+                    return;
+                }
+
                 stateService.deleteStaff(id);
                 resp.getWriter().write("{\"message\": \"Staff deleted successfully.\"}");
+            } else if (pathInfo.equals("/shifts")) {
+                Map<String, Object> shiftData = JsonUtils.parseObject(body);
+                String id = (String) shiftData.get("id");
+                int staffId = readInt(shiftData.get("staffId"), 0);
+                String shiftDate = (String) shiftData.get("shiftDate");
+                String shiftName = (String) shiftData.get("shiftName");
+                String hours = (String) shiftData.get("hours");
+                String status = (String) shiftData.getOrDefault("status", "Hoạt động");
+                String notes = (String) shiftData.getOrDefault("notes", "");
+
+                if (id == null || id.trim().isEmpty()) {
+                    id = "shift-" + UUID.randomUUID().toString().substring(0, 8);
+                }
+                if (staffId <= 0 || shiftDate == null || shiftName == null || hours == null) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Dữ liệu ca trực không hợp lệ.\"}");
+                    return;
+                }
+
+                Staff selectedStaff = null;
+                for (Staff s : stateService.getStaff()) {
+                    if (s.getId() == staffId) {
+                        selectedStaff = s;
+                        break;
+                    }
+                }
+                if (selectedStaff == null) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Nhân sự được chọn không tồn tại.\"}");
+                    return;
+                }
+
+                Shift shift = new Shift(id, staffId, selectedStaff.getName(), shiftDate, shiftName, hours, status, notes);
+                stateService.saveShift(shift);
+                resp.getWriter().write(JsonUtils.toJson(shift));
+            } else if (pathInfo.equals("/shifts/delete")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                String id = (String) reqMap.get("id");
+                if (id == null || id.trim().isEmpty()) {
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Missing shift id.\"}");
+                    return;
+                }
+                stateService.deleteShift(id);
+                resp.getWriter().write("{\"message\": \"Shift deleted successfully.\"}");
             } else if (pathInfo.equals("/members")) {
                 Map<String, Object> mData = JsonUtils.parseObject(body);
                 String mPhone = (String) mData.get("phone");
@@ -234,17 +463,24 @@ public class BrewApiServlet extends HttpServlet {
             } else if (pathInfo.equals("/members/login")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 String lPhone = (String) reqMap.get("phone");
-                Member m = stateService.getMemberByPhone(lPhone);
+                String lPassword = (String) reqMap.get("password");
+                Member m = stateService.authenticateMember(lPhone, lPassword);
                 if (m != null) {
+                    HttpSession session = req.getSession(true);
+                    session.removeAttribute("auth_role");
+                    session.removeAttribute("auth_user");
+                    session.removeAttribute("auth_username");
+                    session.setAttribute("member_phone", m.getPhone());
                     resp.getWriter().write(JsonUtils.toJson(m));
                 } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    resp.getWriter().write("{\"error\": \"Không tìm thấy thành viên!\"}");
+                    resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    resp.getWriter().write("{\"error\": \"Sai số điện thoại hoặc mật khẩu!\"}");
                 }
             } else if (pathInfo.equals("/members/register")) {
                 Map<String, Object> mData = JsonUtils.parseObject(body);
                 String mPhone = (String) mData.get("phone");
                 String mName = (String) mData.get("name");
+                String mPassword = (String) mData.getOrDefault("password", "123456");
                 String mEmail = (String) mData.getOrDefault("email", "");
                 String mPref = (String) mData.getOrDefault("pref", "Espresso");
 
@@ -254,38 +490,58 @@ public class BrewApiServlet extends HttpServlet {
                     resp.getWriter().write("{\"error\": \"Số điện thoại đã tồn tại!\"}");
                 } else {
                     Member newM = new Member(mPhone, mName, "Silver", 50, mEmail, mPref, "Giảm 5% tổng hoá đơn");
-                    stateService.saveMember(newM);
+                    stateService.saveMember(newM, mPassword);
+                    HttpSession session = req.getSession(true);
+                    session.removeAttribute("auth_role");
+                    session.removeAttribute("auth_user");
+                    session.removeAttribute("auth_username");
+                    session.setAttribute("member_phone", newM.getPhone());
                     resp.getWriter().write(JsonUtils.toJson(newM));
                 }
+            } else if (pathInfo.equals("/members/logout")) {
+                HttpSession session = req.getSession(false);
+                if (session != null) {
+                    session.removeAttribute("member_phone");
+                }
+                resp.getWriter().write("{\"message\": \"Member logged out.\"}");
             } else if (pathInfo.equals("/members/redeem")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 String rPhone = (String) reqMap.get("phone");
-                int cost = ((Number) reqMap.get("points")).intValue();
-                String rDiscount = (String) reqMap.get("reward");
-                Member rMember = stateService.getMemberByPhone(rPhone);
-                if (rMember != null) {
-                    if (rMember.getPoints() >= cost) {
-                        rMember.setPoints(rMember.getPoints() - cost);
-                        rMember.setDiscount(rDiscount);
-                        stateService.saveMember(rMember);
-                        resp.getWriter().write(JsonUtils.toJson(rMember));
-                    } else {
-                        resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                        resp.getWriter().write("{\"error\": \"Không đủ điểm (hạt cà phê) để đổi!\"}");
-                    }
+                String code = (String) reqMap.get("code");
+                HttpSession session = req.getSession(false);
+                String sessionPhone = session != null ? (String) session.getAttribute("member_phone") : null;
+                if (sessionPhone == null || !sessionPhone.equals(rPhone)) {
+                    resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    resp.getWriter().write("{\"error\": \"Vui lòng đăng nhập đúng tài khoản hội viên.\"}");
+                    return;
+                }
+                if (stateService.redeemVoucher(rPhone, code)) {
+                    Member rMember = stateService.getMemberByPhone(rPhone);
+                    resp.getWriter().write(JsonUtils.toJson(rMember));
                 } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    resp.getWriter().write("{\"error\": \"Thành viên không tồn tại!\"}");
+                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+                    resp.getWriter().write("{\"error\": \"Không đủ điểm hoặc mã voucher không hợp lệ.\"}");
                 }
             } else if (pathInfo.equals("/shop/toggle")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 boolean closed = (Boolean) reqMap.get("closed");
                 stateService.setShopClosed(closed);
-                resp.getWriter().write("{\"closed\":" + closed + "}");
+                resp.getWriter().write("{\"closed\":" + closed + ",\"timeLimitUnlocked\":" + stateService.isTimeLimitUnlocked() + "}");
+            } else if (pathInfo.equals("/shop/time-limit")) {
+                Map<String, Object> reqMap = JsonUtils.parseObject(body);
+                boolean unlocked = reqMap.get("unlocked") instanceof Boolean ? (Boolean) reqMap.get("unlocked") : false;
+                stateService.setTimeLimitUnlocked(unlocked);
+                resp.getWriter().write("{\"closed\":" + stateService.isShopClosed() + ",\"timeLimitUnlocked\":" + unlocked + "}");
             } else {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 resp.getWriter().write("{\"error\": \"Endpoint not found.\"}");
             }
+        } catch (IllegalArgumentException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\": \"" + escapeJson(e.getMessage()) + "\"}");
+        } catch (IllegalStateException e) {
+            resp.setStatus(HttpServletResponse.SC_CONFLICT);
+            resp.getWriter().write("{\"error\": \"" + escapeJson(e.getMessage()) + "\"}");
         } catch (Exception e) {
             resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             resp.getWriter().write("{\"error\": \"" + escapeJson(e.getMessage()) + "\"}");
@@ -341,6 +597,12 @@ public class BrewApiServlet extends HttpServlet {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 resp.getWriter().write("{\"error\": \"Endpoint not found.\"}");
             }
+        } catch (IllegalArgumentException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\": \"" + escapeJson(e.getMessage()) + "\"}");
+        } catch (IllegalStateException e) {
+            resp.setStatus(HttpServletResponse.SC_CONFLICT);
+            resp.getWriter().write("{\"error\": \"" + escapeJson(e.getMessage()) + "\"}");
         } catch (Exception e) {
             resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             resp.getWriter().write("{\"error\": \"" + escapeJson(e.getMessage()) + "\"}");
@@ -361,5 +623,25 @@ public class BrewApiServlet extends HttpServlet {
     private String escapeJson(String s) {
         if (s == null) return "error";
         return s.replace("\"", "\\\"").replace("\n", " ").replace("\r", " ");
+    }
+
+    private int readInt(Object value, int fallback) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        if (value instanceof String) {
+            try {
+                return Integer.parseInt(((String) value).trim());
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
+    }
+
+    private String getSessionUser(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        Object user = session != null ? session.getAttribute("auth_user") : null;
+        return user == null ? "POS" : String.valueOf(user);
     }
 }
