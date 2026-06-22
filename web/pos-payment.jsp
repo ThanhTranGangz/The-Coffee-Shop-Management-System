@@ -34,6 +34,7 @@
         .pay-method-active { background:#2B1B17; color:#FAF7EE; border-color:#2B1B17; }
     </style>
     <link rel="stylesheet" href="assets/css/pro-ui.css">
+    <script defer src="assets/js/ui-polish.js"></script>
     <script>
         (function() {
             var role = localStorage.getItem('auth_role') || '';
