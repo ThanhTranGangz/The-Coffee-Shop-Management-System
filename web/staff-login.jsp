@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=ops-log-1">
+    <link rel="stylesheet" href="assets/css/app.css?v=hold-05-1">
     <script defer src="assets/js/i18n.js?v=ops-log-1"></script>
 </head>
 <body class="auth-page staff-auth">
@@ -38,48 +38,6 @@
             </form>
         </section>
     </main>
-
-    <script>
-        let selectedRole = 'barista';
-
-        document.addEventListener('DOMContentLoaded', () => {
-            applyI18n();
-            document.getElementById('pin').focus();
-        });
-
-        function chooseRole(role) {
-            selectedRole = role;
-            document.querySelectorAll('.role-option').forEach(btn => btn.classList.toggle('active', btn.dataset.role === role));
-            document.getElementById('pin').focus();
-        }
-
-        document.getElementById('login-form').addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const res = await api('/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    username: selectedRole,
-                    password: document.getElementById('pin').value
-                })
-            });
-            if (res.ok) {
-                const user = await res.json();
-                const targetByRole = {
-                    barista: 'staff-orders.jsp',
-                    cashier: 'cashier.jsp',
-                    runner: 'runner.jsp'
-                };
-                const target = targetByRole[user.role] || 'staff-login.jsp';
-                window.location.href = target;
-            } else {
-                const err = await res.json().catch(() => ({}));
-                const box = document.getElementById('message');
-                box.textContent = err.error || t('loginFailed');
-                box.classList.remove('hidden');
-            }
-        });
-
-    </script>
+    <script src="assets/js/page-staff-login.js?v=jsp-clean-1"></script>
 </body>
 </html>

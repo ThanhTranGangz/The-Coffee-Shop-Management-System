@@ -1,9 +1,9 @@
-# Hướng Dẫn Truy Cập Coffeeshop Lite
+# Hướng Dẫn Truy Cập Coffeeshop Main
 
 ## Vị trí project và database
 
 - Thư mục source project:
-  `/Users/mtsmvp/Downloads/The-Coffee-Shop-Management-System-Lite`
+  `/Users/mtsmvp/Downloads/The-Coffee-Shop-Management-System-main`
 
 - File cấu hình kết nối database:
   `ConnectDB.properties`
@@ -18,19 +18,19 @@
   `/var/opt/mssql/data/CoffeeShopLite_log.ldf`
 
 - App đang deploy trên Tomcat:
-  `/opt/homebrew/opt/tomcat@10/libexec/webapps/The-Coffee-Shop-Management-System-Lite`
+  `/opt/homebrew/opt/tomcat@10/libexec/webapps/The-Coffee-Shop-Management-System-main`
 
 ## Link gốc khi chạy local
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-Lite/
+http://localhost:8080/The-Coffee-Shop-Management-System-main/
 ```
 
 Nếu mở bằng điện thoại cùng Wi-Fi, đổi `localhost` thành IP của máy đang chạy Tomcat.
 Ví dụ:
 
 ```text
-http://192.168.1.10:8080/The-Coffee-Shop-Management-System-Lite/
+http://192.168.1.10:8080/The-Coffee-Shop-Management-System-main/
 ```
 
 ## Khách gọi món
@@ -38,7 +38,7 @@ http://192.168.1.10:8080/The-Coffee-Shop-Management-System-Lite/
 Khách quét QR trên bàn để vào menu đúng bàn:
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-Lite/menu.jsp?tableCode=MA_BAN
+http://localhost:8080/The-Coffee-Shop-Management-System-main/menu.jsp?tableCode=MA_BAN
 ```
 
 Trong thực tế không cần tự nhập `tableCode`. Admin vào mục `Bàn & QR` để tải QR riêng của từng bàn. Khi khách quét QR, hệ thống tự nhận bàn và khách không đổi bàn được trong giao diện gọi món.
@@ -46,13 +46,13 @@ Trong thực tế không cần tự nhập `tableCode`. Admin vào mục `Bàn &
 Nếu cần mở menu thủ công:
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-Lite/menu.jsp
+http://localhost:8080/The-Coffee-Shop-Management-System-main/menu.jsp
 ```
 
 Trang tra đơn của khách:
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-Lite/order-status.jsp
+http://localhost:8080/The-Coffee-Shop-Management-System-main/order-status.jsp
 ```
 
 ## Admin
@@ -62,7 +62,7 @@ Admin không có trang login riêng.
 Mở trực tiếp dashboard:
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-Lite/dashboard.jsp
+http://localhost:8080/The-Coffee-Shop-Management-System-main/dashboard.jsp
 ```
 
 Hệ thống sẽ hiện màn hình che phủ yêu cầu nhập PIN quản trị.
@@ -86,7 +86,7 @@ Sau khi mở khoá, admin dùng được các chức năng:
 Trang đăng nhập nhân viên:
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-Lite/staff-login.jsp
+http://localhost:8080/The-Coffee-Shop-Management-System-main/staff-login.jsp
 ```
 
 Chọn đúng vị trí rồi nhập PIN:
@@ -111,5 +111,5 @@ brew services start mssql-server
 Nếu muốn build lại bằng NetBeans, mở đúng thư mục project:
 
 ```text
-/Users/mtsmvp/Downloads/The-Coffee-Shop-Management-System-Lite
+/Users/mtsmvp/Downloads/The-Coffee-Shop-Management-System-main
 ```

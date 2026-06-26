@@ -2,6 +2,9 @@ package utils;
 
 import java.util.*;
 
+/**
+ * Utility class for JSON serialization and deserialization.
+ */
 @SuppressWarnings("unchecked")
 public class JsonUtils {
     public static String toJson(Object obj) {

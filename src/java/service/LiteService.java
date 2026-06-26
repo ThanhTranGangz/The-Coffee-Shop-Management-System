@@ -939,9 +939,14 @@ public class LiteService {
                 }
             }
             if ("Preparing".equals(currentStatus) && "Ready".equals(status)) {
+                int requiredCups = cupCountForOrder(con, id);
                 int cups = stateValueForUpdate(con, "cupsAvailable", 0);
-                if (cups <= 0) throw new IllegalArgumentException("Không đủ cốc hiện có.");
-                setStateValue(con, "cupsAvailable", cups - 1);
+                if (requiredCups > cups) {
+                    throw new IllegalArgumentException("Đơn này cần " + requiredCups + " cốc, hiện chỉ còn " + cups + " cốc.");
+                }
+                if (requiredCups > 0) {
+                    setStateValue(con, "cupsAvailable", cups - requiredCups);
+                }
             }
             try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status=? WHERE id=?")) {
                 ps.setString(1, status);
@@ -955,6 +960,25 @@ public class LiteService {
             con.commit();
         }
         return getOrderById(id);
+    }
+
+    private int cupCountForOrder(Connection con, int orderId) throws Exception {
+        String sql = "SELECT oi.quantity, mi.category "
+                + "FROM dbo.OrderItems oi "
+                + "JOIN dbo.MenuItems mi ON mi.id=oi.menuItemId "
+                + "WHERE oi.orderId=?";
+        int cups = 0;
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    if (isDrinkCategory(rs.getString("category"))) {
+                        cups += Math.max(0, rs.getInt("quantity"));
+                    }
+                }
+            }
+        }
+        return cups;
     }
 
     public Map<String, Object> getCashStatus(String role) throws Exception {

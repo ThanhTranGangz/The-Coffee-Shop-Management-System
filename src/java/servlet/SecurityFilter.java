@@ -45,7 +45,7 @@ public class SecurityFilter implements Filter {
 
         String role = role(req);
         if (adminPages.contains(path) && !isAdmin(role)) {
-            res.sendRedirect(req.getContextPath() + "/staff-login.jsp");
+            res.sendRedirect(req.getContextPath() + "/dashboard.jsp");
             return;
         }
         if (baristaPages.contains(path) && !isAdmin(role) && !"barista".equals(role)) {
