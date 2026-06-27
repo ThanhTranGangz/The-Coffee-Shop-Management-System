@@ -165,6 +165,8 @@
                 alert(err.error || t('cashCountInvalid'));
                 return;
             }
+            cashData = await res.json();
+            renderCashPanel();
             notifyWork(t('cashWithdrawn'));
             loadStats();
         }

@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=hold-05-1">
-    <script defer src="assets/js/i18n.js?v=ops-log-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
+    <script defer src="assets/js/i18n.js?v=tab-session-1"></script>
 </head>
 <body>
     <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html">coffeshop</a><div class="links" id="nav-links"></div><button id="lang-toggle" class="link lang-toggle" type="button" onclick="toggleLang()">EN</button></div></nav>
@@ -26,10 +26,10 @@
                         <div>
                             <label data-i18n="category">Nhóm</label>
                             <select id="category" onchange="syncDefaultImage()">
-                                <option value="Cà phê">Cà phê</option>
-                                <option value="Trà">Trà</option>
-                                <option value="Đặc biệt">Đặc biệt</option>
-                                <option value="Bánh ngọt">Bánh ngọt</option>
+                                <option value="Cà phê" data-category-option>Cà phê</option>
+                                <option value="Trà" data-category-option>Trà</option>
+                                <option value="Đặc biệt" data-category-option>Đặc biệt</option>
+                                <option value="Bánh ngọt" data-category-option>Bánh ngọt</option>
                             </select>
                         </div>
                         <div><label data-i18n="price">Giá</label><input id="price" type="number" min="10000" max="200000" step="1000" required></div>
@@ -48,6 +48,6 @@
             </aside>
         </div>
     </main>
-    <script src="assets/js/page-admin-menu.js?v=jsp-clean-1"></script>
+    <script src="assets/js/page-admin-menu.js?v=order-confirm-1"></script>
 </body>
 </html>

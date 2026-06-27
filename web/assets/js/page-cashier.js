@@ -54,7 +54,7 @@
         }
 
         function maybeNotify(orders, silent) {
-            const payableIds = new Set(orders.filter(order => order.status === 'Served').map(order => Number(order.id)));
+            const payableIds = new Set(orders.filter(isPayableOrder).map(order => Number(order.id)));
             const hasNew = [...payableIds].some(id => !knownPayableIds.has(id));
             if (!firstLoad && !silent && hasNew) notifyWork(t('newCashierWork'));
             knownPayableIds = payableIds;
@@ -84,7 +84,8 @@
         }
 
         function orderHtml(order) {
-            const payable = order.status === 'Served';
+            const blocking = Number(order.blockingOrders || 0);
+            const payable = isPayableOrder(order);
             return `
                 <article class="card order-card hold-card ${payable ? '' : 'not-ready'}"
                     data-cashier-card="1"
@@ -104,6 +105,7 @@
                         <span class="status ${statusClass(order.status)}">${paymentStatusText(order.status)}</span>
                     </div>
                     ${order.note ? `<div class="order-note"><b>${t('orderNote')}</b><span>${escapeHtml(order.note)}</span></div>` : ''}
+                    ${blocking > 0 ? `<div class="notice mini-notice">${t('paymentBlockedUntilServed')} <b>${blocking}</b> ${t('pendingTableItems').toLowerCase()}</div>` : ''}
                     <div class="order-lines">
                         ${(order.items || []).map(it => `<p><span>${escapeHtml(it.itemName)}${it.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(it.itemSize) : ''} x${it.quantity}</span><span class="price">${money(it.price * it.quantity)}</span></p>`).join('')}
                     </div>
@@ -112,6 +114,10 @@
                         <b class="price">${money(order.total)}</b>
                     </div>
                 </article>`;
+        }
+
+        function isPayableOrder(order) {
+            return order && order.status === 'Served' && Number(order.blockingOrders || 0) === 0;
         }
 
         function statusClass(status) {
@@ -132,7 +138,8 @@
                 body: JSON.stringify({ id, status: 'Paid' })
             });
             if (!res.ok) {
-                notifyWork(t('statusMoveFailed'));
+                const err = await res.json().catch(() => ({}));
+                notifyWork(err.error || t('statusMoveFailed'));
                 return;
             }
             loadOrders({ silent: true });

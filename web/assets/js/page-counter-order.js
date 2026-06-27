@@ -4,6 +4,9 @@
         let counterTable = '';
         let counterNote = '';
         let counterMessage = '';
+        let counterSubmitting = false;
+        let counterConfirming = false;
+        const MAX_QTY = 20;
 
         document.addEventListener('DOMContentLoaded', loadCounterData);
 
@@ -37,7 +40,7 @@
                             <label>${t('orderNote')}</label>
                             <textarea rows="3" oninput="counterNote=this.value" placeholder="${escapeAttr(t('notePlaceholder'))}">${escapeHtml(counterNote)}</textarea>
                         </div>
-                        <button class="btn primary big block" type="button" onclick="submitCounterOrder()" ${counterCart.length ? '' : 'disabled'}>${t('checkout')}</button>
+                        <button class="btn primary big block" type="button" onclick="submitCounterOrder()" ${counterCart.length && !counterSubmitting && !counterConfirming ? '' : 'disabled'}>${t('checkout')}</button>
                         ${counterMessage ? `<div class="notice" style="margin-top:10px">${escapeHtml(counterMessage)}</div>` : ''}
                     </aside>
                 </div>
@@ -93,7 +96,7 @@
             if (!item) return;
             const normalizedSize = sizeOptions(item).length ? size : '';
             const existing = counterCart.find(line => line.menuItemId === id && line.size === normalizedSize);
-            if (existing) existing.quantity++;
+            if (existing) existing.quantity = Math.min(MAX_QTY, existing.quantity + 1);
             else counterCart.push({ menuItemId: id, size: normalizedSize, quantity: 1 });
             counterMessage = '';
             renderCounterOrder();
@@ -101,7 +104,7 @@
 
         function changeCounterQty(index, delta) {
             if (!counterCart[index]) return;
-            counterCart[index].quantity += delta;
+            counterCart[index].quantity = Math.min(MAX_QTY, counterCart[index].quantity + delta);
             if (counterCart[index].quantity <= 0) counterCart.splice(index, 1);
             renderCounterOrder();
         }
@@ -114,27 +117,115 @@
         }
 
         async function submitCounterOrder() {
-            if (!counterTable || !counterCart.length) return;
-            const res = await api('/orders', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({
-                    tableName: counterTable,
-                    customerPhone: '',
-                    note: counterNote.trim(),
-                    items: counterCart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: line.quantity }))
-                })
-            });
-            if (res.ok) {
-                const order = await res.json();
-                counterCart = [];
-                counterNote = '';
-                counterMessage = `${t('orderCreated')} #${order.orderNumber}`;
-                notifyWork(counterMessage);
-            } else {
-                counterMessage = t('orderError');
-            }
+            if (!counterTable || !counterCart.length || counterSubmitting || counterConfirming) return;
+            counterConfirming = true;
             renderCounterOrder();
+            let confirmed = false;
+            try {
+                confirmed = await confirmCounterOrderHold();
+            } finally {
+                counterConfirming = false;
+                renderCounterOrder();
+            }
+            if (!confirmed || !counterCart.length || counterSubmitting) return;
+
+            counterSubmitting = true;
+            renderCounterOrder();
+            try {
+                const res = await api('/orders', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({
+                        tableName: counterTable,
+                        customerPhone: '',
+                        note: counterNote.trim(),
+                        items: counterCart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: Math.min(MAX_QTY, line.quantity) }))
+                    })
+                });
+                if (res.ok) {
+                    const order = await res.json();
+                    counterCart = [];
+                    counterNote = '';
+                    counterMessage = `${t('orderCreated')} #${order.orderNumber}`;
+                    notifyWork(counterMessage);
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    counterMessage = err.error || t('orderError');
+                }
+            } finally {
+                counterSubmitting = false;
+                renderCounterOrder();
+            }
+        }
+
+        function counterSummary() {
+            return counterCart.reduce((summary, line) => {
+                const item = counterMenu.find(menu => menu.id === line.menuItemId);
+                summary.count += Number(line.quantity || 0);
+                summary.total += item ? priceFor(item, line.size) * Number(line.quantity || 0) : 0;
+                return summary;
+            }, { count: 0, total: 0 });
+        }
+
+        function confirmCounterOrderHold() {
+            return new Promise(resolve => {
+                const summary = counterSummary();
+                const overlay = document.createElement('div');
+                overlay.className = 'order-confirm-backdrop';
+                overlay.innerHTML = `
+                    <section class="order-confirm-card" role="dialog" aria-modal="true">
+                        <div>
+                            <p class="eyebrow">${escapeHtml(counterTable)}</p>
+                            <h2>${t('confirmOrderTitle')}</h2>
+                            <p>${t('confirmOrderText')}</p>
+                        </div>
+                        <div class="order-confirm-summary">
+                            <span>${t('orderConfirmItems')}<b>${summary.count}</b></span>
+                            <span>${t('orderConfirmTotal')}<b>${money(summary.total)}</b></span>
+                        </div>
+                        <button class="hold-confirm-button" type="button">
+                            <span>${t('holdToOrder')}</span>
+                            <small>${t('releaseToCancel')}</small>
+                        </button>
+                        <button class="btn block" type="button" data-confirm-cancel>${t('cancel')}</button>
+                    </section>
+                `;
+                document.body.appendChild(overlay);
+
+                const holdButton = overlay.querySelector('.hold-confirm-button');
+                let timer = null;
+                let done = false;
+                const cleanup = value => {
+                    if (done) return;
+                    done = true;
+                    if (timer) clearTimeout(timer);
+                    overlay.remove();
+                    resolve(value);
+                };
+                const cancelHold = () => {
+                    if (timer) clearTimeout(timer);
+                    timer = null;
+                    holdButton.classList.remove('holding');
+                };
+                const startHold = event => {
+                    if (event.cancelable) event.preventDefault();
+                    cancelHold();
+                    if (event.pointerId !== undefined && holdButton.setPointerCapture) {
+                        try { holdButton.setPointerCapture(event.pointerId); } catch (err) {}
+                    }
+                    holdButton.classList.add('holding');
+                    timer = setTimeout(() => cleanup(true), 1000);
+                };
+
+                holdButton.addEventListener('pointerdown', startHold);
+                holdButton.addEventListener('pointerup', cancelHold);
+                holdButton.addEventListener('pointercancel', cancelHold);
+                holdButton.addEventListener('pointerleave', cancelHold);
+                overlay.querySelector('[data-confirm-cancel]').addEventListener('click', () => cleanup(false));
+                overlay.addEventListener('click', event => {
+                    if (event.target === overlay) cleanup(false);
+                });
+            });
         }
 
         function displayName(item) {

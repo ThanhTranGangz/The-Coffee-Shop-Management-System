@@ -6,6 +6,10 @@
         let knownServingOrders = new Set();
         let knownCleaningTables = new Set();
         let firstLoad = true;
+        let runnerOrders = [];
+        let runnerTables = [];
+        const servingInProgress = new Set();
+        const clearingInProgress = new Set();
 
         document.addEventListener('DOMContentLoaded', () => {
             rememberWorkPage('runner.jsp');
@@ -15,14 +19,28 @@
 
         async function loadWork(options = {}) {
             const [orderRes, tableRes] = await Promise.all([api('/orders?view=runner'), api('/tables/map')]);
-            const orders = orderRes.ok ? await orderRes.json() : [];
-            const tables = tableRes.ok ? await tableRes.json() : [];
-            const servingOrders = orders.filter(order => order.status === 'Ready');
-            const cleaningTables = tables.filter(table => table.status === 'Paid');
+            runnerOrders = orderRes.ok ? await orderRes.json() : [];
+            runnerTables = tableRes.ok ? await tableRes.json() : [];
+            const servingOrders = currentServingOrders();
+            const cleaningTables = currentCleaningTables();
             maybeNotify(servingOrders, cleaningTables, options.silent === true);
+            renderCurrentWork();
+        }
+
+        function currentServingOrders() {
+            return runnerOrders.filter(order => order.status === 'Ready');
+        }
+
+        function currentCleaningTables() {
+            return runnerTables.filter(table => table.status === 'Paid');
+        }
+
+        function renderCurrentWork() {
+            const servingOrders = currentServingOrders();
+            const cleaningTables = currentCleaningTables();
             renderTabs(servingOrders, cleaningTables);
-            renderWork(servingOrders, cleaningTables, tables);
-            renderTableMap(tables);
+            renderWork(servingOrders, cleaningTables, runnerTables);
+            renderTableMap(runnerTables);
         }
 
         function maybeNotify(servingOrders, cleaningTables, silent) {
@@ -141,39 +159,58 @@
         }
 
         async function serveOrder(orderId) {
-            if (!orderId) return;
-            const res = await api('/orders/status', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ id: orderId, status: 'Served' })
-            });
-            if (!res.ok) {
-                notifyWork(t('statusMoveFailed'));
-                return;
+            if (!orderId || servingInProgress.has(Number(orderId))) return;
+            servingInProgress.add(Number(orderId));
+            try {
+                const res = await api('/orders/status', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ id: orderId, status: 'Served' })
+                });
+                if (!res.ok) {
+                    notifyWork(t('statusMoveFailed'));
+                    return;
+                }
+                const updated = await res.json().catch(() => ({}));
+                const tableName = updated.tableName || (runnerOrders.find(order => Number(order.id) === Number(orderId)) || {}).tableName || '';
+                runnerOrders = runnerOrders.filter(order => Number(order.id) !== Number(orderId));
+                runnerTables = runnerTables.map(table => String(table.name || '') === String(tableName)
+                    ? Object.assign({}, table, { status: 'Served', busy: true, orderId, orderNumber: updated.orderNumber || table.orderNumber })
+                    : table);
+                renderCurrentWork();
+                loadWork({ silent: true });
+            } finally {
+                servingInProgress.delete(Number(orderId));
             }
-            loadWork({ silent: true });
         }
 
         async function clearTable(tableId) {
-            if (!tableId) return;
-            const res = await api('/tables/clear', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ tableId })
-            });
-            if (!res.ok) {
-                let message = t('statusMoveFailed');
-                try {
-                    const data = await res.json();
-                    if (data && data.error) message = data.error;
-                } catch (err) {}
-                notifyWork(message);
-                return;
+            if (!tableId || clearingInProgress.has(Number(tableId))) return;
+            clearingInProgress.add(Number(tableId));
+            try {
+                const res = await api('/tables/clear', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ tableId })
+                });
+                if (!res.ok) {
+                    let message = t('statusMoveFailed');
+                    try {
+                        const data = await res.json();
+                        if (data && data.error) message = data.error;
+                    } catch (err) {}
+                    notifyWork(message);
+                    return;
+                }
+                runnerTables = runnerTables.map(table => Number(table.id) === Number(tableId)
+                    ? Object.assign({}, table, { status: null, busy: false, orderId: null, orderNumber: null })
+                    : table);
+                renderCurrentWork();
+                notifyWork(t('tableReady'));
+                loadWork({ silent: true });
+            } finally {
+                clearingInProgress.delete(Number(tableId));
             }
-            const card = document.querySelector(`.table-clean-card[data-table-id="${tableId}"]`);
-            if (card) card.remove();
-            notifyWork(t('tableReady'));
-            loadWork({ silent: true });
         }
 
         function startOrderHold(event, id) {

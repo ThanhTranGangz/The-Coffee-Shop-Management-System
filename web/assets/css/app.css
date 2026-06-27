@@ -647,6 +647,109 @@ label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 900; c
     gap: 10px;
 }
 
+.order-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    display: grid;
+    place-items: end center;
+    padding: 18px 14px calc(18px + env(safe-area-inset-bottom));
+    background: rgba(36,27,16,.46);
+    backdrop-filter: blur(16px);
+}
+
+.order-confirm-card {
+    width: min(100%, 520px);
+    display: grid;
+    gap: 14px;
+    border: 1px solid rgba(255,250,241,.52);
+    border-radius: 26px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 20px;
+}
+
+.order-confirm-card h2 {
+    margin: 4px 0 6px;
+    font-size: 24px;
+}
+
+.order-confirm-card p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-weight: 750;
+}
+
+.order-confirm-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.order-confirm-summary span {
+    display: grid;
+    gap: 5px;
+    min-height: 74px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fffaf1;
+    padding: 12px;
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-weight: 850;
+}
+
+.order-confirm-summary b {
+    color: var(--ink);
+    font-size: 18px;
+}
+
+.hold-confirm-button {
+    position: relative;
+    overflow: hidden;
+    min-height: 68px;
+    border: 0;
+    border-radius: 22px;
+    background: var(--accent);
+    color: var(--surface);
+    box-shadow: 0 16px 34px rgba(176,69,40,.28);
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+}
+
+.hold-confirm-button:after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: rgba(255,250,241,.24);
+    pointer-events: none;
+}
+
+.hold-confirm-button.holding:after {
+    animation: hold-fill 1s linear forwards;
+}
+
+.hold-confirm-button span,
+.hold-confirm-button small {
+    position: relative;
+    z-index: 1;
+    display: block;
+}
+
+.hold-confirm-button span {
+    font-size: 16px;
+    font-weight: 950;
+}
+
+.hold-confirm-button small {
+    margin-top: 3px;
+    opacity: .86;
+    font-size: 12px;
+    font-weight: 800;
+}
+
 .pin-intro-card {
     text-align: center;
 }
@@ -933,6 +1036,113 @@ label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 900; c
 .home-secondary {
     background: rgba(255,250,241,.58);
     backdrop-filter: blur(12px);
+}
+
+.qr-entry-page {
+    background:
+        radial-gradient(circle at 50% 8%, rgba(255,255,255,.82), transparent 32%),
+        linear-gradient(180deg, #f8f3e8 0%, #efe3cf 100%);
+}
+
+.qr-entry-shell {
+    width: 100%;
+    min-height: calc(100vh - 62px);
+    min-height: calc(100dvh - 62px);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.qr-entry-hero {
+    width: min(520px, 100%);
+    display: grid;
+    gap: 24px;
+    justify-items: stretch;
+    text-align: center;
+}
+
+.qr-entry-copy h1 {
+    margin: 0;
+    font-size: clamp(52px, 12vw, 92px);
+}
+
+.qr-entry-copy p:not(.home-kicker) {
+    margin: 12px auto 0;
+    max-width: 360px;
+    color: rgba(36,27,16,.68);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 17px;
+    line-height: 1.45;
+}
+
+.qr-scan-panel {
+    display: grid;
+    gap: 14px;
+}
+
+.scan-main-button {
+    border-radius: 999px;
+    min-height: 58px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    letter-spacing: .02em;
+    text-transform: none;
+}
+
+.qr-camera {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    max-height: min(66vh, 620px);
+    overflow: hidden;
+    border-radius: 28px;
+    border: 1px solid rgba(36,27,16,.18);
+    background: #120d08;
+    box-shadow: var(--shadow);
+}
+
+.qr-camera video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+.qr-frame {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: min(72%, 300px);
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border: 3px solid rgba(255,250,241,.96);
+    border-radius: 24px;
+    box-shadow:
+        0 0 0 999px rgba(18,13,8,.34),
+        inset 0 0 0 1px rgba(36,27,16,.32);
+}
+
+.qr-frame::after {
+    content: "";
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    top: 50%;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(255,250,241,.92);
+    box-shadow: 0 0 18px rgba(255,250,241,.74);
+}
+
+.qr-scan-status {
+    min-height: 44px;
+    border: 1px solid rgba(202,185,152,.68);
+    border-radius: 18px;
+    background: rgba(255,250,241,.68);
+    color: var(--ink-soft);
+    padding: 12px 14px;
+    font-weight: 800;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 /* ---------- mobile auth / entry ---------- */
@@ -2605,6 +2815,29 @@ label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 900; c
         width: 100%;
         min-width: 0;
     }
+    .qr-entry-shell {
+        min-height: calc(100vh - 58px);
+        min-height: calc(100dvh - 58px);
+        padding: 18px 14px 28px;
+        place-items: start center;
+    }
+    .qr-entry-hero {
+        width: 100%;
+        max-width: 430px;
+        gap: 18px;
+    }
+    .qr-entry-copy h1 {
+        font-size: clamp(42px, 14vw, 58px);
+    }
+    .qr-camera {
+        aspect-ratio: 10 / 13;
+        border-radius: 22px;
+        max-height: 62vh;
+    }
+    .qr-frame {
+        width: min(78%, 280px);
+        border-radius: 20px;
+    }
     .brand { font-size: 22px; }
     .link, .btn { padding: 9px 10px; font-size: 11px; }
     .nav > .nav-inner > .lang-toggle {
@@ -2892,8 +3125,16 @@ label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 900; c
     .status-col.active {
         opacity: 1;
         border-color: var(--accent);
-        box-shadow: var(--shadow-soft);
-    }
+    box-shadow: var(--shadow-soft);
+}
+
+.mini-notice {
+    margin: 0 0 10px;
+    padding: 9px 10px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 850;
+}
     .order-card {
         height: 226px;
         margin-bottom: 0;

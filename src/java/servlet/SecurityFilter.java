@@ -16,6 +16,7 @@ import java.util.List;
 
 @WebFilter("/*")
 public class SecurityFilter implements Filter {
+    private static final String ATTR_ROLE = "role";
     private final List<String> adminPages = Arrays.asList("/admin-menu.jsp", "/admin-tables.jsp", "/system-logs.jsp");
     private final List<String> baristaPages = Arrays.asList("/staff-orders.jsp");
     private final List<String> cashierPages = Arrays.asList("/cashier.jsp", "/counter-order.jsp");
@@ -100,8 +101,25 @@ public class SecurityFilter implements Filter {
 
     private String role(HttpServletRequest req) {
         HttpSession session = req.getSession(false);
-        Object role = session == null ? null : session.getAttribute("role");
+        Object role = session == null ? null : session.getAttribute(tabAttr(req, ATTR_ROLE));
         return role == null ? "" : String.valueOf(role);
+    }
+
+    private String tabKey(HttpServletRequest req) {
+        String key = value(req.getHeader("X-Tab-Session"));
+        if (key.isEmpty()) key = value(req.getParameter("tabSession"));
+        if (key.isEmpty()) key = "default";
+        key = key.replaceAll("[^A-Za-z0-9_-]", "");
+        if (key.isEmpty()) key = "default";
+        return key.length() > 80 ? key.substring(0, 80) : key;
+    }
+
+    private String tabAttr(HttpServletRequest req, String base) {
+        return base + "." + tabKey(req);
+    }
+
+    private String value(Object raw) {
+        return raw == null ? "" : String.valueOf(raw).trim();
     }
 
     private void writeError(HttpServletResponse res, int status, String message) throws IOException {

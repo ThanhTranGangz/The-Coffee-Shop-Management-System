@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=hold-05-1">
-    <script defer src="assets/js/i18n.js?v=ops-log-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
+    <script defer src="assets/js/i18n.js?v=tab-session-1"></script>
 </head>
 <body class="auth-page staff-auth">
     <main class="auth-shell">
@@ -38,6 +38,6 @@
             </form>
         </section>
     </main>
-    <script src="assets/js/page-staff-login.js?v=jsp-clean-1"></script>
+    <script src="assets/js/page-staff-login.js?v=tab-session-1"></script>
 </body>
 </html>

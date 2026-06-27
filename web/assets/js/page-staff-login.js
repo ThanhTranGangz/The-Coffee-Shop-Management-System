@@ -29,7 +29,7 @@
                     runner: 'runner.jsp'
                 };
                 const target = targetByRole[user.role] || 'staff-login.jsp';
-                window.location.href = target;
+                window.location.href = withTab(target);
             } else {
                 const err = await res.json().catch(() => ({}));
                 const box = document.getElementById('message');

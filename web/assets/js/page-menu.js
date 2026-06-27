@@ -10,6 +10,9 @@
         let preferredTableCode = '';
         let qrTableName = '';
         let lockedTable = false;
+        let isSubmitting = false;
+        let isConfirmingOrder = false;
+        const MAX_QTY = 20;
 
         document.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(location.search);
@@ -28,7 +31,7 @@
                 }
             });
             document.getElementById('sheet-plus').addEventListener('click', () => {
-                if (currentQty < 20) {
+                if (currentQty < MAX_QTY) {
                     currentQty++;
                     syncSheet();
                 }
@@ -94,6 +97,7 @@
         }
 
         function selectedTable() {
+            if (lockedTable && qrTableName) return qrTableName;
             const mobile = document.getElementById('table-select-mobile');
             const desktop = document.getElementById('table-select-desktop');
             return window.matchMedia('(max-width: 760px)').matches ? mobile.value : desktop.value;
@@ -238,6 +242,7 @@
         function syncSheet() {
             document.getElementById('sheet-qty').textContent = currentQty;
             document.getElementById('sheet-minus').disabled = currentQty <= 1;
+            document.getElementById('sheet-plus').disabled = currentQty >= MAX_QTY;
             const unit = currentItem ? priceFor(currentItem, currentSize) : 0;
             document.getElementById('sheet-price').textContent = money(unit);
             document.getElementById('sheet-total').textContent = money(unit * currentQty);
@@ -266,8 +271,8 @@
             if (!currentItem) return;
             const note = document.getElementById('sheet-note').value.trim();
             const existing = cart.find(item => item.menuItemId === currentItem.id && item.size === currentSize && item.note === note);
-            if (existing) existing.quantity += currentQty;
-            else cart.push({ menuItemId: currentItem.id, size: currentSize, quantity: currentQty, note });
+            if (existing) existing.quantity = Math.min(MAX_QTY, existing.quantity + currentQty);
+            else cart.push({ menuItemId: currentItem.id, size: currentSize, quantity: Math.min(MAX_QTY, currentQty), note });
             closeSheet();
             renderCart();
         }
@@ -298,7 +303,7 @@
                                 <div class="stepper">
                                     <button type="button" onclick="changeQty(${index}, -1)">−</button>
                                     <span class="num">${line.quantity}</span>
-                                    <button type="button" onclick="changeQty(${index}, 1)">+</button>
+                                    <button type="button" onclick="changeQty(${index}, 1)" ${line.quantity >= MAX_QTY ? 'disabled' : ''}>+</button>
                                 </div>
                             </div>
                         </div>`;
@@ -308,12 +313,12 @@
             document.getElementById('cart-count').textContent = count;
             document.getElementById('cart-bar-total').textContent = money(total);
             document.getElementById('cart-bar').classList.toggle('show', cart.length > 0);
-            document.getElementById('submit-order').disabled = cart.length === 0;
+            document.getElementById('submit-order').disabled = cart.length === 0 || isSubmitting || isConfirmingOrder;
         }
 
         function changeQty(index, delta) {
             if (!cart[index]) return;
-            cart[index].quantity += delta;
+            cart[index].quantity = Math.min(MAX_QTY, cart[index].quantity + delta);
             if (cart[index].quantity <= 0) cart.splice(index, 1);
             renderCart();
         }
@@ -324,37 +329,133 @@
         }
 
         async function submitOrder() {
+            if (isSubmitting || isConfirmingOrder) return;
             const msg = document.getElementById('message');
             msg.classList.remove('hidden');
             if (!cart.length) {
                 msg.textContent = t('emptyCart');
                 return;
             }
+            isConfirmingOrder = true;
+            renderCart();
+            let confirmed = false;
+            try {
+                confirmed = await confirmOrderHold();
+            } finally {
+                isConfirmingOrder = false;
+                renderCart();
+            }
+            if (!confirmed) return;
+            if (isSubmitting || !cart.length) return;
+            isSubmitting = true;
+            renderCart();
             const itemNotes = cart.map(line => {
                 const menu = menuItems.find(item => item.id === line.menuItemId);
                 return line.note && menu ? `${displayName(menu)}${line.size ? ' ' + t('size') + ' ' + sizeLabel(menu, line.size) : ''}: ${line.note}` : '';
             }).filter(Boolean).join('; ');
             const orderNote = [document.getElementById('note').value.trim(), itemNotes].filter(Boolean).join(' | ');
-            const res = await api('/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tableName: selectedTable(),
-                    customerPhone: '',
-                    note: orderNote,
-                    items: cart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: line.quantity }))
-                })
-            });
-            if (res.ok) {
-                const order = await res.json();
-                const statusUrl = preferredTableCode
-                    ? `order-status.jsp?tableCode=${encodeURIComponent(preferredTableCode)}`
-                    : `order-status.jsp?table=${encodeURIComponent(selectedTable())}`;
-                msg.innerHTML = `<strong>${t('orderSent')}</strong><br>${t('orderNumber')}: ${order.orderNumber}<br><a class="btn primary" style="margin-top:10px" href="${statusUrl}">${t('viewStatus')}</a>`;
-                cart = [];
+            try {
+                const res = await api('/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tableName: selectedTable(),
+                        tableCode: preferredTableCode,
+                        customerPhone: '',
+                        note: orderNote,
+                        items: cart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: Math.min(MAX_QTY, line.quantity) }))
+                    })
+                });
+                if (res.ok) {
+                    const order = await res.json();
+                    if (order.tableName) {
+                        preferredTable = order.tableName;
+                        qrTableName = lockedTable ? order.tableName : qrTableName;
+                        sessionStorage.setItem('selectedTable', order.tableName);
+                    }
+                    const statusUrl = preferredTableCode
+                        ? `order-status.jsp?tableCode=${encodeURIComponent(preferredTableCode)}`
+                        : `order-status.jsp?table=${encodeURIComponent(order.tableName || selectedTable())}`;
+                    msg.innerHTML = `<strong>${t('orderSent')}</strong><br>${t('orderNumber')}: ${order.orderNumber}<br><a class="btn primary" style="margin-top:10px" href="${withTab(statusUrl)}">${t('viewStatus')}</a>`;
+                    cart = [];
+                } else {
+                    const err = await res.json().catch(() => ({}));
+                    msg.textContent = err.error || t('orderError');
+                }
+            } finally {
+                isSubmitting = false;
                 renderCart();
-            } else {
-                const err = await res.json().catch(() => ({}));
-                msg.textContent = err.error || t('orderError');
             }
+        }
+
+        function cartSummary() {
+            return cart.reduce((summary, line) => {
+                const menu = menuItems.find(item => item.id === line.menuItemId);
+                const unit = menu ? priceFor(menu, line.size) : 0;
+                summary.count += Number(line.quantity || 0);
+                summary.total += unit * Number(line.quantity || 0);
+                return summary;
+            }, { count: 0, total: 0 });
+        }
+
+        function confirmOrderHold() {
+            return new Promise(resolve => {
+                const summary = cartSummary();
+                const overlay = document.createElement('div');
+                overlay.className = 'order-confirm-backdrop';
+                overlay.innerHTML = `
+                    <section class="order-confirm-card" role="dialog" aria-modal="true">
+                        <div>
+                            <p class="eyebrow">${escapeHtml(selectedTable())}</p>
+                            <h2>${t('confirmOrderTitle')}</h2>
+                            <p>${t('confirmOrderText')}</p>
+                        </div>
+                        <div class="order-confirm-summary">
+                            <span>${t('orderConfirmItems')}<b>${summary.count}</b></span>
+                            <span>${t('orderConfirmTotal')}<b>${money(summary.total)}</b></span>
+                        </div>
+                        <button class="hold-confirm-button" type="button">
+                            <span>${t('holdToOrder')}</span>
+                            <small>${t('releaseToCancel')}</small>
+                        </button>
+                        <button class="btn block" type="button" data-confirm-cancel>${t('cancel')}</button>
+                    </section>
+                `;
+                document.body.appendChild(overlay);
+
+                const holdButton = overlay.querySelector('.hold-confirm-button');
+                let timer = null;
+                let done = false;
+
+                const cleanup = value => {
+                    if (done) return;
+                    done = true;
+                    if (timer) clearTimeout(timer);
+                    overlay.remove();
+                    resolve(value);
+                };
+                const cancelHold = () => {
+                    if (timer) clearTimeout(timer);
+                    timer = null;
+                    holdButton.classList.remove('holding');
+                };
+                const startHold = event => {
+                    if (event.cancelable) event.preventDefault();
+                    cancelHold();
+                    if (event.pointerId !== undefined && holdButton.setPointerCapture) {
+                        try { holdButton.setPointerCapture(event.pointerId); } catch (err) {}
+                    }
+                    holdButton.classList.add('holding');
+                    timer = setTimeout(() => cleanup(true), 1000);
+                };
+
+                holdButton.addEventListener('pointerdown', startHold);
+                holdButton.addEventListener('pointerup', cancelHold);
+                holdButton.addEventListener('pointercancel', cancelHold);
+                holdButton.addEventListener('pointerleave', cancelHold);
+                overlay.querySelector('[data-confirm-cancel]').addEventListener('click', () => cleanup(false));
+                overlay.addEventListener('click', event => {
+                    if (event.target === overlay) cleanup(false);
+                });
+            });
         }

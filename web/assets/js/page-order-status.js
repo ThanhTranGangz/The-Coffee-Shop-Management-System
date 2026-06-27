@@ -31,6 +31,7 @@
                 return;
             }
             const orders = await res.json();
+            syncTrackedTable(orders);
             if (tableCode && !tableName) await resolveTableName();
             box.innerHTML = `
                 <section class="card table-order-head">
@@ -42,6 +43,19 @@
                     ${orders.length ? orders.map(orderCard).join('') : `<div class="empty-state"><div class="big">0</div><h3>${t('noTableOrders')}</h3></div>`}
                 </section>
             `;
+        }
+
+        function syncTrackedTable(orders) {
+            if (!Array.isArray(orders) || !orders.length || !orders[0].tableName) return;
+            const nextTable = orders[0].tableName;
+            const moved = tableName && tableName !== nextTable;
+            tableName = nextTable;
+            sessionStorage.setItem('selectedTable', tableName);
+            if (moved) {
+                tableCode = '';
+                sessionStorage.removeItem('selectedTableCode');
+                history.replaceState(null, '', `order-status.jsp?table=${encodeURIComponent(tableName)}`);
+            }
         }
 
         async function resolveTableName() {

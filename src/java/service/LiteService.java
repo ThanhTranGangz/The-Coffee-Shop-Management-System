@@ -10,6 +10,7 @@ import java.util.*;
 
 public class LiteService {
     private static final LiteService INSTANCE = new LiteService();
+    private static final int MAX_ITEM_QUANTITY = 20;
     private final DBContext db = new DBContext();
 
     public static LiteService getInstance() {
@@ -561,6 +562,36 @@ public class LiteService {
         }
     }
 
+    public List<Map<String, Object>> getOpenOrdersByIds(List<Integer> orderIds) throws Exception {
+        List<Integer> ids = cleanIds(orderIds);
+        if (ids.isEmpty()) return new ArrayList<>();
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt FROM dbo.Orders "
+                + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            bindIds(ps, ids);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> list = rows(rs);
+                for (Map<String, Object> order : list) {
+                    order.put("items", getOrderItems(readInt(order.get("id"), 0)));
+                }
+                return list;
+            }
+        }
+    }
+
+    public String currentTableForOrderIds(List<Integer> orderIds) throws Exception {
+        List<Integer> ids = cleanIds(orderIds);
+        if (ids.isEmpty()) return "";
+        String sql = "SELECT TOP 1 tableName FROM dbo.Orders "
+                + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            bindIds(ps, ids);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? readString(rs.getString("tableName"), "") : "";
+            }
+        }
+    }
+
     public Map<String, Object> transferTable(int fromTableId, int toTableId) throws Exception {
         return transferTable(fromTableId, toTableId, "system", "system");
     }
@@ -628,33 +659,41 @@ public class LiteService {
     public Map<String, Object> clearServedTable(int tableId, String actorRole, String actorName) throws Exception {
         try (Connection con = db.getConnection()) {
             con.setAutoCommit(false);
-            int orderId;
-            int orderNumber;
-            String tableName;
-            String findSql = "SELECT TOP 1 o.id, o.orderNumber, t.name tableName "
-                    + "FROM dbo.Orders o JOIN dbo.Tables t ON t.name=o.tableName "
-                    + "WHERE t.id=? AND o.status='Paid' ORDER BY o.id DESC";
-            try (PreparedStatement ps = con.prepareStatement(findSql)) {
-                ps.setInt(1, tableId);
+            Map<String, Object> table = tableRowForUpdate(con, tableId);
+            if (table == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
+            String tableName = readString(table.get("name"), "");
+
+            int notClearedYet = countOpenOrders(con, tableName, "('Pending','Preparing','Ready','Served')");
+            if (notClearedYet > 0) {
+                throw new IllegalArgumentException("Bàn vẫn còn đơn đang phục vụ, chưa thể dọn.");
+            }
+
+            List<Integer> orderIds = new ArrayList<>();
+            List<Integer> orderNumbers = new ArrayList<>();
+            try (PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE tableName=? AND status='Paid' ORDER BY id")) {
+                ps.setString(1, tableName);
                 try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        throw new IllegalArgumentException("Bàn này không có đơn chờ dọn.");
+                    while (rs.next()) {
+                        orderIds.add(rs.getInt("id"));
+                        orderNumbers.add(rs.getInt("orderNumber"));
                     }
-                    orderId = rs.getInt("id");
-                    orderNumber = rs.getInt("orderNumber");
-                    tableName = rs.getString("tableName");
                 }
             }
-            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status='Cleared' WHERE id=? AND status='Paid'")) {
-                ps.setInt(1, orderId);
-                if (ps.executeUpdate() == 0) {
+            if (orderIds.isEmpty()) throw new IllegalArgumentException("Bàn này không có đơn chờ dọn.");
+
+            int clearedCount;
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status='Cleared' WHERE tableName=? AND status='Paid'")) {
+                ps.setString(1, tableName);
+                clearedCount = ps.executeUpdate();
+                if (clearedCount == 0) {
                     throw new IllegalArgumentException("Bàn này vừa được cập nhật bởi thiết bị khác.");
                 }
             }
+            String orderLabel = orderNumbers.stream().map(number -> "#" + number).reduce((a, b) -> a + ", " + b).orElse("");
             insertSystemLog(con, actorRole, actorName, "TABLE_CLEAR",
-                    "Bồi bàn dọn xong " + tableName + " cho đơn #" + orderNumber + " lúc " + nowLabelVi(),
-                    "Waiter cleared " + tableName + " for order #" + orderNumber + " at " + nowLabelEn(),
-                    orderId);
+                    "Bồi bàn dọn xong " + tableName + " cho " + clearedCount + " hóa đơn " + orderLabel + " lúc " + nowLabelVi(),
+                    "Waiter cleared " + tableName + " for " + clearedCount + " bill(s) " + orderLabel + " at " + nowLabelEn(),
+                    orderIds.get(0));
             con.commit();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("message", "Table ready");
@@ -662,8 +701,11 @@ public class LiteService {
             result.put("tableName", tableName);
             result.put("busy", false);
             result.put("status", "Available");
-            result.put("orderId", orderId);
-            result.put("orderNumber", orderNumber);
+            result.put("orderId", orderIds.get(0));
+            result.put("orderNumber", orderNumbers.get(0));
+            result.put("orderIds", orderIds);
+            result.put("orderNumbers", orderNumbers);
+            result.put("clearedOrders", clearedCount);
             result.put("orderStatus", "Cleared");
             return result;
         }
@@ -680,6 +722,15 @@ public class LiteService {
     public Map<String, Object> getTableByCode(String code) throws Exception {
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active, floorNo, tableNo FROM dbo.Tables WHERE code=? AND active=1")) {
             ps.setString(1, readString(code, ""));
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? row(rs) : null;
+            }
+        }
+    }
+
+    public Map<String, Object> getTableByName(String name) throws Exception {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active, floorNo, tableNo FROM dbo.Tables WHERE name=? AND active=1")) {
+            ps.setString(1, readString(name, ""));
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
             }
@@ -791,6 +842,7 @@ public class LiteService {
 
     public Map<String, Object> createOrder(Map<String, Object> data) throws Exception {
         String tableName = readString(data.get("tableName"), "Bàn 1");
+        if (getTableByName(tableName) == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
         String phone = readString(data.get("customerPhone"), "");
         String note = limitNote(readString(data.get("note"), ""));
         List<?> items = data.get("items") instanceof List<?> ? (List<?>) data.get("items") : Collections.emptyList();
@@ -816,7 +868,11 @@ public class LiteService {
                 if (!(raw instanceof Map<?, ?>)) continue;
                 Map<?, ?> item = (Map<?, ?>) raw;
                 int menuId = readInt(item.get("menuItemId"), 0);
-                int quantity = Math.max(1, readInt(item.get("quantity"), 1));
+                int requestedQuantity = readInt(item.get("quantity"), 1);
+                if (requestedQuantity > MAX_ITEM_QUANTITY) {
+                    throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
+                }
+                int quantity = Math.max(1, requestedQuantity);
                 Map<String, Object> menu = getMenuItem(menuId);
                 if (menu == null) continue;
                 String size = normalizeSize(menu, readString(item.get("size"), ""));
@@ -875,6 +931,10 @@ public class LiteService {
             List<Map<String, Object>> list = rows(rs);
             for (Map<String, Object> order : list) {
                 order.put("items", getOrderItems(readInt(order.get("id"), 0)));
+                if ("cashier".equals(role)) {
+                    String tableName = readString(order.get("tableName"), "");
+                    order.put("blockingOrders", countOpenOrders(con, tableName, "('Pending','Preparing','Ready')"));
+                }
             }
             if ("runner".equals(role)) sanitizeRunnerOrders(list);
             return list;
@@ -948,6 +1008,12 @@ public class LiteService {
                     setStateValue(con, "cupsAvailable", cups - requiredCups);
                 }
             }
+            if ("Served".equals(currentStatus) && "Paid".equals(status)) {
+                int notServedYet = countOpenOrders(con, tableName, "('Pending','Preparing','Ready')");
+                if (notServedYet > 0) {
+                    throw new IllegalStateException("Bàn vẫn còn món chưa phục vụ, chưa thể thanh toán.");
+                }
+            }
             try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status=? WHERE id=?")) {
                 ps.setString(1, status);
                 ps.setInt(2, id);
@@ -957,9 +1023,131 @@ public class LiteService {
                     statusLogVi(actorRole, currentStatus, status, orderNumber, tableName),
                     statusLogEn(actorRole, currentStatus, status, orderNumber, tableName),
                     id);
+            int resultOrderId = id;
+            if ("Ready".equals(currentStatus) && "Served".equals(status)) {
+                resultOrderId = consolidateServedBillsForTable(con, tableName, id, actorRole, actorName);
+            }
             con.commit();
+            return getOrderById(resultOrderId);
         }
-        return getOrderById(id);
+    }
+
+    private int consolidateServedBillsForTable(Connection con, String tableName, int preferredOrderId, String actorRole, String actorName) throws Exception {
+        List<Integer> servedIds = new ArrayList<>();
+        try (PreparedStatement ps = con.prepareStatement("SELECT id FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE tableName=? AND status='Served' ORDER BY id")) {
+            ps.setString(1, tableName);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) servedIds.add(rs.getInt("id"));
+            }
+        }
+        if (servedIds.size() <= 1) return preferredOrderId;
+
+        int targetId = servedIds.get(0);
+        for (Integer sourceId : servedIds) {
+            if (sourceId != null && sourceId > 0 && sourceId != targetId) {
+                mergeServedOrderInto(con, sourceId, targetId, actorRole, actorName);
+            }
+        }
+        return targetId;
+    }
+
+    private void mergeServedOrderInto(Connection con, int sourceId, int targetId, String actorRole, String actorName) throws Exception {
+        Map<String, Object> source = orderMergeInfo(con, sourceId);
+        Map<String, Object> target = orderMergeInfo(con, targetId);
+        if (source.isEmpty() || target.isEmpty()) return;
+
+        int sourceTotal = readInt(source.get("total"), 0);
+        int sourceNumber = readInt(source.get("orderNumber"), 0);
+        int targetNumber = readInt(target.get("orderNumber"), 0);
+        String sourceNote = readString(source.get("note"), "");
+        String targetNote = readString(target.get("note"), "");
+        String sourcePhone = readString(source.get("customerPhone"), "");
+        String targetPhone = readString(target.get("customerPhone"), "");
+        String tableName = readString(target.get("tableName"), "");
+
+        moveOrderItemsToMergedBill(con, sourceId, targetId);
+
+        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET total=total+?, note=?, customerPhone=? WHERE id=? AND status='Served'")) {
+            ps.setInt(1, sourceTotal);
+            ps.setString(2, mergedNote(targetNote, sourceNote));
+            String phone = targetPhone.isEmpty() ? sourcePhone : targetPhone;
+            ps.setString(3, phone.isEmpty() ? null : phone);
+            ps.setInt(4, targetId);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status='Merged', total=0 WHERE id=? AND status='Served'")) {
+            ps.setInt(1, sourceId);
+            ps.executeUpdate();
+        }
+        insertSystemLog(con, actorRole, actorName, "ORDER_MERGE",
+                "Gộp đơn #" + sourceNumber + " vào hóa đơn #" + targetNumber + " của " + tableName + " lúc " + nowLabelVi(),
+                "Merged order #" + sourceNumber + " into bill #" + targetNumber + " at " + tableName + " at " + nowLabelEn(),
+                targetId);
+    }
+
+    private Map<String, Object> orderMergeInfo(Connection con, int orderId) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, customerPhone, total, note FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=? AND status='Served'")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? row(rs) : new LinkedHashMap<>();
+            }
+        }
+    }
+
+    private void moveOrderItemsToMergedBill(Connection con, int sourceId, int targetId) throws Exception {
+        List<Map<String, Object>> sourceItems = new ArrayList<>();
+        try (PreparedStatement ps = con.prepareStatement("SELECT menuItemId, itemName, itemSize, quantity, price FROM dbo.OrderItems WHERE orderId=? ORDER BY id")) {
+            ps.setInt(1, sourceId);
+            try (ResultSet rs = ps.executeQuery()) {
+                sourceItems = rows(rs);
+            }
+        }
+        for (Map<String, Object> item : sourceItems) {
+            int existingId = findMatchingOrderItem(con, targetId, readInt(item.get("menuItemId"), 0), readString(item.get("itemSize"), ""), readInt(item.get("price"), 0));
+            int quantity = Math.max(0, readInt(item.get("quantity"), 0));
+            if (existingId > 0) {
+                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.OrderItems SET quantity=quantity+? WHERE id=?")) {
+                    ps.setInt(1, quantity);
+                    ps.setInt(2, existingId);
+                    ps.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.OrderItems (orderId,menuItemId,itemName,itemSize,quantity,price) VALUES (?,?,?,?,?,?)")) {
+                    ps.setInt(1, targetId);
+                    ps.setInt(2, readInt(item.get("menuItemId"), 0));
+                    ps.setString(3, readString(item.get("itemName"), ""));
+                    String size = readString(item.get("itemSize"), "");
+                    ps.setString(4, size.isEmpty() ? null : size);
+                    ps.setInt(5, quantity);
+                    ps.setInt(6, readInt(item.get("price"), 0));
+                    ps.executeUpdate();
+                }
+            }
+        }
+        try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.OrderItems WHERE orderId=?")) {
+            ps.setInt(1, sourceId);
+            ps.executeUpdate();
+        }
+    }
+
+    private int findMatchingOrderItem(Connection con, int orderId, int menuItemId, String size, int price) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement("SELECT TOP 1 id FROM dbo.OrderItems WHERE orderId=? AND menuItemId=? AND ISNULL(itemSize,'')=? AND price=? ORDER BY id")) {
+            ps.setInt(1, orderId);
+            ps.setInt(2, menuItemId);
+            ps.setString(3, readString(size, ""));
+            ps.setInt(4, price);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt("id") : 0;
+            }
+        }
+    }
+
+    private String mergedNote(String targetNote, String sourceNote) {
+        String target = readString(targetNote, "");
+        String source = readString(sourceNote, "");
+        if (target.isEmpty()) return limitNote(source);
+        if (source.isEmpty()) return limitNote(target);
+        return limitNote(target + ", " + source);
     }
 
     private int cupCountForOrder(Connection con, int orderId) throws Exception {
@@ -1547,6 +1735,28 @@ public class LiteService {
             return Integer.parseInt(String.valueOf(value));
         } catch (Exception e) {
             return fallback;
+        }
+    }
+
+    private List<Integer> cleanIds(List<Integer> ids) {
+        List<Integer> clean = new ArrayList<>();
+        if (ids == null) return clean;
+        for (Integer id : ids) {
+            if (id != null && id > 0 && !clean.contains(id)) clean.add(id);
+            if (clean.size() >= 50) break;
+        }
+        return clean;
+    }
+
+    private String placeholders(int count) {
+        StringJoiner joiner = new StringJoiner(",");
+        for (int i = 0; i < count; i++) joiner.add("?");
+        return joiner.toString();
+    }
+
+    private void bindIds(PreparedStatement ps, List<Integer> ids) throws Exception {
+        for (int i = 0; i < ids.size(); i++) {
+            ps.setInt(i + 1, ids.get(i));
         }
     }
 

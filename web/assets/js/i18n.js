@@ -1,4 +1,5 @@
 const LANG_KEY = 'coffeshop_lang';
+const TAB_SESSION_KEY = 'coffeshop_tab_session';
 const dict = {
     vi: {
         home: 'Trang chủ', order: 'Gọi món', status: 'Tra đơn', login: 'Đăng nhập',
@@ -7,6 +8,9 @@ const dict = {
         heroEyebrow: 'Đặt món tại bàn', heroTitle: 'coffeshop', heroText: 'Chọn món, gửi đơn và theo dõi trạng thái ngay tại bàn.',
         homeCardTitle: 'Dành cho khách tại quán', homeFeatureMenu: 'Quét QR trên bàn để gọi món', homeFeatureStatus: 'Theo dõi đơn bằng mã đơn',
         openMenu: 'Quét QR tại bàn', staffLogin: 'Nhân viên', checkOrder: 'Kiểm tra đơn',
+        scanTableQrEyebrow: 'Gọi món tại bàn', scanTableQrText: 'Quét mã QR trên bàn để mở thực đơn.', scanTableQrButton: 'Quét QR tại bàn',
+        scanTableQrHint: 'Đưa mã QR trên bàn vào giữa khung hình.', scanStarting: 'Đang mở camera...', stopScan: 'Dừng quét',
+        cameraUnsupported: 'Trình duyệt này không hỗ trợ mở camera.', cameraPermissionError: 'Không mở được camera. Hãy cấp quyền camera hoặc dùng HTTPS.', invalidTableQr: 'QR này không thuộc bàn đang hoạt động.', tableQrDetected: 'Đã nhận bàn, đang mở thực đơn...',
         roleChoose: 'Vị trí', pin: 'Mã PIN', demoPins: '',
         table: 'Bàn', quantity: 'Số lượng', size: 'Size', cart: 'Giỏ hàng', sendOrder: 'Gửi đơn', total: 'Tổng tiền',
         counterOrder: 'Gọi món tại quầy', orderForTable: 'Gọi món cho bàn', orderCreated: 'Đã tạo đơn',
@@ -22,12 +26,16 @@ const dict = {
         searchMenu: 'Tìm món, ví dụ: cà phê sữa...', all: 'Tất cả', addToCart: 'Thêm vào giỏ',
         cartSummary: 'Xem giỏ hàng', tableHelp: 'Chọn bàn trước khi gửi đơn',
         checkout: 'Xác nhận gọi món', orderSent: 'Đơn đã gửi cho quán', viewStatus: 'Theo dõi đơn',
+        confirmOrderTitle: 'Xác nhận gọi món', confirmOrderText: 'Kiểm tra lại giỏ hàng trước khi gửi đơn cho quầy.',
+        holdToOrder: 'Giữ 1 giây để gửi đơn', releaseToCancel: 'Thả tay để huỷ thao tác', orderConfirmItems: 'Số món', orderConfirmTotal: 'Tổng thanh toán',
         remove: 'Bỏ món', cartNote: 'Ghi chú cho quán', noMenu: 'Không thấy món phù hợp',
         noOrder: 'Chưa có đơn nào', nextStep: 'Chuyển trạng thái',
         newBaristaWork: 'Có đơn mới chờ pha chế',
         newCashierWork: 'Có đơn mới chờ thanh toán',
         newWaiterWork: 'Có việc mới cho bồi bàn',
         statusMoveFailed: 'Không chuyển được trạng thái',
+        paymentBlockedUntilServed: 'Bàn còn món chưa phục vụ, chưa thể thanh toán.',
+        pendingTableItems: 'Món chưa ra bàn',
         pendingColumn: 'Chờ xử lý', preparingColumn: 'Đang pha', readyColumn: 'Sẵn sàng', servedColumn: 'Đã phục vụ',
         serveColumn: 'Phục vụ', cleaningColumn: 'Chờ dọn',
         unpaid: 'Chưa thanh toán', paid: 'Đã thanh toán',
@@ -68,6 +76,9 @@ const dict = {
         heroEyebrow: 'Order at your table', heroTitle: 'coffeshop', heroText: 'Choose, order, and follow your drinks from the table.',
         homeCardTitle: 'For in-store guests', homeFeatureMenu: 'Scan the table QR to order', homeFeatureStatus: 'Track your order by code',
         openMenu: 'Scan table QR', staffLogin: 'Staff', checkOrder: 'Check order',
+        scanTableQrEyebrow: 'Order at your table', scanTableQrText: 'Scan the QR code on your table to open the menu.', scanTableQrButton: 'Scan table QR',
+        scanTableQrHint: 'Place the table QR code inside the frame.', scanStarting: 'Opening camera...', stopScan: 'Stop scanning',
+        cameraUnsupported: 'This browser cannot open the camera.', cameraPermissionError: 'Could not open the camera. Allow camera access or use HTTPS.', invalidTableQr: 'This QR code is not an active table QR.', tableQrDetected: 'Table detected, opening the menu...',
         roleChoose: 'Position', pin: 'PIN', demoPins: '',
         table: 'Table', quantity: 'Quantity', size: 'Size', cart: 'Cart', sendOrder: 'Send order', total: 'Total',
         counterOrder: 'Counter order', orderForTable: 'Order for table', orderCreated: 'Order created',
@@ -83,12 +94,16 @@ const dict = {
         searchMenu: 'Search drinks, for example: milk coffee...', all: 'All', addToCart: 'Add to cart',
         cartSummary: 'View cart', tableHelp: 'Choose a table before sending the order',
         checkout: 'Confirm order', orderSent: 'Order sent to the counter', viewStatus: 'Track order',
+        confirmOrderTitle: 'Confirm order', confirmOrderText: 'Review your cart before sending it to the counter.',
+        holdToOrder: 'Hold 1 second to order', releaseToCancel: 'Release to cancel', orderConfirmItems: 'Items', orderConfirmTotal: 'Total',
         remove: 'Remove', cartNote: 'Note for the cafe', noMenu: 'No matching items',
         noOrder: 'No orders yet', nextStep: 'Move status',
         newBaristaWork: 'New order waiting for barista',
         newCashierWork: 'New order waiting for payment',
         newWaiterWork: 'New waiter task',
         statusMoveFailed: 'Could not move status',
+        paymentBlockedUntilServed: 'This table still has unserved items.',
+        pendingTableItems: 'Unserved items',
         pendingColumn: 'Pending', preparingColumn: 'Preparing', readyColumn: 'Ready', servedColumn: 'Served',
         serveColumn: 'Serve', cleaningColumn: 'Clean',
         unpaid: 'Unpaid', paid: 'Paid',
@@ -126,11 +141,42 @@ const dict = {
 
 function lang() { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'vi'; }
 function t(key) { return (dict[lang()] && dict[lang()][key]) || key; }
+function tabSessionId() {
+    let id = sessionStorage.getItem(TAB_SESSION_KEY);
+    if (!id) {
+        id = (window.crypto && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : 'tab-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem(TAB_SESSION_KEY, id);
+    }
+    return id;
+}
+function withTab(url) {
+    if (!url || url.startsWith('#') || url.startsWith('javascript:') || url.startsWith('mailto:') || url.startsWith('tel:')) return url;
+    try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.origin !== window.location.origin) return url;
+        if (!parsed.pathname.endsWith('.jsp')) return url;
+        parsed.searchParams.set('tabSession', tabSessionId());
+        return parsed.pathname.split('/').pop() + parsed.search + parsed.hash;
+    } catch (err) {
+        return url;
+    }
+}
 function api(path, options) {
-    return fetch('api' + path, Object.assign({ credentials: 'same-origin' }, options || {}));
+    const opts = Object.assign({}, options || {});
+    const headers = new Headers(opts.headers || {});
+    headers.set('X-Tab-Session', tabSessionId());
+    opts.headers = headers;
+    opts.credentials = 'same-origin';
+    return fetch('api' + path, opts);
 }
 function money(value) {
-    return new Intl.NumberFormat(lang() === 'en' ? 'en-US' : 'vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0);
+    const amount = Number(value || 0);
+    const formatted = new Intl.NumberFormat(lang() === 'en' ? 'en-US' : 'vi-VN', {
+        maximumFractionDigits: 0
+    }).format(amount);
+    return lang() === 'en' ? `VND ${formatted}` : `${formatted} đ`;
 }
 function statusText(status) {
     const map = { Pending: 'pending', Preparing: 'preparing', Ready: 'ready', Served: 'served', Paid: 'paid', Cleared: 'cleared' };
@@ -156,6 +202,11 @@ function toggleLang() {
 function applyI18n() {
     document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = t(el.dataset.i18nPlaceholder));
+    document.querySelectorAll('[data-category-option]').forEach(option => option.textContent = categoryText(option.value));
+    document.querySelectorAll('a[href]').forEach(link => {
+        const href = link.getAttribute('href');
+        if (href && href.includes('.jsp')) link.setAttribute('href', withTab(href));
+    });
     const select = document.getElementById('lang-select');
     if (select) select.value = lang();
     const toggle = document.getElementById('lang-toggle');
@@ -172,36 +223,36 @@ function nav(role) {
     const runner = role === 'runner';
     if (admin) {
         return `
-            <a class="link" href="dashboard.jsp" data-i18n="dashboard">${t('dashboard')}</a>
-            <a class="link" href="admin-tables.jsp" data-i18n="tablesAdmin">${t('tablesAdmin')}</a>
-            <a class="link" href="admin-menu.jsp" data-i18n="menuAdmin">${t('menuAdmin')}</a>
-            <a class="link" href="staff-orders.jsp" data-i18n="staffOrders">${t('staffOrders')}</a>
-            <a class="link" href="cashier.jsp" data-i18n="cashier">${t('cashier')}</a>
-            <a class="link" href="counter-order.jsp" data-i18n="counterOrder">${t('counterOrder')}</a>
-            <a class="link" href="runner.jsp" data-i18n="runner">${t('runner')}</a>
-            <a class="link" href="table-transfer.jsp" data-i18n="transferTable">${t('transferTable')}</a>
-            <a class="link" href="system-logs.jsp" data-i18n="systemLogs">${t('systemLogs')}</a>
+            <a class="link" href="${withTab('dashboard.jsp')}" data-i18n="dashboard">${t('dashboard')}</a>
+            <a class="link" href="${withTab('admin-tables.jsp')}" data-i18n="tablesAdmin">${t('tablesAdmin')}</a>
+            <a class="link" href="${withTab('admin-menu.jsp')}" data-i18n="menuAdmin">${t('menuAdmin')}</a>
+            <a class="link" href="${withTab('staff-orders.jsp')}" data-i18n="staffOrders">${t('staffOrders')}</a>
+            <a class="link" href="${withTab('cashier.jsp')}" data-i18n="cashier">${t('cashier')}</a>
+            <a class="link" href="${withTab('counter-order.jsp')}" data-i18n="counterOrder">${t('counterOrder')}</a>
+            <a class="link" href="${withTab('runner.jsp')}" data-i18n="runner">${t('runner')}</a>
+            <a class="link" href="${withTab('table-transfer.jsp')}" data-i18n="transferTable">${t('transferTable')}</a>
+            <a class="link" href="${withTab('system-logs.jsp')}" data-i18n="systemLogs">${t('systemLogs')}</a>
             <button class="btn danger" onclick="logout()" data-i18n="logout">${t('logout')}</button>
         `;
     }
     if (barista) {
         return `
-            <a class="link" href="staff-orders.jsp" data-i18n="staffOrders">${t('staffOrders')}</a>
+            <a class="link" href="${withTab('staff-orders.jsp')}" data-i18n="staffOrders">${t('staffOrders')}</a>
             <button class="btn danger" onclick="logout()" data-i18n="logout">${t('logout')}</button>
         `;
     }
     if (cashier) {
         return `
-            <a class="link" href="cashier.jsp" data-i18n="cashier">${t('cashier')}</a>
-            <a class="link" href="counter-order.jsp" data-i18n="counterOrder">${t('counterOrder')}</a>
-            <a class="link" href="table-transfer.jsp" data-i18n="transferTable">${t('transferTable')}</a>
+            <a class="link" href="${withTab('cashier.jsp')}" data-i18n="cashier">${t('cashier')}</a>
+            <a class="link" href="${withTab('counter-order.jsp')}" data-i18n="counterOrder">${t('counterOrder')}</a>
+            <a class="link" href="${withTab('table-transfer.jsp')}" data-i18n="transferTable">${t('transferTable')}</a>
             <button class="btn danger" onclick="logout()" data-i18n="logout">${t('logout')}</button>
         `;
     }
     if (runner) {
         return `
-            <a class="link" href="runner.jsp" data-i18n="runner">${t('runner')}</a>
-            <a class="link" href="table-transfer.jsp" data-i18n="transferTable">${t('transferTable')}</a>
+            <a class="link" href="${withTab('runner.jsp')}" data-i18n="runner">${t('runner')}</a>
+            <a class="link" href="${withTab('table-transfer.jsp')}" data-i18n="transferTable">${t('transferTable')}</a>
             <button class="btn danger" onclick="logout()" data-i18n="logout">${t('logout')}</button>
         `;
     }
@@ -211,8 +262,8 @@ function nav(role) {
         ? `order-status.jsp?tableCode=${encodeURIComponent(tableCode)}`
         : (tableName ? `order-status.jsp?table=${encodeURIComponent(tableName)}` : 'order-status.jsp');
     return `
-        <a class="link" href="menu.jsp" data-i18n="order">${t('order')}</a>
-        <a class="link" href="${statusHref}" data-i18n="status">${t('status')}</a>
+        <a class="link" href="${withTab('menu.jsp')}" data-i18n="order">${t('order')}</a>
+        <a class="link" href="${withTab(statusHref)}" data-i18n="status">${t('status')}</a>
     `;
 }
 async function loadNav() {
@@ -228,7 +279,7 @@ async function loadNav() {
             cashier: 'cashier.jsp',
             runner: 'runner.jsp'
         };
-        brand.href = homeByRole[session.role] || 'index.html';
+        brand.href = session.role ? withTab(homeByRole[session.role]) : 'index.html';
     }
     applyI18n();
 }
@@ -264,7 +315,7 @@ async function logout() {
         }
     }
     await api('/auth/logout', { method: 'POST' });
-    window.location.href = redirectTarget;
+    window.location.href = withTab(redirectTarget);
 }
 
 function parseMoneyInput(value) {
@@ -348,7 +399,7 @@ async function goBackToWork(defaultPage) {
     const target = (lastPage && (!allowed.length || allowed.includes(lastPage)))
         ? lastPage
         : (fallbackByRole[role] || defaultPage || 'staff-login.jsp');
-    window.location.href = target;
+    window.location.href = withTab(target);
 }
 
 function notifyWork(message) {
