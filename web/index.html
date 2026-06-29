@@ -4,12 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=qr-index-1">
-    <script defer src="assets/js/i18n.js?v=qr-index-1"></script>
-    <script defer src="assets/js/jsQR.js?v=1.4.0"></script>
-    <script defer src="assets/js/page-index.js?v=qr-index-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=debug-index-1">
+    <script defer src="assets/js/i18n.js?v=debug-index-1"></script>
 </head>
-<body class="home-page qr-entry-page">
+<body class="home-page">
     <nav class="nav home-nav">
         <div class="nav-inner home-nav-inner">
             <a class="brand" href="index.html">coffeshop</a>
@@ -19,26 +17,15 @@
         </div>
     </nav>
 
-    <main class="qr-entry-shell">
-        <section class="qr-entry-hero">
-            <div class="qr-entry-copy">
-                <p class="home-kicker" data-i18n="scanTableQrEyebrow">Gọi món tại bàn</p>
-                <h1>coffeshop</h1>
-                <p data-i18n="scanTableQrText">Quét mã QR trên bàn để mở thực đơn.</p>
+    <main class="home-shell">
+        <section class="home-copy">
+            <h1>coffeshop</h1>
+
+            <div class="home-actions">
+                <a class="btn primary" href="guest.html" data-i18n="guestEntry">Khách</a>
+                <a class="btn home-secondary" href="staff-login.jsp" data-i18n="staffEntry">Nhân viên</a>
+                <a class="btn dark" href="dashboard.jsp" data-i18n="adminEntry">Admin</a>
             </div>
-
-            <section class="qr-scan-panel" id="qr-scan-panel">
-                <button class="btn primary big block scan-main-button" type="button" id="start-scan" data-i18n="scanTableQrButton">Quét QR tại bàn</button>
-
-                <div class="qr-camera hidden" id="qr-camera">
-                    <video id="qr-video" playsinline muted></video>
-                    <div class="qr-frame" aria-hidden="true"></div>
-                    <canvas id="qr-canvas" class="hidden"></canvas>
-                </div>
-
-                <div class="qr-scan-status" id="qr-scan-status" data-i18n="scanTableQrHint">Đưa mã QR trên bàn vào giữa khung hình.</div>
-                <button class="btn block hidden" type="button" id="stop-scan" data-i18n="stopScan">Dừng quét</button>
-            </section>
         </section>
     </main>
 </body>
