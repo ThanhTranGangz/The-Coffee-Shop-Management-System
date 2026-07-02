@@ -26,6 +26,22 @@
         <section class="work-tabs two-tabs" id="cashier-tabs"></section>
         <section class="order-list" id="cashier-orders"></section>
     </main>
-    <script src="assets/js/page-cashier.js?v=order-confirm-1"></script>
+
+    <div class="overlay" id="split-overlay" onclick="closeSplit()"></div>
+    <aside class="sheet" id="split-sheet" aria-hidden="true">
+        <div class="sheet-in">
+            <div class="sheet-grip"></div>
+            <h3 data-i18n="splitTitle">Tách hóa đơn</h3>
+            <p class="muted" data-i18n="splitHint">Chọn số lượng mỗi món để tách sang hóa đơn mới.</p>
+            <div id="split-rows"></div>
+            <div id="split-message" class="notice hidden"></div>
+            <div class="links" style="margin-top:14px">
+                <button class="btn" type="button" onclick="closeSplit()" data-i18n="cancel">Huỷ</button>
+                <button class="btn primary" type="button" onclick="confirmSplit()" data-i18n="splitConfirm">Xác nhận tách</button>
+            </div>
+        </div>
+    </aside>
+
+    <script src="assets/js/page-cashier.js?v=split-bill-1"></script>
 </body>
 </html>

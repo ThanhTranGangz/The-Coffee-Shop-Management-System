@@ -32,6 +32,7 @@ public class LiteService {
             st.execute("IF COL_LENGTH('dbo.MenuItems','imagePath') IS NULL ALTER TABLE dbo.MenuItems ADD imagePath VARCHAR(255) NULL");
             st.execute("IF OBJECT_ID('dbo.MenuItemSizes','U') IS NULL CREATE TABLE dbo.MenuItemSizes (id INT IDENTITY PRIMARY KEY, menuItemId INT NOT NULL, sizeName NVARCHAR(20) NOT NULL, extraPrice INT NOT NULL DEFAULT 0, sortOrder INT NOT NULL DEFAULT 0, FOREIGN KEY(menuItemId) REFERENCES dbo.MenuItems(id))");
             st.execute("IF OBJECT_ID('dbo.Orders','U') IS NULL CREATE TABLE dbo.Orders (id INT IDENTITY PRIMARY KEY, orderNumber INT NULL UNIQUE, tableName NVARCHAR(60) NOT NULL, customerPhone VARCHAR(20) NULL, status VARCHAR(30) NOT NULL DEFAULT 'Pending', total INT NOT NULL DEFAULT 0, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
+            st.execute("IF COL_LENGTH('dbo.Orders','splitLocked') IS NULL ALTER TABLE dbo.Orders ADD splitLocked BIT NOT NULL DEFAULT 0");
             st.execute("IF OBJECT_ID('dbo.OrderItems','U') IS NULL CREATE TABLE dbo.OrderItems (id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, menuItemId INT NOT NULL, itemName NVARCHAR(120) NOT NULL, itemSize VARCHAR(20) NULL, quantity INT NOT NULL, price INT NOT NULL, FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
             st.execute("IF COL_LENGTH('dbo.OrderItems','itemSize') IS NULL ALTER TABLE dbo.OrderItems ADD itemSize VARCHAR(20) NULL");
             st.execute("ALTER TABLE dbo.OrderItems ALTER COLUMN itemSize VARCHAR(20) NULL");
@@ -387,6 +388,30 @@ public class LiteService {
                 return item;
             }
         }
+    }
+
+    public Map<String, Object> importMenuItems(List<Map<String, Object>> rows) {
+        List<Map<String, Object>> imported = new ArrayList<>();
+        List<Map<String, Object>> skipped = new ArrayList<>();
+        int rowNumber = 1;
+        for (Map<String, Object> data : rows) {
+            rowNumber++;
+            try {
+                imported.add(saveMenuItem(data));
+            } catch (Exception e) {
+                Map<String, Object> failure = new LinkedHashMap<>();
+                failure.put("row", rowNumber);
+                failure.put("nameVi", readString(data.get("nameVi"), ""));
+                failure.put("reason", e.getMessage());
+                skipped.add(failure);
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("importedCount", imported.size());
+        result.put("skippedCount", skipped.size());
+        result.put("imported", imported);
+        result.put("skipped", skipped);
+        return result;
     }
 
     private void validateMenuItem(int id, String nameVi, String nameEn, String category, int price, String imagePath) {
@@ -1034,7 +1059,7 @@ public class LiteService {
 
     private int consolidateServedBillsForTable(Connection con, String tableName, int preferredOrderId, String actorRole, String actorName) throws Exception {
         List<Integer> servedIds = new ArrayList<>();
-        try (PreparedStatement ps = con.prepareStatement("SELECT id FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE tableName=? AND status='Served' ORDER BY id")) {
+        try (PreparedStatement ps = con.prepareStatement("SELECT id FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE tableName=? AND status='Served' AND splitLocked=0 ORDER BY id")) {
             ps.setString(1, tableName);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) servedIds.add(rs.getInt("id"));
@@ -1139,6 +1164,160 @@ public class LiteService {
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt("id") : 0;
             }
+        }
+    }
+
+    public Map<String, Object> splitOrder(int sourceOrderId, List<Map<String, Object>> selections, String actorRole, String actorName) throws Exception {
+        if (selections == null || selections.isEmpty()) {
+            throw new IllegalArgumentException("Chưa chọn món nào để tách.");
+        }
+        // Gộp số lượng theo orderItemId để tránh trùng dòng trong lựa chọn.
+        Map<Integer, Integer> wanted = new LinkedHashMap<>();
+        for (Map<String, Object> sel : selections) {
+            int itemId = readInt(sel.get("id"), 0);
+            int qty = readInt(sel.get("quantity"), 0);
+            if (itemId <= 0 || qty <= 0) continue;
+            wanted.merge(itemId, qty, Integer::sum);
+        }
+        if (wanted.isEmpty()) {
+            throw new IllegalArgumentException("Số lượng tách không hợp lệ.");
+        }
+
+        try (Connection con = db.getConnection()) {
+            con.setAutoCommit(false);
+
+            int sourceNumber;
+            String tableName;
+            try (PreparedStatement ps = con.prepareStatement("SELECT orderNumber, tableName FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=? AND status='Served'")) {
+                ps.setInt(1, sourceOrderId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new IllegalArgumentException("Chỉ tách được hóa đơn đang chờ thanh toán.");
+                    sourceNumber = rs.getInt("orderNumber");
+                    tableName = rs.getString("tableName");
+                }
+            }
+
+            // Đọc & khóa các dòng của đơn nguồn.
+            Map<Integer, Map<String, Object>> sourceLines = new LinkedHashMap<>();
+            try (PreparedStatement ps = con.prepareStatement("SELECT id, menuItemId, itemName, itemSize, quantity, price FROM dbo.OrderItems WITH (UPDLOCK, ROWLOCK) WHERE orderId=? ORDER BY id")) {
+                ps.setInt(1, sourceOrderId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    for (Map<String, Object> line : rows(rs)) {
+                        sourceLines.put(readInt(line.get("id"), 0), line);
+                    }
+                }
+            }
+            if (sourceLines.isEmpty()) throw new IllegalArgumentException("Hóa đơn nguồn không có món.");
+
+            // Validate lựa chọn thuộc đơn nguồn và số lượng hợp lệ; đồng thời kiểm tra không tách hết mọi thứ.
+            boolean leavesRemainder = false;
+            for (Map.Entry<Integer, Map<String, Object>> entry : sourceLines.entrySet()) {
+                int available = readInt(entry.getValue().get("quantity"), 0);
+                int take = wanted.getOrDefault(entry.getKey(), 0);
+                if (take < available) leavesRemainder = true;
+            }
+            for (Map.Entry<Integer, Integer> req : wanted.entrySet()) {
+                Map<String, Object> line = sourceLines.get(req.getKey());
+                if (line == null) throw new IllegalArgumentException("Món tách không thuộc hóa đơn này.");
+                int available = readInt(line.get("quantity"), 0);
+                if (req.getValue() > available) {
+                    throw new IllegalArgumentException("Số lượng tách vượt quá số lượng của món.");
+                }
+            }
+            if (!leavesRemainder) {
+                throw new IllegalArgumentException("Phải để lại ít nhất 1 món trên hóa đơn gốc.");
+            }
+
+            // Tạo hóa đơn mới (đã khóa để tránh auto-gộp lại).
+            int newId;
+            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total,status,splitLocked) VALUES (?,NULL,?,0,'Served',1)", Statement.RETURN_GENERATED_KEYS)) {
+                ps.setString(1, tableName);
+                ps.setString(2, limitNote("Tách từ #" + sourceNumber));
+                ps.executeUpdate();
+                try (ResultSet keys = ps.getGeneratedKeys()) {
+                    keys.next();
+                    newId = keys.getInt(1);
+                }
+            }
+
+            // Chuyển số lượng sang hóa đơn mới.
+            for (Map.Entry<Integer, Integer> req : wanted.entrySet()) {
+                Map<String, Object> line = sourceLines.get(req.getKey());
+                int take = req.getValue();
+                int available = readInt(line.get("quantity"), 0);
+                if (take >= available) {
+                    try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.OrderItems WHERE id=?")) {
+                        ps.setInt(1, req.getKey());
+                        ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.OrderItems SET quantity=quantity-? WHERE id=?")) {
+                        ps.setInt(1, take);
+                        ps.setInt(2, req.getKey());
+                        ps.executeUpdate();
+                    }
+                }
+                int menuItemId = readInt(line.get("menuItemId"), 0);
+                String size = readString(line.get("itemSize"), "");
+                int price = readInt(line.get("price"), 0);
+                int existingId = findMatchingOrderItem(con, newId, menuItemId, size, price);
+                if (existingId > 0) {
+                    try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.OrderItems SET quantity=quantity+? WHERE id=?")) {
+                        ps.setInt(1, take);
+                        ps.setInt(2, existingId);
+                        ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.OrderItems (orderId,menuItemId,itemName,itemSize,quantity,price) VALUES (?,?,?,?,?,?)")) {
+                        ps.setInt(1, newId);
+                        ps.setInt(2, menuItemId);
+                        ps.setString(3, readString(line.get("itemName"), ""));
+                        ps.setString(4, size.isEmpty() ? null : size);
+                        ps.setInt(5, take);
+                        ps.setInt(6, price);
+                        ps.executeUpdate();
+                    }
+                }
+            }
+
+            // Tính lại tổng cho cả hai hóa đơn và khóa đơn gốc khỏi auto-gộp.
+            updateOrderTotal(con, sourceOrderId);
+            updateOrderTotal(con, newId);
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET orderNumber=?, splitLocked=1 WHERE id=?")) {
+                ps.setInt(1, 1000 + newId);
+                ps.setInt(2, newId);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET splitLocked=1 WHERE id=?")) {
+                ps.setInt(1, sourceOrderId);
+                ps.executeUpdate();
+            }
+
+            insertSystemLog(con, actorRole, actorName, "ORDER_SPLIT",
+                    "Tách hóa đơn #" + sourceNumber + " thành hóa đơn mới #" + (1000 + newId) + " tại " + tableName + " lúc " + nowLabelVi(),
+                    "Split bill #" + sourceNumber + " into new bill #" + (1000 + newId) + " at " + tableName + " at " + nowLabelEn(),
+                    newId);
+            con.commit();
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("source", getOrderById(sourceOrderId));
+            result.put("created", getOrderById(newId));
+            return result;
+        }
+    }
+
+    private void updateOrderTotal(Connection con, int orderId) throws Exception {
+        int total = 0;
+        try (PreparedStatement ps = con.prepareStatement("SELECT ISNULL(SUM(quantity*price),0) AS total FROM dbo.OrderItems WHERE orderId=?")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) total = rs.getInt("total");
+            }
+        }
+        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET total=? WHERE id=?")) {
+            ps.setInt(1, total);
+            ps.setInt(2, orderId);
+            ps.executeUpdate();
         }
     }
 

@@ -12,12 +12,19 @@
     <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html">coffeshop</a><div class="links" id="nav-links"></div><button id="lang-toggle" class="link lang-toggle" type="button" onclick="toggleLang()">EN</button></div></nav>
     <main class="shell work-shell">
         <div class="work-toolbar">
-            <button class="btn primary" onclick="resetForm()" data-i18n="addNew">Thêm mới</button>
+            <button class="btn primary" onclick="resetForm(); openEditSheet();" data-i18n="addNew">Thêm mới</button>
+            <button class="btn" type="button" onclick="downloadImportTemplate()" data-i18n="downloadTemplate">Tải file mẫu</button>
+            <button class="btn" type="button" onclick="document.getElementById('import-file').click()" data-i18n="importExcel">Import từ Excel</button>
+            <input type="file" id="import-file" accept=".xlsx,.xls" style="display:none" onchange="importExcelFile(event)">
         </div>
         <div class="grid side">
             <section class="menu-grid" id="items"></section>
-            <aside class="card">
-                <h2 id="form-title" data-i18n="itemInfo">Thông tin món</h2>
+            <div class="overlay" id="form-overlay"></div>
+            <aside class="card" id="edit-panel">
+                <div class="form-panel-head">
+                    <h2 id="form-title" data-i18n="itemInfo">Thông tin món</h2>
+                    <button type="button" class="btn form-panel-close" onclick="resetForm(); closeEditSheet();" data-i18n="cancel">Huỷ</button>
+                </div>
                 <form class="grid" onsubmit="saveItem(event)">
                     <input id="id" type="hidden">
                     <div><label data-i18n="nameVi">Tên tiếng Việt</label><input id="nameVi" minlength="2" maxlength="80" required></div>
@@ -48,6 +55,6 @@
             </aside>
         </div>
     </main>
-    <script src="assets/js/page-admin-menu.js?v=order-confirm-1"></script>
+    <script src="assets/js/page-admin-menu.js?v=edit-sheet-1"></script>
 </body>
 </html>

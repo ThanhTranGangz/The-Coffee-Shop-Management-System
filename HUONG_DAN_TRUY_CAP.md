@@ -38,7 +38,7 @@ http://192.168.1.10:8080/The-Coffee-Shop-Management-System-main/
 Khách quét QR trên bàn để vào menu đúng bàn:
 
 ```text
-http://localhost:8080/The-Coffee-Shop-Management-System-main/menu.jsp?tableCode=MA_BAN
+  http://localhost:8080/The-Coffee-Shop-Management-System-main/menu.jsp?tableCode=MA_BAN
 ```
 
 Trong thực tế không cần tự nhập `tableCode`. Admin vào mục `Bàn & QR` để tải QR riêng của từng bàn. Khi khách quét QR, hệ thống tự nhận bàn và khách không đổi bàn được trong giao diện gọi món.

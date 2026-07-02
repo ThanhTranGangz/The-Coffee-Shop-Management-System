@@ -6,7 +6,25 @@
             'Bánh ngọt': 'assets/img/menu/pastry.jpg'
         };
 
-        document.addEventListener('DOMContentLoaded', loadItems);
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('form-overlay').addEventListener('click', closeEditSheet);
+            loadItems();
+        });
+
+        function isMobile() {
+            return window.matchMedia('(max-width: 760px)').matches;
+        }
+
+        function openEditSheet() {
+            if (!isMobile()) return;
+            document.getElementById('form-overlay').classList.add('show');
+            document.getElementById('edit-panel').classList.add('show');
+        }
+
+        function closeEditSheet() {
+            document.getElementById('form-overlay').classList.remove('show');
+            document.getElementById('edit-panel').classList.remove('show');
+        }
 
         async function loadItems() {
             const res = await api('/menu');
@@ -45,6 +63,7 @@
             document.getElementById('hasSizes').checked = Array.isArray(item.sizes) && item.sizes.length > 0;
             renderSizeRows(item.sizes || []);
             hideMessage();
+            openEditSheet();
         }
 
         function resetForm() {
@@ -136,6 +155,50 @@
                 return;
             }
             resetForm();
+            closeEditSheet();
+            loadItems();
+        }
+
+        async function downloadImportTemplate() {
+            const res = await api('/menu/import-template');
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                alert(err.error || t('orderError'));
+                return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mau-import-thuc-don.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        async function importExcelFile(event) {
+            const input = event.target;
+            const file = input.files && input.files[0];
+            input.value = '';
+            if (!file) {
+                alert(t('importNoFile'));
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api('/menu/import', { method: 'POST', body: formData });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(result.error || t('orderError'));
+                return;
+            }
+            let msg = `${t('importDone')}: ${result.importedCount}`;
+            if (result.skippedCount) {
+                msg += `\n${t('importSkipped')}: ${result.skippedCount}`;
+                msg += '\n' + result.skipped.map(s => `- #${s.row} ${s.nameVi || ''}: ${s.reason}`).join('\n');
+            }
+            alert(msg);
             loadItems();
         }
 

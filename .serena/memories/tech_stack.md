@@ -1,0 +1,8 @@
+- Java Servlet/JSP (Jakarta EE, `web-app` schema version 6.0) — no Spring, no Maven.
+- Build: Ant via NetBeans-generated `nbproject/build-impl.xml` (`build.xml` just imports it). Not a hand-maintained Ant script.
+- Jars vendored manually in `lib/` (no dependency manager): `sqljdbc42.jar` (SQL Server JDBC), `zxing-core-3.5.3.jar` (QR SVG generation, used only in `LiteApiServlet.writeTableQr`/`qrSvg`), `jakarta.servlet.jsp.jstl-*.jar`, `jaxb-api-2.1.jar`. Registered in `nbproject/project.properties` (`file.reference.*`, `javac.classpath`) and copied to `WEB-INF/lib` per `nbproject/project.xml`. If a fresh checkout shows red imports for zxing/sqlserver in NetBeans, check `lib/` + these two project files first.
+- DB: Microsoft SQL Server. Connection info duplicated in THREE places that must stay in sync: `ConnectDB.properties` (serverName/portNumber/databaseName/user/password), `src/java/db.properties` (db.* prefixed, same values), and hardcoded defaults inside `src/java/context/DBContext.java`. Default DB name is `CoffeeShopLite`; `DBContext.ensureDatabase()` auto-creates it on first connect if missing.
+- No JSON library (no Gson/Jackson) — hand-rolled `src/java/utils/JsonUtils.java` for both serialize and parse. Good enough for demo payload shapes only.
+- Frontend: vanilla JS, no framework/bundler. Pages render via `element.innerHTML` template strings; manual `escapeHtml`/`escapeAttr`/`escapeJs` calls required wherever untrusted data is interpolated.
+- No automated test suite exists in this repo.
+- Server target: Apache Tomcat 10.

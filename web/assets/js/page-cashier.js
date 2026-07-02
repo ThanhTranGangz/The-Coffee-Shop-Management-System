@@ -4,6 +4,8 @@
         let knownPayableIds = new Set();
         let shownWithdrawalIds = new Set();
         let firstLoad = true;
+        let currentOrders = [];
+        let splitOrderId = 0;
 
         document.addEventListener('DOMContentLoaded', () => {
             rememberWorkPage('cashier.jsp');
@@ -45,6 +47,7 @@
         async function loadOrders(options = {}) {
             const orderRes = await api('/orders?view=cashier');
             const orders = await orderRes.json();
+            currentOrders = Array.isArray(orders) ? orders : [];
             maybeNotify(orders, options.silent === true);
             renderTabs(orders);
             const visibleOrders = filterOrders(orders);
@@ -113,7 +116,16 @@
                         <span data-i18n="total">${t('total')}</span>
                         <b class="price">${money(order.total)}</b>
                     </div>
+                    ${order.status === 'Served' && splittableUnits(order) >= 2 ? `<div class="links" style="margin-top:10px">
+                        <button class="btn split-btn" type="button"
+                            onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"
+                            onclick="event.stopPropagation(); openSplit(${order.id})">${t('splitBill')}</button>
+                    </div>` : ''}
                 </article>`;
+        }
+
+        function splittableUnits(order) {
+            return (order.items || []).reduce((sum, it) => sum + Number(it.quantity || 0), 0);
         }
 
         function isPayableOrder(order) {
@@ -174,6 +186,70 @@
             holdTimer = null;
             if (holdingCard) holdingCard.classList.remove('holding');
             holdingCard = null;
+        }
+
+        function openSplit(id) {
+            const order = currentOrders.find(o => Number(o.id) === Number(id));
+            if (!order) return;
+            splitOrderId = Number(id);
+            hideSplitMessage();
+            document.getElementById('split-rows').innerHTML = (order.items || []).map(it => `
+                <div class="size-row split-row" data-item-id="${it.id}" data-max="${Number(it.quantity || 0)}">
+                    <span>${escapeHtml(it.itemName)}${it.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(it.itemSize) : ''} <b class="price">${money(it.price)}</b></span>
+                    <input type="number" min="0" max="${Number(it.quantity || 0)}" value="0" inputmode="numeric" aria-label="${t('splitToNewBill')}">
+                    <span class="status served">/ ${Number(it.quantity || 0)}</span>
+                </div>
+            `).join('');
+            document.getElementById('split-overlay').classList.add('show');
+            document.getElementById('split-sheet').classList.add('show');
+            document.getElementById('split-sheet').setAttribute('aria-hidden', 'false');
+        }
+
+        function closeSplit() {
+            splitOrderId = 0;
+            document.getElementById('split-overlay').classList.remove('show');
+            document.getElementById('split-sheet').classList.remove('show');
+            document.getElementById('split-sheet').setAttribute('aria-hidden', 'true');
+        }
+
+        async function confirmSplit() {
+            if (!splitOrderId) return;
+            const items = [];
+            document.querySelectorAll('#split-rows .split-row').forEach(row => {
+                const input = row.querySelector('input');
+                const max = Number(row.dataset.max || 0);
+                let qty = Math.floor(Number(input.value || 0));
+                if (qty < 0) qty = 0;
+                if (qty > max) qty = max;
+                if (qty > 0) items.push({ id: Number(row.dataset.itemId), quantity: qty });
+            });
+            if (!items.length) {
+                showSplitMessage(t('splitNothing'));
+                return;
+            }
+            const res = await api('/orders/split', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: splitOrderId, items })
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                showSplitMessage(err.error || t('splitFailed'));
+                return;
+            }
+            closeSplit();
+            notifyWork(t('splitDone'));
+            loadOrders({ silent: true });
+        }
+
+        function showSplitMessage(text) {
+            const box = document.getElementById('split-message');
+            box.textContent = text;
+            box.classList.remove('hidden');
+        }
+
+        function hideSplitMessage() {
+            document.getElementById('split-message').classList.add('hidden');
         }
 
         function escapeHtml(value) {

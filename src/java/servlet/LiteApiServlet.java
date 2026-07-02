@@ -5,15 +5,18 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.Part;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import service.LiteService;
+import utils.ExcelUtils;
 import utils.JsonUtils;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -41,6 +44,15 @@ public class LiteApiServlet extends HttpServlet {
         try {
             if ("/tables/qr".equals(path)) {
                 writeTableQr(req, resp);
+                return;
+            }
+            if ("/menu/import-template".equals(path)) {
+                if (!"admin".equals(role(req))) {
+                    json(resp);
+                    error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được tải mẫu import.");
+                    return;
+                }
+                writeMenuImportTemplate(resp);
                 return;
             }
             json(resp);
@@ -119,6 +131,23 @@ public class LiteApiServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         json(resp);
         String path = req.getPathInfo() == null ? "/" : req.getPathInfo();
+        if ("/menu/import".equals(path)) {
+            try {
+                if (!"admin".equals(role(req))) {
+                    error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được import thực đơn.");
+                    return;
+                }
+                Map<String, Object> result = handleMenuImport(req);
+                service.addSystemLog(role(req), user(req), "MENU_IMPORT",
+                        "Admin import " + result.get("importedCount") + " món từ Excel (bỏ qua " + result.get("skippedCount") + " dòng)",
+                        "Admin imported " + result.get("importedCount") + " menu items from Excel (skipped " + result.get("skippedCount") + " rows)",
+                        null);
+                resp.getWriter().write(JsonUtils.toJson(result));
+            } catch (Exception e) {
+                error(resp, HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
+            }
+            return;
+        }
         Map<String, Object> body = JsonUtils.parseObject(readBody(req));
         try {
             switch (path) {
@@ -203,6 +232,15 @@ public class LiteApiServlet extends HttpServlet {
                     }
                     if ("runner".equals(currentRole)) sanitizeRunnerOrder(updatedOrder);
                     resp.getWriter().write(JsonUtils.toJson(updatedOrder));
+                    break;
+                case "/orders/split":
+                    String splitRole = role(req);
+                    if (!"cashier".equals(splitRole) && !"admin".equals(splitRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ thu ngân hoặc admin được tách đơn.");
+                        return;
+                    }
+                    Map<String, Object> splitResult = service.splitOrder(readInt(body.get("id"), 0), splitSelections(body.get("items")), splitRole, user(req));
+                    resp.getWriter().write(JsonUtils.toJson(splitResult));
                     break;
                 case "/menu":
                     Map<String, Object> savedMenu = service.saveMenuItem(body);
@@ -558,6 +596,30 @@ public class LiteApiServlet extends HttpServlet {
         resp.getWriter().write(svg);
     }
 
+    private void writeMenuImportTemplate(HttpServletResponse resp) throws Exception {
+        byte[] bytes = ExcelUtils.buildTemplate();
+        resp.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        resp.setHeader("Content-Disposition", "attachment; filename=\"mau-import-thuc-don.xlsx\"");
+        resp.setContentLength(bytes.length);
+        resp.getOutputStream().write(bytes);
+        resp.getOutputStream().flush();
+    }
+
+    private Map<String, Object> handleMenuImport(HttpServletRequest req) throws Exception {
+        Part filePart = req.getPart("file");
+        if (filePart == null || filePart.getSize() == 0) {
+            throw new IllegalArgumentException("Vui lòng chọn file Excel để import.");
+        }
+        List<Map<String, Object>> rows;
+        try (InputStream in = filePart.getInputStream()) {
+            rows = ExcelUtils.parseMenuRows(in);
+        }
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("Không tìm thấy dòng dữ liệu hợp lệ trong file. Vui lòng dùng file mẫu.");
+        }
+        return service.importMenuItems(rows);
+    }
+
     private String qrSvg(String text, int size) throws Exception {
         EnumMap<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
         hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
@@ -621,6 +683,21 @@ public class LiteApiServlet extends HttpServlet {
         } catch (Exception e) {
             return fallback;
         }
+    }
+
+    private List<Map<String, Object>> splitSelections(Object raw) {
+        List<Map<String, Object>> selections = new ArrayList<>();
+        if (raw instanceof Iterable<?>) {
+            for (Object entry : (Iterable<?>) raw) {
+                if (!(entry instanceof Map<?, ?>)) continue;
+                Map<?, ?> item = (Map<?, ?>) entry;
+                Map<String, Object> selection = new LinkedHashMap<>();
+                selection.put("id", readInt(item.get("id"), 0));
+                selection.put("quantity", readInt(item.get("quantity"), 0));
+                selections.add(selection);
+            }
+        }
+        return selections;
     }
 
     private long readLong(Object value, long fallback) {
