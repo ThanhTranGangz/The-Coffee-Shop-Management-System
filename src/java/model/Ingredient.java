@@ -52,4 +52,15 @@ public class Ingredient {
 
     public int getImportCost() { return importCost; }
     public void setImportCost(int importCost) { this.importCost = importCost; }
+
+    public java.util.Map<String, Object> toMap() {
+        java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+        map.put("id", id);
+        map.put("name", name);
+        map.put("unit", unit);
+        map.put("stock", stock);
+        map.put("minStock", minStock);
+        map.put("importCost", importCost);
+        return map;
+    }
 }

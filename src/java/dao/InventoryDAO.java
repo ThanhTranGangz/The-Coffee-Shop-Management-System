@@ -16,6 +16,78 @@ import java.util.List;
 public class InventoryDAO {
     private List<Ingredient> fallbackInventory = createDefaultInventory();
 
+    public InventoryDAO() {
+        ensureInventoryTable();
+    }
+
+    /**
+     * Kiểm tra và tự động tạo bảng dbo.Inventory trong cơ sở dữ liệu nếu bảng này chưa tồn tại.
+     * Hàm này giúp hệ thống tự động khởi tạo (auto-migration) mà không cần chạy file SQL thủ công.
+     */
+    private void ensureInventoryTable() {
+        DBContext db = new DBContext();
+        // Câu lệnh SQL kiểm tra sự tồn tại của bảng và khởi tạo bảng mới nếu chưa có
+        String sql = "IF OBJECT_ID('dbo.Inventory','U') IS NULL " +
+                     "CREATE TABLE dbo.Inventory (" +
+                     "id VARCHAR(50) PRIMARY KEY, " +
+                     "name NVARCHAR(120) NOT NULL, " +
+                     "unit NVARCHAR(20) NOT NULL, " +
+                     "stock INT NOT NULL DEFAULT 0, " +
+                     "minStock INT NOT NULL DEFAULT 0, " +
+                     "importCost INT NOT NULL DEFAULT 0" +
+                     ");";
+        try (Connection con = db.getConnection();
+             java.sql.Statement st = con.createStatement()) {
+            st.execute(sql);
+        } catch (Exception e) {
+            System.err.println("InventoryDAO.ensureInventoryTable skipped: " + e.getMessage());
+        }
+        // Gọi hàm đổ dữ liệu mặc định ngay sau khi đảm bảo bảng đã được tạo
+        seedDefaultInventoryIfEmpty();
+    }
+
+    /**
+     * Kiểm tra xem bảng dbo.Inventory có đang trống không.
+     * Nếu bảng trống (chưa có dòng dữ liệu nào), hệ thống sẽ tự động thêm (seed) các nguyên liệu cơ bản vào CSDL.
+     */
+    private void seedDefaultInventoryIfEmpty() {
+        DBContext db = new DBContext();
+        String checkSql = "SELECT COUNT(*) AS total FROM dbo.Inventory";
+        try (Connection con = db.getConnection();
+             java.sql.Statement st = con.createStatement();
+             ResultSet rs = st.executeQuery(checkSql)) {
+            
+            // Nếu có kết quả trả về và số lượng = 0 (bảng trống)
+            if (rs.next() && rs.getInt("total") == 0) {
+                List<Ingredient> defaults = createDefaultInventory();
+                String insertSql = "INSERT INTO dbo.Inventory (id, name, unit, stock, minStock, importCost) VALUES (?, ?, ?, ?, ?, ?)";
+                
+                // Mở transaction (setAutoCommit(false)) để đảm bảo nếu insert bị lỗi giữa chừng thì sẽ rollback lại toàn bộ
+                con.setAutoCommit(false);
+                try (PreparedStatement pst = con.prepareStatement(insertSql)) {
+                    for (Ingredient item : defaults) {
+                        pst.setString(1, item.getId());
+                        pst.setString(2, item.getName());
+                        pst.setString(3, item.getUnit());
+                        pst.setInt(4, item.getStock());
+                        pst.setInt(5, item.getMinStock());
+                        pst.setInt(6, item.getImportCost());
+                        // Thêm vào batch để gửi nhiều câu lệnh insert lên SQL Server cùng lúc giúp tăng hiệu năng
+                        pst.addBatch();
+                    }
+                    pst.executeBatch(); // Thực thi lô các câu lệnh insert
+                    con.commit(); // Lưu thay đổi
+                    System.out.println("InventoryDAO: Seeded default ingredients into database.");
+                } catch (Exception e) {
+                    con.rollback(); // Hoàn tác nếu có lỗi
+                    throw e;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("InventoryDAO.seedDefaultInventoryIfEmpty failed: " + e.getMessage());
+        }
+    }
+
     /**
      * Retrieves all ingredients from the database or fallback list.
      * 

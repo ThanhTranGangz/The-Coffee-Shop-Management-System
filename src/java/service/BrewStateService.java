@@ -820,8 +820,12 @@ public class BrewStateService {
         boolean itemUpdated = false;
         for (OrderItem item : order.getItems()) {
             if (item.getId().equals(itemId)) {
+                String oldStatus = item.getStatus();
                 item.setStatus(newStatus);
                 itemUpdated = true;
+                if ("Preparing".equals(oldStatus) && "Ready".equals(newStatus)) {
+                    deductInventoryForItem(item);
+                }
                 break;
             }
         }
@@ -857,12 +861,17 @@ public class BrewStateService {
             throw new IllegalArgumentException("Không tìm thấy đơn cần cập nhật.");
         }
 
+        String oldStatus = order.getStatus();
         order.setStatus(newStatus);
         order.setUpdatedAt(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
 
         // Cascade to children order items
         for (OrderItem item : order.getItems()) {
+            String oldItemStatus = item.getStatus();
             item.setStatus(newStatus);
+            if ("Preparing".equals(oldItemStatus) && "Ready".equals(newStatus)) {
+                deductInventoryForItem(item);
+            }
         }
         orderDAO.update(order);
 
@@ -879,6 +888,26 @@ public class BrewStateService {
         }
 
         notifyStateChange();
+    }
+
+    private void deductInventoryForItem(OrderItem item) {
+        dao.RecipeDAO recipeDao = new dao.RecipeDAO();
+        dao.InventoryDAO inventoryDao = new dao.InventoryDAO();
+        try {
+            java.util.List<model.RecipeItem> recipes = recipeDao.getByMenuItemId(item.getMenuItemId());
+            if (recipes != null && !recipes.isEmpty()) {
+                for (model.RecipeItem rItem : recipes) {
+                    model.Ingredient ing = inventoryDao.getById(rItem.getIngredientId());
+                    if (ing != null) {
+                        int totalDeduct = rItem.getQuantity() * item.getQuantity();
+                        ing.setStock(Math.max(0, ing.getStock() - totalDeduct));
+                        inventoryDao.save(ing);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error deducting inventory for item: " + e.getMessage());
+        }
     }
 
     /**

@@ -316,8 +316,10 @@ public class LiteService {
         String sql = "SELECT id, nameVi, nameEn, category, price, active, imagePath FROM dbo.MenuItems " + (includeInactive ? "" : "WHERE active=1 ") + "ORDER BY category, nameVi";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             List<Map<String, Object>> menu = rows(rs);
+            dao.RecipeDAO recipeDao = new dao.RecipeDAO();
             for (Map<String, Object> item : menu) {
                 item.put("sizes", getMenuSizes(con, readInt(item.get("id"), 0)));
+                item.put("recipes", recipeDao.getByMenuItemId(String.valueOf(item.get("id"))).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
             }
             return menu;
         }
@@ -366,9 +368,28 @@ public class LiteService {
                 }
             }
             saveMenuSizes(con, id, sizes);
+            saveMenuRecipes(id, data.get("recipes"));
             con.commit();
         }
         return getMenuItem(id);
+    }
+
+    private void saveMenuRecipes(int menuItemId, Object recipesObj) {
+        if (recipesObj instanceof List) {
+            List<Map<String, Object>> list = (List<Map<String, Object>>) recipesObj;
+            List<model.RecipeItem> recipeItems = new java.util.ArrayList<>();
+            for (Map<String, Object> row : list) {
+                String ingredientId = readString(row.get("ingredientId"), "");
+                int quantity = readInt(row.get("quantity"), 0);
+                if (!ingredientId.isEmpty() && quantity > 0) {
+                    model.RecipeItem item = new model.RecipeItem();
+                    item.setIngredientId(ingredientId);
+                    item.setQuantity(quantity);
+                    recipeItems.add(item);
+                }
+            }
+            new dao.RecipeDAO().saveForMenuItem(String.valueOf(menuItemId), recipeItems);
+        }
     }
 
     public void deleteMenuItem(int id) throws Exception {
@@ -385,6 +406,7 @@ public class LiteService {
                 if (!rs.next()) return null;
                 Map<String, Object> item = row(rs);
                 item.put("sizes", getMenuSizes(con, id));
+                item.put("recipes", new dao.RecipeDAO().getByMenuItemId(String.valueOf(id)).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
                 return item;
             }
         }
@@ -1032,6 +1054,7 @@ public class LiteService {
                 if (requiredCups > 0) {
                     setStateValue(con, "cupsAvailable", cups - requiredCups);
                 }
+                deductInventoryForOrder(con, id);
             }
             if ("Served".equals(currentStatus) && "Paid".equals(status)) {
                 int notServedYet = countOpenOrders(con, tableName, "('Pending','Preparing','Ready')");
@@ -1054,6 +1077,32 @@ public class LiteService {
             }
             con.commit();
             return getOrderById(resultOrderId);
+        }
+    }
+
+    private void deductInventoryForOrder(Connection con, int orderId) throws Exception {
+        dao.RecipeDAO recipeDao = new dao.RecipeDAO();
+        dao.InventoryDAO inventoryDao = new dao.InventoryDAO();
+        String sql = "SELECT menuItemId, quantity FROM dbo.OrderItems WHERE orderId=?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String menuItemId = String.valueOf(rs.getInt("menuItemId"));
+                    int qty = rs.getInt("quantity");
+                    List<model.RecipeItem> recipes = recipeDao.getByMenuItemId(menuItemId);
+                    if (recipes != null && !recipes.isEmpty()) {
+                        for (model.RecipeItem rItem : recipes) {
+                            model.Ingredient ing = inventoryDao.getById(rItem.getIngredientId());
+                            if (ing != null) {
+                                int totalDeduct = rItem.getQuantity() * qty;
+                                ing.setStock(Math.max(0, ing.getStock() - totalDeduct));
+                                inventoryDao.save(ing);
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

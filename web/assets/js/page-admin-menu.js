@@ -1,4 +1,5 @@
         let items = [];
+        let inventoryItems = [];
         const imageByCategory = {
             'Cà phê': 'assets/img/menu/coffee.jpg',
             'Trà': 'assets/img/menu/tea.jpg',
@@ -8,8 +9,15 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-overlay').addEventListener('click', closeEditSheet);
-            loadItems();
+            loadInventory().then(loadItems);
         });
+
+        async function loadInventory() {
+            try {
+                const res = await api('/inventory');
+                if (res.ok) inventoryItems = await res.json();
+            } catch (e) { console.error('Failed to load inventory', e); }
+        }
 
         function isMobile() {
             return window.matchMedia('(max-width: 760px)').matches;
@@ -35,6 +43,7 @@
         window.renderPage = function() {
             document.getElementById('items').innerHTML = items.map(item => {
                 const name = lang() === 'en' ? item.nameEn : item.nameVi;
+                
                 return `
                     <article class="card dish" style="cursor:default">
                         <div class="dish-img">${imageHtml(item, name)}</div>
@@ -43,7 +52,7 @@
                             <div class="dish-name">${escapeHtml(name)}</div>
                             ${item.sizes && item.sizes.length ? `<div class="dish-sizes">${item.sizes.map(size => escapeHtml(size.sizeName)).join(' · ')}</div>` : ''}
                             <div class="dish-foot"><span class="price">${money(item.price)}</span>${item.active ? '<span class="status ready">' + t('active') + '</span>' : ''}</div>
-                            <div class="links" style="margin-top:12px"><button class="btn" onclick="edit(${item.id})">${t('edit')}</button><button class="btn danger" onclick="removeItem(${item.id})">${t('delete')}</button></div>
+                            <div class="links" style="margin-top:12px"><button class="btn" onclick="edit('${item.id}')">${t('edit')}</button><button class="btn danger" onclick="removeItem('${item.id}')">${t('delete')}</button></div>
                         </div>
                     </article>`;
             }).join('');
@@ -56,14 +65,28 @@
             return `<span class="initial">${escapeHtml(String(name || '?').charAt(0))}</span>`;
         }
 
+        function scrollToEditPanel() {
+            setTimeout(() => {
+                document.getElementById('edit-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+        }
+
+        window.newItem = function() {
+            resetForm();
+            openEditSheet();
+            scrollToEditPanel();
+        };
+
         function edit(id) {
-            const item = items.find(x => x.id === id);
+            const item = items.find(x => String(x.id) === String(id));
             ['id','nameVi','nameEn','category','price','imagePath'].forEach(key => document.getElementById(key).value = item[key] || '');
             document.getElementById('active').checked = item.active;
             document.getElementById('hasSizes').checked = Array.isArray(item.sizes) && item.sizes.length > 0;
             renderSizeRows(item.sizes || []);
+            renderRecipeRows(item.recipes || []);
             hideMessage();
             openEditSheet();
+            scrollToEditPanel();
         }
 
         function resetForm() {
@@ -74,6 +97,7 @@
             document.getElementById('active').checked = true;
             document.getElementById('hasSizes').checked = false;
             renderSizeRows([]);
+            renderRecipeRows([]);
             hideMessage();
         }
 
@@ -136,6 +160,47 @@
             }
         }
 
+        function renderRecipeRows(recipes) {
+            const container = document.getElementById('recipe-rows');
+            if (!container) return;
+            const rows = Array.isArray(recipes) ? recipes : [];
+            container.innerHTML = rows.map((recipe, index) => {
+                const options = inventoryItems.map(ing => 
+                    `<option value="${escapeAttr(ing.id)}" ${ing.id === recipe.ingredientId ? 'selected' : ''}>${escapeHtml(ing.name)} (${escapeHtml(ing.unit)})</option>`
+                ).join('');
+                return `
+                <div class="recipe-row form-row" style="margin-bottom:0.5rem; display:flex; gap:0.5rem;">
+                    <select class="recipe-ing" style="flex:1;">
+                        <option value="">-- Chọn nguyên liệu --</option>
+                        ${options}
+                    </select>
+                    <input type="number" class="recipe-qty" min="1" max="10000" value="${Number(recipe.quantity || 1)}" style="width:80px;" aria-label="Định lượng">
+                    <button class="btn danger" type="button" onclick="removeRecipeRow(${index})">${t('delete')}</button>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function readRecipeRows() {
+            return Array.from(document.querySelectorAll('.recipe-row')).map(row => {
+                const ingSelect = row.querySelector('.recipe-ing');
+                const qtyInput = row.querySelector('.recipe-qty');
+                return { ingredientId: ingSelect.value, quantity: Number(qtyInput.value || 0) };
+            }).filter(r => r.ingredientId && r.quantity > 0);
+        }
+
+        function addRecipeRow() {
+            const rows = readRecipeRows();
+            rows.push({ ingredientId: '', quantity: 1 });
+            renderRecipeRows(rows);
+        }
+
+        function removeRecipeRow(index) {
+            const rows = readRecipeRows();
+            rows.splice(index, 1);
+            renderRecipeRows(rows);
+        }
+
         async function saveItem(event) {
             event.preventDefault();
             const res = await api('/menu', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
@@ -147,7 +212,8 @@
                 imagePath: document.getElementById('imagePath').value.trim(),
                 active: document.getElementById('active').checked,
                 hasSizes: document.getElementById('hasSizes').checked,
-                sizes: readSizeRows()
+                sizes: readSizeRows(),
+                recipes: readRecipeRows()
             })});
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));

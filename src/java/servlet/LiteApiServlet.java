@@ -64,6 +64,10 @@ public class LiteApiServlet extends HttpServlet {
                     boolean admin = "admin".equals(role(req));
                     resp.getWriter().write(JsonUtils.toJson(service.getMenu(admin)));
                     break;
+                case "/inventory":
+                    java.util.List<java.util.Map<String, Object>> invList = new dao.InventoryDAO().getAll().stream().map(i -> i.toMap()).collect(java.util.stream.Collectors.toList());
+                    resp.getWriter().write(JsonUtils.toJson(invList));
+                    break;
                 case "/tables":
                     resp.getWriter().write(JsonUtils.toJson(service.getTables()));
                     break;

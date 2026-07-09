@@ -14,6 +14,7 @@ public class MenuItem {
     private List<String> availableSizes;
     private String image;
     private Boolean inStock;
+    private List<RecipeItem> recipes;
 
     /**
      * Default constructor.
@@ -80,4 +81,7 @@ public class MenuItem {
 
     public Boolean getInStock() { return inStock; }
     public void setInStock(Boolean inStock) { this.inStock = inStock; }
+
+    public List<RecipeItem> getRecipes() { return recipes; }
+    public void setRecipes(List<RecipeItem> recipes) { this.recipes = recipes; }
 }
