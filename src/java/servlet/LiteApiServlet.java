@@ -258,6 +258,34 @@ public class LiteApiServlet extends HttpServlet {
                             "Admin xoá/ẩn món #" + readInt(body.get("id"), 0), "Admin deleted/hidden menu item #" + readInt(body.get("id"), 0), readInt(body.get("id"), 0));
                     resp.getWriter().write("{\"message\":\"Menu item deleted\"}");
                     break;
+                case "/inventory/save":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được sửa kho nguyên liệu.");
+                        return;
+                    }
+                    model.Ingredient ing = new model.Ingredient();
+                    ing.setId(str(body.get("id")));
+                    ing.setName(str(body.get("name")));
+                    ing.setUnit(str(body.get("unit")));
+                    ing.setStock(readInt(body.get("stock"), 0));
+                    ing.setMinStock(readInt(body.get("minStock"), 0));
+                    ing.setImportCost(readInt(body.get("importCost"), 0));
+                    new dao.InventoryDAO().save(ing);
+                    service.addSystemLog(role(req), user(req), "INVENTORY_SAVE",
+                            "Admin lưu nguyên liệu " + ing.getId() + " - " + ing.getName(), "Admin saved ingredient " + ing.getId() + " - " + ing.getName(), null);
+                    resp.getWriter().write(JsonUtils.toJson(ing.toMap()));
+                    break;
+                case "/inventory/delete":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được xoá nguyên liệu.");
+                        return;
+                    }
+                    String ingId = str(body.get("id"));
+                    new dao.InventoryDAO().delete(ingId);
+                    service.addSystemLog(role(req), user(req), "INVENTORY_DELETE",
+                            "Admin xoá nguyên liệu " + ingId, "Admin deleted ingredient " + ingId, null);
+                    resp.getWriter().write("{\"message\":\"Ingredient deleted\"}");
+                    break;
                 case "/tables":
                     Map<String, Object> savedTable = service.saveTable(body);
                     service.addSystemLog(role(req), user(req), "TABLE_SAVE",

@@ -3,7 +3,7 @@ const TAB_SESSION_KEY = 'coffeshop_tab_session';
 const dict = {
     vi: {
         home: 'Trang chủ', order: 'Gọi món', status: 'Tra đơn', login: 'Đăng nhập',
-        dashboard: 'Dashboard', staffOrders: 'Pha chế', cashier: 'Thu ngân', runner: 'Bồi bàn', menuAdmin: 'Thực đơn', tablesAdmin: 'Bàn & QR', systemLogs: 'Log hệ thống',
+        dashboard: 'Dashboard', staffOrders: 'Pha chế', cashier: 'Thu ngân', runner: 'Bồi bàn', menuAdmin: 'Thực đơn', inventoryAdmin: 'Kho nguyên liệu', tablesAdmin: 'Bàn & QR', systemLogs: 'Log hệ thống',
         logout: 'Đăng xuất', language: 'Ngôn ngữ', refresh: 'Làm mới', save: 'Lưu', cancel: 'Huỷ', delete: 'Xoá', backToPrevious: 'Quay lại',
         heroEyebrow: 'Đặt món tại bàn', heroTitle: 'coffeshop', heroText: 'Chọn món, gửi đơn và theo dõi trạng thái ngay tại bàn.',
         homeCardTitle: 'Dành cho khách tại quán', homeFeatureMenu: 'Quét QR trên bàn để gọi món', homeFeatureStatus: 'Theo dõi đơn bằng mã đơn',
@@ -76,7 +76,7 @@ const dict = {
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
-        dashboard: 'Dashboard', staffOrders: 'Barista', cashier: 'Cashier', runner: 'Waiter', menuAdmin: 'Menu', tablesAdmin: 'Tables & QR', systemLogs: 'System logs',
+        dashboard: 'Dashboard', staffOrders: 'Barista', cashier: 'Cashier', runner: 'Waiter', menuAdmin: 'Menu', inventoryAdmin: 'Inventory', tablesAdmin: 'Tables & QR', systemLogs: 'System logs',
         logout: 'Log out', language: 'Language', refresh: 'Refresh', save: 'Save', cancel: 'Cancel', delete: 'Delete', backToPrevious: 'Back',
         heroEyebrow: 'Order at your table', heroTitle: 'coffeshop', heroText: 'Choose, order, and follow your drinks from the table.',
         homeCardTitle: 'For in-store guests', homeFeatureMenu: 'Scan the table QR to order', homeFeatureStatus: 'Track your order by code',
@@ -236,6 +236,7 @@ function nav(role) {
             <a class="link" href="${withTab('dashboard.jsp')}" data-i18n="dashboard">${t('dashboard')}</a>
             <a class="link" href="${withTab('admin-tables.jsp')}" data-i18n="tablesAdmin">${t('tablesAdmin')}</a>
             <a class="link" href="${withTab('admin-menu.jsp')}" data-i18n="menuAdmin">${t('menuAdmin')}</a>
+            <a class="link" href="${withTab('inventory.jsp')}" data-i18n="inventoryAdmin">Kho nguyên liệu</a>
             <a class="link" href="${withTab('staff-orders.jsp')}" data-i18n="staffOrders">${t('staffOrders')}</a>
             <a class="link" href="${withTab('cashier.jsp')}" data-i18n="cashier">${t('cashier')}</a>
             <a class="link" href="${withTab('counter-order.jsp')}" data-i18n="counterOrder">${t('counterOrder')}</a>
