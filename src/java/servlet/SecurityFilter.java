@@ -89,7 +89,7 @@ public class SecurityFilter implements Filter {
                     || path.equals("/api/cash/status") || path.equals("/api/cash/count") || path.equals("/api/cash/ack-withdrawals");
         }
         if ("runner".equals(role)) {
-            return path.equals("/api/orders") || path.equals("/api/orders/status")
+            return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/invoice")
                     || path.equals("/api/tables/map") || path.equals("/api/tables/clear") || path.equals("/api/tables/transfer");
         }
         return false;

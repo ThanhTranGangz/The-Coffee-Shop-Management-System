@@ -13,6 +13,12 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             rememberWorkPage('runner.jsp');
+            const backdrop = document.getElementById('invoice-backdrop');
+            if (backdrop) {
+                backdrop.addEventListener('click', event => {
+                    if (event.target.id === 'invoice-backdrop') closeInvoice();
+                });
+            }
             loadWork();
             setInterval(() => loadWork({ silent: false }), 5000);
         });
@@ -97,6 +103,11 @@
                     ${order.note ? `<div class="order-note"><b>${t('orderNote')}</b><span>${escapeHtml(order.note)}</span></div>` : ''}
                     <div class="order-lines">
                         ${(order.items || []).map(item => `<p>${escapeHtml(item.itemName)}${item.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(item.itemSize) : ''} x${item.quantity}</p>`).join('')}
+                    </div>
+                    <div class="links runner-card-actions">
+                        <button class="btn print-invoice-btn" type="button"
+                            onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"
+                            onclick="event.stopPropagation(); openInvoice(${order.id || 0})">${t('printInvoice')}</button>
                     </div>
                 </article>`;
         }
@@ -267,4 +278,82 @@
             return String(value || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
         }
 
+        async function openInvoice(orderId) {
+            if (!orderId) return;
+            cancelHold();
+            try {
+                const res = await api('/orders/invoice?id=' + encodeURIComponent(orderId));
+                if (!res.ok) {
+                    notifyWork(t('invoiceLoadFailed'));
+                    return;
+                }
+                const order = await res.json();
+                renderInvoice(order);
+                const backdrop = document.getElementById('invoice-backdrop');
+                backdrop.hidden = false;
+                document.body.classList.add('invoice-open');
+            } catch (err) {
+                notifyWork(t('invoiceLoadFailed'));
+            }
+        }
+
+        function closeInvoice() {
+            const backdrop = document.getElementById('invoice-backdrop');
+            if (!backdrop) return;
+            backdrop.hidden = true;
+            document.body.classList.remove('invoice-open');
+            document.getElementById('invoice-sheet').innerHTML = '';
+        }
+
+        function renderInvoice(order) {
+            const items = order.items || [];
+            document.getElementById('invoice-sheet').innerHTML = `
+                <div class="invoice-print-area">
+                    <div class="invoice-brand">coffeshop</div>
+                    <div class="invoice-meta">
+                        <div>
+                            <p class="eyebrow">${t('table')}</p>
+                            <strong>${escapeHtml(order.tableName)}</strong>
+                        </div>
+                        <div>
+                            <p class="eyebrow">${t('orderNumber')}</p>
+                            <strong>#${escapeHtml(order.orderNumber)}</strong>
+                        </div>
+                        <div>
+                            <p class="eyebrow">${t('invoiceDate')}</p>
+                            <strong>${escapeHtml(formatInvoiceTime(order.createdAt))}</strong>
+                        </div>
+                    </div>
+                    ${order.note ? `<div class="order-note"><b>${t('orderNote')}</b><span>${escapeHtml(order.note)}</span></div>` : ''}
+                    <div class="order-lines invoice-lines">
+                        ${items.map(item => `
+                            <p>
+                                <span>${escapeHtml(item.itemName)}${item.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(item.itemSize) : ''} x${item.quantity}</span>
+                                <span class="price">${money(Number(item.price || 0) * Number(item.quantity || 0))}</span>
+                            </p>
+                        `).join('')}
+                    </div>
+                    <div class="cart-total invoice-total">
+                        <span>${t('total')}</span>
+                        <b class="price">${money(order.total)}</b>
+                    </div>
+                    <p class="invoice-pay-hint">${t('invoicePayHint')}</p>
+                </div>
+            `;
+        }
+
+        function formatInvoiceTime(value) {
+            if (!value) return '—';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return String(value);
+            return date.toLocaleString(lang() === 'en' ? 'en-US' : 'vi-VN');
+        }
+
+        function printInvoiceSheet() {
+            window.print();
+        }
+
         window.renderPage = () => loadWork({ silent: true });
+        window.openInvoice = openInvoice;
+        window.closeInvoice = closeInvoice;
+        window.printInvoiceSheet = printInvoiceSheet;

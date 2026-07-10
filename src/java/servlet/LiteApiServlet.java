@@ -104,6 +104,28 @@ public class LiteApiServlet extends HttpServlet {
                         resp.getWriter().write(JsonUtils.toJson(order));
                     }
                     break;
+                case "/orders/invoice": {
+                    String currentRole = role(req);
+                    if (!"runner".equals(currentRole) && !"admin".equals(currentRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ bồi bàn được in hóa đơn.");
+                        break;
+                    }
+                    int invoiceId = readInt(req.getParameter("id"), 0);
+                    Map<String, Object> invoice = service.getOrderInvoice(invoiceId);
+                    if (invoice == null) {
+                        error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy đơn hàng.");
+                    } else if ("runner".equals(currentRole)) {
+                        String status = str(invoice.get("status"));
+                        if (!"Ready".equals(status) && !"Served".equals(status)) {
+                            error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ in được hóa đơn đơn đang phục vụ.");
+                        } else {
+                            resp.getWriter().write(JsonUtils.toJson(invoice));
+                        }
+                    } else {
+                        resp.getWriter().write(JsonUtils.toJson(invoice));
+                    }
+                    break;
+                }
                 case "/orders/table":
                     if (role(req).isEmpty()) {
                         resp.getWriter().write(JsonUtils.toJson(guestTableOrders(req)));

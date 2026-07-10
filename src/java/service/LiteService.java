@@ -316,13 +316,53 @@ public class LiteService {
         String sql = "SELECT id, nameVi, nameEn, category, price, active, imagePath FROM dbo.MenuItems " + (includeInactive ? "" : "WHERE active=1 ") + "ORDER BY category, nameVi";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             List<Map<String, Object>> menu = rows(rs);
+            Set<Integer> bestSellerIds = getBestSellerMenuIdsByCategory(con, menu);
             dao.RecipeDAO recipeDao = new dao.RecipeDAO();
             for (Map<String, Object> item : menu) {
-                item.put("sizes", getMenuSizes(con, readInt(item.get("id"), 0)));
-                item.put("recipes", recipeDao.getByMenuItemId(String.valueOf(item.get("id"))).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
+                int itemId = readInt(item.get("id"), 0);
+                item.put("sizes", getMenuSizes(con, itemId));
+                item.put("recipes", recipeDao.getByMenuItemId(String.valueOf(itemId)).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
+                item.put("bestSeller", bestSellerIds.contains(itemId));
             }
             return menu;
         }
+    }
+
+    private Set<Integer> getBestSellerMenuIdsByCategory(Connection con, List<Map<String, Object>> menu) throws Exception {
+        Set<Integer> ids = new LinkedHashSet<>();
+        Set<Integer> menuIds = new HashSet<>();
+        Map<String, List<Integer>> itemsByCategory = new LinkedHashMap<>();
+        for (Map<String, Object> item : menu) {
+            int itemId = readInt(item.get("id"), 0);
+            String category = readString(item.get("category"), "");
+            if (itemId <= 0 || category.isEmpty()) continue;
+            menuIds.add(itemId);
+            itemsByCategory.computeIfAbsent(category, key -> new ArrayList<>()).add(itemId);
+        }
+        Map<String, Integer> topByCategory = new LinkedHashMap<>();
+        String sql = "SELECT m.category, oi.menuItemId, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue "
+                + "FROM dbo.OrderItems oi "
+                + "JOIN dbo.Orders o ON o.id = oi.orderId "
+                + "JOIN dbo.MenuItems m ON m.id = oi.menuItemId "
+                + "WHERE o.status IN ('Paid','Cleared') AND oi.menuItemId IS NOT NULL AND oi.menuItemId > 0 "
+                + "GROUP BY m.category, oi.menuItemId "
+                + "ORDER BY m.category, SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC, oi.menuItemId";
+        try (PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String category = readString(rs.getString("category"), "");
+                int menuItemId = rs.getInt("menuItemId");
+                if (category.isEmpty() || menuItemId <= 0 || !menuIds.contains(menuItemId) || topByCategory.containsKey(category)) continue;
+                topByCategory.put(category, menuItemId);
+                ids.add(menuItemId);
+            }
+        }
+        for (Map.Entry<String, List<Integer>> entry : itemsByCategory.entrySet()) {
+            if (topByCategory.containsKey(entry.getKey()) || entry.getValue().isEmpty()) continue;
+            int fallbackId = entry.getValue().get(0);
+            topByCategory.put(entry.getKey(), fallbackId);
+            ids.add(fallbackId);
+        }
+        return ids;
     }
 
     public Map<String, Object> saveMenuItem(Map<String, Object> data) throws Exception {
@@ -1646,6 +1686,13 @@ public class LiteService {
                 return order;
             }
         }
+    }
+
+    public Map<String, Object> getOrderInvoice(int id) throws Exception {
+        Map<String, Object> order = getOrderById(id);
+        if (order == null) return null;
+        order.remove("customerPhone");
+        return order;
     }
 
     private List<Map<String, Object>> getOrderItems(int orderId) throws Exception {

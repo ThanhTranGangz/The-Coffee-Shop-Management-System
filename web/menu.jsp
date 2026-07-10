@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=tab-session-2"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=vi-serif-1">
+    <script defer src="assets/js/i18n.js?v=scroll-top-1"></script>
 </head>
 <body>
     <nav class="nav">
@@ -37,6 +37,13 @@
                         <input id="search-input" type="search" data-i18n-placeholder="searchMenu" placeholder="Tìm món, ví dụ: cà phê sữa..." autocomplete="off">
                     </div>
                 </div>
+                <section class="favorites-section" id="favorites-section" hidden>
+                    <div class="cat-head favorites-head">
+                        <h2 data-i18n="favoriteItems">Các món được yêu thích nhất</h2>
+                        <span class="line"></span>
+                    </div>
+                    <div class="menu-grid favorites-grid" id="favorites-list"></div>
+                </section>
                 <div class="chips" id="chips"></div>
                 <section class="menu-grid" id="menu-list"></section>
             </section>
@@ -57,6 +64,10 @@
             </aside>
         </div>
     </main>
+
+    <button class="scroll-top-btn" id="scroll-top-btn" type="button" onclick="scrollToTop()" aria-label="Lên đầu trang" title="Lên đầu trang" hidden>
+        <span aria-hidden="true">↑</span>
+    </button>
 
     <div class="cart-bar" id="cart-bar">
         <div class="cart-bar-in" onclick="document.getElementById('cart-panel').scrollIntoView({behavior:'smooth', block:'start'})">
@@ -92,6 +103,6 @@
             </button>
         </div>
     </div>
-    <script src="assets/js/page-menu.js?v=tab-session-1"></script>
+    <script src="assets/js/page-menu.js?v=scroll-top-1"></script>
 </body>
 </html>

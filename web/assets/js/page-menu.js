@@ -37,8 +37,28 @@
                 }
             });
             document.getElementById('sheet-add').addEventListener('click', addSheetItem);
+            window.addEventListener('scroll', updateScrollTop, { passive: true });
+            window.addEventListener('resize', updateScrollTop);
+            updateScrollTop();
             await loadData();
         });
+
+        function updateScrollTop() {
+            const btn = document.getElementById('scroll-top-btn');
+            if (!btn) return;
+            const label = t('scrollToTop');
+            btn.setAttribute('aria-label', label);
+            btn.setAttribute('title', label);
+            const show = window.scrollY > 320;
+            btn.hidden = !show;
+            btn.classList.toggle('show', show);
+            document.body.classList.toggle('has-cart-bar', document.getElementById('cart-bar')?.classList.contains('show'));
+        }
+
+        function scrollToTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        window.scrollToTop = scrollToTop;
 
         async function loadData() {
             try {
@@ -154,9 +174,11 @@
 
         window.renderPage = function() {
             renderWelcome();
+            renderFavorites();
             renderChips();
             renderMenu();
             renderCart();
+            updateScrollTop();
         }
 
         function renderWelcome() {
@@ -168,6 +190,30 @@
             document.getElementById('table-welcome').classList.remove('hidden');
         }
 
+        function favoriteItems() {
+            const seen = new Set();
+            return menuItems.filter(item => {
+                if (!item.bestSeller || seen.has(item.id)) return false;
+                seen.add(item.id);
+                return true;
+            });
+        }
+
+        function renderFavorites() {
+            const section = document.getElementById('favorites-section');
+            const list = document.getElementById('favorites-list');
+            if (!section || !list) return;
+            const showFavorites = activeCategory === 'all' && !searchText;
+            const items = showFavorites ? favoriteItems() : [];
+            if (!items.length) {
+                section.hidden = true;
+                list.innerHTML = '';
+                return;
+            }
+            section.hidden = false;
+            list.innerHTML = items.map(item => dishCardHtml(item)).join('');
+        }
+
         function renderChips() {
             const chips = [`<button class="chip ${activeCategory === 'all' ? 'active' : ''}" onclick="setCategory('all')">${t('all')}</button>`]
                 .concat(categories().map(cat => `<button class="chip ${activeCategory === cat ? 'active' : ''}" onclick="setCategory('${escapeHtml(cat)}')">${escapeHtml(categoryText(cat))}</button>`));
@@ -177,6 +223,27 @@
         function setCategory(category) {
             activeCategory = category;
             renderPage();
+        }
+
+        function dishCardHtml(item) {
+            const name = displayName(item);
+            const sized = hasSizes(item);
+            return `
+                <article class="card dish" onclick="openSheet(${item.id})">
+                    <div class="dish-img">
+                        ${item.bestSeller ? `<span class="dish-badge best-seller">${t('bestSeller')}</span>` : ''}
+                        ${imageHtml(item, name)}
+                    </div>
+                    <div class="dish-body">
+                        <p class="eyebrow">${escapeHtml(categoryText(item.category))}</p>
+                        <div class="dish-name">${escapeHtml(name)}</div>
+                        ${sized ? `<div class="dish-sizes">${sizeOptions(item).map(size => escapeHtml(size.label)).join(' · ')}</div>` : ''}
+                        <div class="dish-foot">
+                            <span class="price">${money(item.price)}</span>
+                            <button class="dish-add" type="button" onclick="event.stopPropagation(); openSheet(${item.id})">+</button>
+                        </div>
+                    </div>
+                </article>`;
         }
 
         function renderMenu() {
@@ -193,21 +260,7 @@
                     lastCategory = item.category;
                     html += `<div class="cat-head"><h2>${escapeHtml(categoryText(item.category))}</h2><span class="line"></span></div>`;
                 }
-                const name = displayName(item);
-                const sized = hasSizes(item);
-                html += `
-                    <article class="card dish" onclick="openSheet(${item.id})">
-                        <div class="dish-img">${imageHtml(item, name)}</div>
-                        <div class="dish-body">
-                            <p class="eyebrow">${escapeHtml(categoryText(item.category))}</p>
-                            <div class="dish-name">${escapeHtml(name)}</div>
-                            ${sized ? `<div class="dish-sizes">${sizeOptions(item).map(size => escapeHtml(size.label)).join(' · ')}</div>` : ''}
-                            <div class="dish-foot">
-                                <span class="price">${money(item.price)}</span>
-                                <button class="dish-add" type="button" onclick="event.stopPropagation(); openSheet(${item.id})">+</button>
-                            </div>
-                        </div>
-                    </article>`;
+                html += dishCardHtml(item);
             });
             grid.innerHTML = html;
         }
@@ -314,6 +367,7 @@
             document.getElementById('cart-bar-total').textContent = money(total);
             document.getElementById('cart-bar').classList.toggle('show', cart.length > 0);
             document.getElementById('submit-order').disabled = cart.length === 0 || isSubmitting || isConfirmingOrder;
+            updateScrollTop();
         }
 
         function changeQty(index, delta) {

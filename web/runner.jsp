@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=tab-session-2"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=invoice-print-1">
+    <script defer src="assets/js/i18n.js?v=invoice-print-1"></script>
 </head>
 <body>
     <nav class="nav">
@@ -25,6 +25,25 @@
         <section class="runner-work-grid" id="runner-work"></section>
         <section class="card table-map-card" id="runner-table-map"></section>
     </main>
-    <script src="assets/js/page-runner.js?v=clear-table-1"></script>
+
+    <div class="invoice-backdrop" id="invoice-backdrop" hidden>
+        <div class="invoice-modal" role="dialog" aria-modal="true" aria-labelledby="invoice-title">
+            <div class="invoice-modal-head">
+                <div>
+                    <p class="eyebrow" data-i18n="invoiceTitle">Hóa đơn</p>
+                    <h2 id="invoice-title">coffeshop</h2>
+                </div>
+                <button class="btn" type="button" onclick="closeInvoice()" data-i18n="closeInvoice">Đóng</button>
+            </div>
+            <p class="invoice-hint" data-i18n="invoiceHint">Đưa hóa đơn này kèm món cho khách. Khi thanh toán, khách đưa hóa đơn cho thu ngân.</p>
+            <div class="invoice-sheet" id="invoice-sheet"></div>
+            <div class="invoice-actions no-print">
+                <button class="btn" type="button" onclick="closeInvoice()" data-i18n="closeInvoice">Đóng</button>
+                <button class="btn primary" type="button" onclick="printInvoiceSheet()" data-i18n="printNow">In hóa đơn</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/page-runner.js?v=invoice-print-1"></script>
 </body>
 </html>
