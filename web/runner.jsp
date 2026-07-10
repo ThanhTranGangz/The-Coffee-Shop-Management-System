@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
-    <link rel="stylesheet" href="assets/css/app.css?v=invoice-print-1">
-    <script defer src="assets/js/i18n.js?v=invoice-print-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=invoice-print-fix-1">
+    <script defer src="assets/js/i18n.js?v=invoice-confirm-1"></script>
 </head>
 <body>
     <nav class="nav">
@@ -44,6 +44,6 @@
         </div>
     </div>
 
-    <script src="assets/js/page-runner.js?v=invoice-print-1"></script>
+    <script src="assets/js/page-runner.js?v=invoice-confirm-1"></script>
 </body>
 </html>

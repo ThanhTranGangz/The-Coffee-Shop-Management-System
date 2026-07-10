@@ -1,5 +1,6 @@
         const runnerStatuses = ['Ready', 'Paid'];
         const runnerKeys = { Ready: 'serveColumn', Paid: 'cleaningColumn' };
+        const PRINTED_INVOICE_KEY = 'runner_printed_invoices';
         let activeRunnerStatus = 'Ready';
         let holdTimer = null;
         let holdingCard = null;
@@ -8,6 +9,7 @@
         let firstLoad = true;
         let runnerOrders = [];
         let runnerTables = [];
+        let currentInvoiceOrderId = 0;
         const servingInProgress = new Set();
         const clearingInProgress = new Set();
 
@@ -35,6 +37,10 @@
 
         function currentServingOrders() {
             return runnerOrders.filter(order => order.status === 'Ready');
+        }
+
+        function currentReprintOrders() {
+            return runnerOrders.filter(order => order.status === 'Served');
         }
 
         function currentCleaningTables() {
@@ -71,10 +77,32 @@
         }
 
         function renderWork(servingOrders, cleaningTables, tables) {
-            const list = activeRunnerStatus === 'Ready' ? servingOrders : cleaningTables;
-            document.getElementById('runner-work').innerHTML = list.length
-                ? list.map(activeRunnerStatus === 'Ready' ? servingOrderHtml : cleaningTableHtml).join('')
-                : `<div class="empty-state"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
+            const holder = document.getElementById('runner-work');
+            if (activeRunnerStatus !== 'Ready') {
+                holder.innerHTML = cleaningTables.length
+                    ? cleaningTables.map(cleaningTableHtml).join('')
+                    : `<div class="empty-state"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
+                return;
+            }
+            const reprintOrders = currentReprintOrders();
+            if (!servingOrders.length && !reprintOrders.length) {
+                holder.innerHTML = `<div class="empty-state"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
+                return;
+            }
+            let html = servingOrders.map(servingOrderHtml).join('');
+            if (reprintOrders.length) {
+                html += `
+                    <div class="runner-reprint-head">
+                        <div class="cat-head">
+                            <h2>${t('reprintInvoice')}</h2>
+                            <span class="line"></span>
+                        </div>
+                        <p class="runner-reprint-hint">${t('reprintInvoiceHint')}</p>
+                    </div>
+                    ${reprintOrders.map(reprintOrderHtml).join('')}
+                `;
+            }
+            holder.innerHTML = html;
         }
 
         function setActiveRunnerStatus(status) {
@@ -108,6 +136,27 @@
                         <button class="btn print-invoice-btn" type="button"
                             onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"
                             onclick="event.stopPropagation(); openInvoice(${order.id || 0})">${t('printInvoice')}</button>
+                    </div>
+                </article>`;
+        }
+
+        function reprintOrderHtml(order) {
+            return `
+                <article class="card order-card runner-order-card runner-reprint-card">
+                    <div class="toolbar order-card-head">
+                        <div>
+                            <p class="eyebrow">${escapeHtml(order.tableName)}</p>
+                            <h3>#${order.orderNumber}</h3>
+                        </div>
+                        <span class="status served">${t('unpaid')}</span>
+                    </div>
+                    ${order.note ? `<div class="order-note"><b>${t('orderNote')}</b><span>${escapeHtml(order.note)}</span></div>` : ''}
+                    <div class="order-lines">
+                        ${(order.items || []).map(item => `<p>${escapeHtml(item.itemName)}${item.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(item.itemSize) : ''} x${item.quantity}</p>`).join('')}
+                    </div>
+                    <div class="links runner-card-actions">
+                        <button class="btn print-invoice-btn" type="button"
+                            onclick="openInvoice(${order.id || 0})">${t('printInvoice')}</button>
                     </div>
                 </article>`;
         }
@@ -169,6 +218,70 @@
             `;
         }
 
+        function readPrintedInvoiceIds() {
+            try {
+                const raw = sessionStorage.getItem(PRINTED_INVOICE_KEY);
+                const list = raw ? JSON.parse(raw) : [];
+                return Array.isArray(list) ? list.map(Number).filter(id => id > 0) : [];
+            } catch (err) {
+                return [];
+            }
+        }
+
+        function isInvoicePrinted(orderId) {
+            return readPrintedInvoiceIds().includes(Number(orderId));
+        }
+
+        function markInvoicePrinted(orderId) {
+            const id = Number(orderId);
+            if (!id) return;
+            const ids = new Set(readPrintedInvoiceIds());
+            ids.add(id);
+            sessionStorage.setItem(PRINTED_INVOICE_KEY, JSON.stringify([...ids]));
+        }
+
+        function confirmServeWithoutInvoice() {
+            return new Promise(resolve => {
+                const overlay = document.createElement('div');
+                overlay.className = 'app-modal-backdrop';
+                overlay.innerHTML = `
+                    <section class="app-modal-card">
+                        <div>
+                            <p class="eyebrow">${escapeHtml(t('serveWithoutInvoiceTitle'))}</p>
+                            <h2>${escapeHtml(t('serveWithoutInvoiceText'))}</h2>
+                        </div>
+                        <div class="app-modal-actions">
+                            <button class="btn" type="button" data-modal-cancel>${escapeHtml(t('cancel'))}</button>
+                            <button class="btn primary" type="button" data-modal-ok>${escapeHtml(t('serveAnyway'))}</button>
+                        </div>
+                    </section>
+                `;
+                const cleanup = value => {
+                    overlay.remove();
+                    resolve(value);
+                };
+                overlay.querySelector('[data-modal-cancel]').addEventListener('click', () => cleanup(false));
+                overlay.querySelector('[data-modal-ok]').addEventListener('click', () => cleanup(true));
+                overlay.addEventListener('click', event => {
+                    if (event.target === overlay) cleanup(false);
+                });
+                overlay.addEventListener('keydown', event => {
+                    if (event.key === 'Escape') cleanup(false);
+                });
+                document.body.appendChild(overlay);
+                overlay.querySelector('[data-modal-ok]').focus();
+            });
+        }
+
+        async function requestServeOrder(orderId) {
+            if (!orderId) return;
+            if (!isInvoicePrinted(orderId)) {
+                const confirmed = await confirmServeWithoutInvoice();
+                if (!confirmed) return;
+            }
+            await serveOrder(orderId);
+        }
+
         async function serveOrder(orderId) {
             if (!orderId || servingInProgress.has(Number(orderId))) return;
             servingInProgress.add(Number(orderId));
@@ -183,10 +296,19 @@
                     return;
                 }
                 const updated = await res.json().catch(() => ({}));
-                const tableName = updated.tableName || (runnerOrders.find(order => Number(order.id) === Number(orderId)) || {}).tableName || '';
-                runnerOrders = runnerOrders.filter(order => Number(order.id) !== Number(orderId));
+                const previous = runnerOrders.find(order => Number(order.id) === Number(orderId)) || {};
+                const tableName = updated.tableName || previous.tableName || '';
+                const servedOrder = {
+                    id: orderId,
+                    orderNumber: updated.orderNumber || previous.orderNumber,
+                    tableName,
+                    status: 'Served',
+                    note: updated.note || previous.note || '',
+                    items: updated.items || previous.items || []
+                };
+                runnerOrders = [servedOrder, ...runnerOrders.filter(order => Number(order.id) !== Number(orderId))];
                 runnerTables = runnerTables.map(table => String(table.name || '') === String(tableName)
-                    ? Object.assign({}, table, { status: 'Served', busy: true, orderId, orderNumber: updated.orderNumber || table.orderNumber })
+                    ? Object.assign({}, table, { status: 'Served', busy: true, orderId, orderNumber: servedOrder.orderNumber || table.orderNumber })
                     : table);
                 renderCurrentWork();
                 loadWork({ silent: true });
@@ -226,7 +348,7 @@
 
         function startOrderHold(event, id) {
             if (!id) return;
-            beginHold(event, () => serveOrder(id));
+            beginHold(event, () => requestServeOrder(id));
         }
 
         function startTableHold(event, id) {
@@ -288,6 +410,7 @@
                     return;
                 }
                 const order = await res.json();
+                currentInvoiceOrderId = Number(order.id || orderId);
                 renderInvoice(order);
                 const backdrop = document.getElementById('invoice-backdrop');
                 backdrop.hidden = false;
@@ -303,6 +426,7 @@
             backdrop.hidden = true;
             document.body.classList.remove('invoice-open');
             document.getElementById('invoice-sheet').innerHTML = '';
+            currentInvoiceOrderId = 0;
         }
 
         function renderInvoice(order) {
@@ -350,6 +474,7 @@
         }
 
         function printInvoiceSheet() {
+            if (currentInvoiceOrderId) markInvoicePrinted(currentInvoiceOrderId);
             window.print();
         }
 

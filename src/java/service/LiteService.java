@@ -1011,7 +1011,7 @@ public class LiteService {
                     ? "WHERE status='Served' "
                     : "WHERE status='Served' OR id IN (" + sessionPaid + ") ";
         } else if ("runner".equals(role)) {
-            sql += "WHERE status IN ('Ready','Paid') ";
+            sql += "WHERE status IN ('Ready','Served','Paid') ";
         }
         sql += "ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
