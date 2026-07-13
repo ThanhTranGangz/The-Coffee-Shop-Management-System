@@ -13,15 +13,34 @@
         let pollTimer = null;
         let sessionRole = '';
         let cupData = { cupsAvailable: 0 };
+        let viewMode = localStorage.getItem('barista_view_mode') || 'order';
 
         document.addEventListener('DOMContentLoaded', async () => {
             rememberWorkPage('staff-orders.jsp');
             await loadSession();
             await loadCupStatus();
+            renderViewToggle();
             loadOrders();
             pollTimer = setInterval(() => loadOrders({ silent: false }), 5000);
             setInterval(loadCupStatus, 6000);
         });
+
+        function renderViewToggle() {
+            const container = document.getElementById('view-toggle-group');
+            if (!container) return;
+            container.innerHTML = `
+                <button class="view-toggle-btn ${viewMode === 'order' ? 'active' : ''}" id="btn-view-order" onclick="switchViewMode('order')">${t('cookByOrder')}</button>
+                <button class="view-toggle-btn ${viewMode === 'item' ? 'active' : ''}" id="btn-view-item" onclick="switchViewMode('item')">${t('cookByItem')}</button>
+            `;
+        }
+
+        function switchViewMode(mode) {
+            if (viewMode === mode) return;
+            viewMode = mode;
+            localStorage.setItem('barista_view_mode', mode);
+            renderViewToggle();
+            loadOrders({ silent: true });
+        }
 
         async function loadSession() {
             const res = await api('/auth/session');
@@ -100,17 +119,138 @@
         function renderBoard(orders) {
             const activeOrders = orders.filter(order => order.status === activeStatus);
             const activeLabel = t(statusKeys[activeStatus]);
+            
+            let countLabel = activeOrders.length;
+            let bodyHtml = '';
+            
+            if (viewMode === 'item') {
+                const groupedItems = groupOrdersByItem(activeOrders);
+                const totalCups = groupedItems.reduce((sum, item) => sum + item.totalQuantity, 0);
+                countLabel = `${groupedItems.length} (${totalCups} ${t('items')})`;
+                bodyHtml = groupedItems.length 
+                    ? groupedItems.map(itemGroupHtml).join('') 
+                    : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
+            } else {
+                bodyHtml = activeOrders.length 
+                    ? activeOrders.map(orderHtml).join('') 
+                    : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
+            }
+            
             document.getElementById('orders-board').innerHTML = `
                 <section class="status-col active single-status" id="col-${activeStatus}">
                     <div class="status-col-head">
                         <span>${activeLabel}</span>
-                        <b>${activeOrders.length}</b>
+                        <b>${countLabel}</b>
                     </div>
                     <div class="status-col-body">
-                        ${activeOrders.length ? activeOrders.map(orderHtml).join('') : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`}
+                        ${bodyHtml}
                     </div>
                 </section>
             `;
+        }
+
+        function groupOrdersByItem(orders) {
+            const grouped = {};
+            orders.forEach(order => {
+                const items = order.items || [];
+                items.forEach(it => {
+                    const key = `${it.menuItemId}_${it.itemSize || ''}`;
+                    if (!grouped[key]) {
+                        grouped[key] = {
+                            menuItemId: it.menuItemId,
+                            itemName: it.itemName,
+                            itemSize: it.itemSize || '',
+                            totalQuantity: 0,
+                            orders: [],
+                            notes: []
+                        };
+                    }
+                    grouped[key].totalQuantity += it.quantity;
+                    if (!grouped[key].orders.some(o => o.id === order.id)) {
+                        grouped[key].orders.push({
+                            id: order.id,
+                            orderNumber: order.orderNumber,
+                            quantity: it.quantity,
+                            tableName: order.tableName
+                        });
+                    }
+                    if (order.note) {
+                        grouped[key].notes.push({
+                            orderNumber: order.orderNumber,
+                            note: order.note
+                        });
+                    }
+                });
+            });
+            return Object.values(grouped);
+        }
+
+        function itemGroupHtml(item) {
+            const next = nextStatus(activeStatus);
+            const orderIds = item.orders.map(o => o.id).join(',');
+            const notesHtml = item.notes.map(n => `<span>#${n.orderNumber}: ${escapeHtml(n.note)}</span>`).join('; ');
+            
+            return `
+                <article class="card order-card hold-card ${next ? '' : 'not-ready'}" data-next="${next || ''}"
+                    onpointerdown="startHoldGroup(event, [${orderIds}], '${next || ''}')"
+                    onpointerup="cancelHold()"
+                    onpointercancel="cancelHold()"
+                    ontouchstart="startHoldGroup(event, [${orderIds}], '${next || ''}')"
+                    ontouchend="cancelHold()"
+                    onmousedown="startHoldGroup(event, [${orderIds}], '${next || ''}')"
+                    onmouseup="cancelHold()"
+                    oncontextmenu="return false">
+                    <div class="toolbar order-card-head">
+                        <div>
+                            <p class="eyebrow">${item.itemSize ? t('size') + ' ' + escapeHtml(item.itemSize) : ''}</p>
+                            <h3>${escapeHtml(item.itemName)}</h3>
+                        </div>
+                        <span class="price">x${item.totalQuantity}</span>
+                    </div>
+                    <div class="order-note" style="margin-top: 8px;">
+                        <b>${t('orders')}:</b>
+                        <div class="order-chips-list" style="display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: 6px;">
+                            ${item.orders.map(o => `
+                                <span class="order-chip-link" onclick="event.stopPropagation(); setStatusGroupItem(${o.id}, ${o.orderNumber}, '${next}')" title="${escapeHtml(o.tableName)}">
+                                    #${o.orderNumber} (x${o.quantity})
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ${notesHtml ? `<div class="order-note" style="margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px;"><b>${t('note')}:</b> ${notesHtml}</div>` : ''}
+                </article>`;
+        }
+
+        function startHoldGroup(event, ids, next) {
+            if (!next) return;
+            beginHold(event, () => setStatusGroup(ids, next));
+        }
+
+        async function setStatusGroup(ids, status) {
+            if (!status || !ids || ids.length === 0) return;
+            const promises = ids.map(id => api('/orders/status', {
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ id, status })
+            }));
+            const results = await Promise.all(promises);
+            const allOk = results.every(res => res.ok);
+            if (!allOk) {
+                notifyWork(t('statusMoveFailed'));
+            }
+            if (status === 'Ready') await loadCupStatus();
+            loadOrders({ silent: true });
+        }
+
+        async function setStatusGroupItem(id, orderNumber, status) {
+            if (!status) return;
+            const nextLabel = t(statusKeys[status]);
+            const msg = t('confirmMoveOrderStatus')
+                .replace('{order}', orderNumber)
+                .replace('{status}', nextLabel);
+            if (confirm(msg)) {
+                await setStatus(id, status);
+            }
         }
 
         function setActiveStatus(status) {
@@ -202,5 +342,6 @@
 
         window.renderPage = () => {
             renderCupChip();
+            renderViewToggle();
             loadOrders({ silent: true });
         };
