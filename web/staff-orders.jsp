@@ -20,6 +20,7 @@
     <main class="shell work-shell">
         <section class="work-toolbar action-toolbar">
             <button class="stock-chip" id="cup-chip" type="button"></button>
+            <div class="view-toggle-group" id="view-toggle-group"></div>
         </section>
         <section class="work-tabs" id="barista-tabs"></section>
         <section class="status-board" id="orders-board"></section>
