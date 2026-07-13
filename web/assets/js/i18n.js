@@ -82,7 +82,8 @@ const dict = {
         cashPayment: 'Thanh toán', cashCount: 'Kiểm kê', adminWithdrawEvent: 'Admin rút tiền', selectedRange: 'Khoảng đang xem',
         cupsAvailable: 'Cốc hiện có', editCupStock: 'Sửa số cốc', updateCups: 'Cập nhật cốc', gotIt: 'Đã hiểu',
         adminPinTitle: 'Mã PIN quản trị', adminPinText: 'Nhập mã PIN để mở dashboard.', unlock: 'Mở khoá', adminPinInvalid: 'Sai mã PIN quản trị.',
-        actorAll: 'Tất cả', actorGuest: 'Khách', actorAdmin: 'Admin', actorBarista: 'Pha chế', actorCashier: 'Thu ngân', actorRunner: 'Bồi bàn', noLogs: 'Chưa có log'
+        actorAll: 'Tất cả', actorGuest: 'Khách', actorAdmin: 'Admin', actorBarista: 'Pha chế', actorCashier: 'Thu ngân', actorRunner: 'Bồi bàn', noLogs: 'Chưa có log',
+        cookByOrder: 'Nấu theo đơn', cookByItem: 'Nấu theo món', confirmMoveOrderStatus: 'Chuyển đơn #{order} sang trạng thái {status}?'
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
@@ -165,7 +166,8 @@ const dict = {
         cashPayment: 'Payment', cashCount: 'Cash count', adminWithdrawEvent: 'Admin withdrawal', selectedRange: 'Selected range',
         cupsAvailable: 'Cups available', editCupStock: 'Edit cups', updateCups: 'Update cups', gotIt: 'Got it',
         adminPinTitle: 'Admin PIN', adminPinText: 'Enter the PIN to unlock the dashboard.', unlock: 'Unlock', adminPinInvalid: 'Incorrect admin PIN.',
-        actorAll: 'All', actorGuest: 'Guest', actorAdmin: 'Admin', actorBarista: 'Barista', actorCashier: 'Cashier', actorRunner: 'Waiter', noLogs: 'No logs yet'
+        actorAll: 'All', actorGuest: 'Guest', actorAdmin: 'Admin', actorBarista: 'Barista', actorCashier: 'Cashier', actorRunner: 'Waiter', noLogs: 'No logs yet',
+        cookByOrder: 'Cook by Order', cookByItem: 'Cook by Item', confirmMoveOrderStatus: 'Move order #{order} to {status}?'
     }
 };
 
