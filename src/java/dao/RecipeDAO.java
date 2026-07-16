@@ -61,6 +61,37 @@ public class RecipeDAO {
     }
 
     /**
+     * Retrieves all recipe items mapped by their menu item id.
+     * This avoids N+1 queries when loading the entire menu.
+     *
+     * @return a map of menu item id to a list of recipe items
+     */
+    public java.util.Map<String, List<RecipeItem>> getAllRecipesMappedByMenuItemId() {
+        java.util.Map<String, List<RecipeItem>> map = new java.util.HashMap<>();
+        String sql = "SELECT id, menuItemId, ingredientId, quantity FROM dbo.RecipeItems";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql);
+             ResultSet rs = st.executeQuery()) {
+            
+            while (rs.next()) {
+                String menuId = rs.getString("menuItemId");
+                RecipeItem item = new RecipeItem(
+                    rs.getString("id"), menuId,
+                    rs.getString("ingredientId"), rs.getInt("quantity")
+                );
+                map.computeIfAbsent(menuId, k -> new ArrayList<>()).add(item);
+            }
+        } catch (Exception e) {
+            System.err.println("Database fetch failed in RecipeDAO.getAllRecipesMappedByMenuItemId(), falling back: " + e.getMessage());
+            for (RecipeItem item : getFallbackRecipes()) {
+                map.computeIfAbsent(item.getMenuItemId(), k -> new ArrayList<>()).add(item);
+            }
+        }
+        return map;
+    }
+
+    /**
      * Saves (inserts or updates) a list of recipe items for a specific menu item.
      * This will clear existing recipes for the menu item and insert the new ones.
      * 

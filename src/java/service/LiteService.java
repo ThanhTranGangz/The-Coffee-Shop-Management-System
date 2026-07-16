@@ -319,11 +319,15 @@ public class LiteService {
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             List<Map<String, Object>> menu = rows(rs);
             Set<Integer> bestSellerIds = getBestSellerMenuIdsByCategory(con, menu);
+            
             dao.RecipeDAO recipeDao = new dao.RecipeDAO();
+            java.util.Map<String, java.util.List<model.RecipeItem>> allRecipes = recipeDao.getAllRecipesMappedByMenuItemId();
+            java.util.Map<Integer, java.util.List<Map<String, Object>>> allSizes = getAllMenuSizesMapped(con);
+            
             for (Map<String, Object> item : menu) {
                 int itemId = readInt(item.get("id"), 0);
-                item.put("sizes", getMenuSizes(con, itemId));
-                item.put("recipes", recipeDao.getByMenuItemId(String.valueOf(itemId)).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
+                item.put("sizes", allSizes.getOrDefault(itemId, new java.util.ArrayList<>()));
+                item.put("recipes", allRecipes.getOrDefault(String.valueOf(itemId), new java.util.ArrayList<>()).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
                 item.put("bestSeller", bestSellerIds.contains(itemId));
             }
             return menu;
@@ -515,6 +519,21 @@ public class LiteService {
                 return rows(rs);
             }
         }
+    }
+
+    private java.util.Map<Integer, java.util.List<Map<String, Object>>> getAllMenuSizesMapped(Connection con) throws Exception {
+        java.util.Map<Integer, java.util.List<Map<String, Object>>> map = new java.util.HashMap<>();
+        try (PreparedStatement ps = con.prepareStatement("SELECT menuItemId, sizeName, extraPrice FROM dbo.MenuItemSizes ORDER BY sortOrder, id");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                int menuId = rs.getInt("menuItemId");
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("sizeName", rs.getString("sizeName"));
+                row.put("extraPrice", rs.getInt("extraPrice"));
+                map.computeIfAbsent(menuId, k -> new java.util.ArrayList<>()).add(row);
+            }
+        }
+        return map;
     }
 
     private void saveMenuSizes(Connection con, int menuItemId, List<Map<String, Object>> sizes) throws Exception {
