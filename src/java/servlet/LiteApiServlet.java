@@ -145,6 +145,41 @@ public class LiteApiServlet extends HttpServlet {
                 case "/logs":
                     resp.getWriter().write(JsonUtils.toJson(service.getSystemLogs(req.getParameter("actor"))));
                     break;
+                case "/staff":
+                    java.util.List<java.util.Map<String, Object>> staffList = new dao.StaffDAO().getAll().stream().map(s -> {
+                        java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+                        map.put("id", s.getId());
+                        map.put("name", s.getName());
+                        map.put("role", s.getRole());
+                        return map;
+                    }).collect(java.util.stream.Collectors.toList());
+                    resp.getWriter().write(JsonUtils.toJson(staffList));
+                    break;
+                case "/shifts":
+                    java.util.List<java.util.Map<String, Object>> shiftList = new dao.ShiftDAO().getAll().stream().map(s -> {
+                        java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+                        map.put("id", s.getId());
+                        map.put("staffId", s.getStaffId());
+                        map.put("staffName", s.getStaffName());
+                        map.put("date", s.getShiftDate());
+                        map.put("shiftName", s.getShiftName());
+                        map.put("hours", s.getHours());
+                        map.put("status", s.getStatus());
+                        map.put("notes", s.getNotes());
+                        map.put("assignedRole", s.getAssignedRole());
+                        return map;
+                    }).collect(java.util.stream.Collectors.toList());
+                    resp.getWriter().write(JsonUtils.toJson(shiftList));
+                    break;
+                case "/payroll":
+                    String month = req.getParameter("month"); // e.g., "2026-07"
+                    if (month == null || month.isEmpty()) {
+                        error(resp, HttpServletResponse.SC_BAD_REQUEST, "Missing 'month' parameter.");
+                        return;
+                    }
+                    java.util.List<java.util.Map<String, Object>> payroll = new dao.ShiftDAO().getPayrollByMonth(month);
+                    resp.getWriter().write(JsonUtils.toJson(payroll));
+                    break;
                 default:
                     error(resp, HttpServletResponse.SC_NOT_FOUND, "Endpoint not found.");
             }
@@ -273,6 +308,46 @@ public class LiteApiServlet extends HttpServlet {
                     service.addSystemLog(role(req), user(req), "MENU_SAVE",
                             "Admin lưu món " + str(savedMenu.get("nameVi")), "Admin saved menu item " + str(savedMenu.get("nameEn")), readInt(savedMenu.get("id"), 0));
                     resp.getWriter().write(JsonUtils.toJson(savedMenu));
+                    break;
+                case "/shifts":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được lưu ca làm.");
+                        return;
+                    }
+                    dao.ShiftDAO shiftDAO = new dao.ShiftDAO();
+                    String shiftId = str(body.get("id"));
+                    if (shiftId.isEmpty()) { shiftId = "s" + System.currentTimeMillis(); }
+                    model.Shift shift = new model.Shift(
+                        shiftId,
+                        readInt(body.get("staffId"), 0),
+                        str(body.get("staffName")),
+                        str(body.get("date")),
+                        str(body.get("shiftName")),
+                        str(body.get("hours")),
+                        str(body.get("status")),
+                        str(body.get("notes")),
+                        str(body.get("assignedRole"))
+                    );
+                    shiftDAO.save(shift);
+                    java.util.Map<String, Object> sMap = new java.util.LinkedHashMap<>();
+                    sMap.put("id", shift.getId());
+                    sMap.put("staffId", shift.getStaffId());
+                    sMap.put("staffName", shift.getStaffName());
+                    sMap.put("date", shift.getShiftDate());
+                    sMap.put("shiftName", shift.getShiftName());
+                    sMap.put("hours", shift.getHours());
+                    sMap.put("status", shift.getStatus());
+                    sMap.put("notes", shift.getNotes());
+                    sMap.put("assignedRole", shift.getAssignedRole());
+                    resp.getWriter().write(JsonUtils.toJson(sMap));
+                    break;
+                case "/shifts/delete":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được xóa ca làm.");
+                        return;
+                    }
+                    new dao.ShiftDAO().delete(str(body.get("id")));
+                    resp.getWriter().write("{\"success\":true}");
                     break;
                 case "/menu/delete":
                     service.deleteMenuItem(readInt(body.get("id"), 0));

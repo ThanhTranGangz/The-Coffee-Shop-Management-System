@@ -19,7 +19,7 @@ function render() {
     
     tbody.innerHTML = '';
     if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem" class="muted">Chưa có nguyên liệu nào trong kho.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem" class="muted">${t('inventoryEmpty')}</td></tr>`;
         return;
     }
 
@@ -37,8 +37,8 @@ function render() {
             <td style="padding:12px">${escapeHtml(ing.unit)}</td>
             <td style="padding:12px; text-align:right">${money(ing.importCost)}</td>
             <td style="padding:12px; text-align:right">
-                <button class="btn" style="padding:4px 8px; font-size:0.85rem; margin-right:4px" onclick="edit('${escapeJs(ing.id)}')">Sửa</button>
-                <button class="btn danger" style="padding:4px 8px; font-size:0.85rem" onclick="deleteItem('${escapeJs(ing.id)}')">Xoá</button>
+                <button class="btn" style="padding:4px 8px; font-size:0.85rem; margin-right:4px" onclick="edit('${escapeJs(ing.id)}')">${t('edit')}</button>
+                <button class="btn danger" style="padding:4px 8px; font-size:0.85rem" onclick="deleteItem('${escapeJs(ing.id)}')">${t('delete')}</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -56,7 +56,7 @@ function newItem() {
     document.getElementById('minStock').value = 0;
     document.getElementById('importCost').value = 0;
     
-    document.getElementById('form-title').textContent = 'Thêm nguyên liệu mới';
+    document.getElementById('form-title').textContent = t('addNewMaterial');
     document.getElementById('message').className = 'notice hidden';
     openEditSheet();
 }
@@ -75,7 +75,7 @@ function edit(id) {
     document.getElementById('minStock').value = ing.minStock;
     document.getElementById('importCost').value = ing.importCost;
     
-    document.getElementById('form-title').textContent = 'Sửa nguyên liệu: ' + ing.name;
+    document.getElementById('form-title').textContent = t('editMaterial') + ' ' + ing.name;
     document.getElementById('message').className = 'notice hidden';
     openEditSheet();
 }
@@ -116,17 +116,17 @@ async function saveItem(event) {
             closeEditSheet();
         } else {
             const err = await res.json().catch(()=>({}));
-            msg.textContent = err.error || 'Lỗi hệ thống';
+            msg.textContent = err.error || t('systemError');
             msg.className = 'notice error';
         }
     } catch (err) {
-        msg.textContent = 'Mất kết nối mạng';
+        msg.textContent = t('networkError');
         msg.className = 'notice error';
     }
 }
 
 async function deleteItem(id) {
-    if (!confirm('Bạn có chắc chắn muốn xoá nguyên liệu ' + id + '? (Sẽ gây lỗi nếu món ăn đang dùng nguyên liệu này)')) return;
+    if (!confirm(t('deleteMaterialConfirm').replace('{id}', id))) return;
     try {
         const res = await api('/inventory/delete', {
             method: 'POST',
@@ -179,3 +179,20 @@ document.addEventListener('DOMContentLoaded', () => {
     loadData();
     document.getElementById('form-overlay').addEventListener('click', closeEditSheet);
 });
+
+window.renderPage = function() {
+    render();
+    if (editingId) {
+        const ing = items.find(i => i.id === editingId);
+        if (ing) {
+            document.getElementById('form-title').textContent = t('editMaterial') + ' ' + ing.name;
+        }
+    } else {
+        const titleEl = document.getElementById('form-title');
+        if (titleEl && titleEl.textContent !== t('materialInfo')) {
+            titleEl.textContent = t('addNewMaterial');
+        } else if (titleEl) {
+            titleEl.textContent = t('materialInfo');
+        }
+    }
+};

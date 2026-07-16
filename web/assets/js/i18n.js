@@ -3,7 +3,7 @@ const TAB_SESSION_KEY = 'coffeshop_tab_session';
 const dict = {
     vi: {
         home: 'Trang chủ', order: 'Gọi món', status: 'Tra đơn', login: 'Đăng nhập',
-        dashboard: 'Dashboard', staffOrders: 'Pha chế', cashier: 'Thu ngân', runner: 'Bồi bàn', menuAdmin: 'Thực đơn', inventoryAdmin: 'Kho nguyên liệu', tablesAdmin: 'Bàn & QR', systemLogs: 'Log hệ thống',
+        dashboard: 'Dashboard', staffOrders: 'Pha chế', cashier: 'Thu ngân', runner: 'Bồi bàn', menuAdmin: 'Thực đơn', inventoryAdmin: 'Kho nguyên liệu', tablesAdmin: 'Bàn & QR', staffAdmin: 'Nhân viên', systemLogs: 'Log hệ thống',
         logout: 'Đăng xuất', language: 'Ngôn ngữ', refresh: 'Làm mới', save: 'Lưu', cancel: 'Huỷ', delete: 'Xoá', backToPrevious: 'Quay lại',
         heroEyebrow: 'Đặt món tại bàn', heroTitle: 'coffeshop', heroText: 'Chọn món, gửi đơn và theo dõi trạng thái ngay tại bàn.',
         homeCardTitle: 'Dành cho khách tại quán', homeFeatureMenu: 'Quét QR trên bàn để gọi món', homeFeatureStatus: 'Theo dõi đơn bằng mã đơn',
@@ -48,6 +48,17 @@ const dict = {
         revenueToday: 'Hôm nay', revenueMonth: 'Tháng này', revenueYear: 'Năm nay',
         soldProducts: 'Sản phẩm đã bán', bestSeller: 'Bán chạy nhất', rangeBestSeller: 'Bán chạy trong khoảng này', noSalesData: 'Chưa có dữ liệu',
         favoriteItems: 'Các món được yêu thích nhất',
+        staffSchedule: 'Lịch làm việc tuần này', jumpToPayroll: 'Bảng Chấm Công', prevWeek: '< Tuần trước', nextWeek: 'Tuần sau >',
+        shiftFormTitle: 'Phân công ca làm', addShiftTitle: 'Thêm nhân viên vào ca', editShiftTitle: 'Sửa phân công',
+        staffLabel: 'Nhân viên', dateLabel: 'Ngày (YYYY-MM-DD)', shiftLabel: 'Ca làm', roleLabel: 'Vị trí (Vai trò)',
+        notesLabel: 'Ghi chú', notesPlaceholder: 'Ghi chú thêm...', statusLabel: 'Trạng thái', saveShift: 'LƯU CA LÀM',
+        payrollSection: 'Bảng chấm công (Tính tổng giờ)', roleFilter: 'Vai trò:', monthFilter: 'Tháng:',
+        totalShifts: 'Tổng số ca (Đã làm)', totalHours: 'Tổng số giờ', loadingData: 'Đang tải dữ liệu...',
+        payrollNote1: '* Chỉ tính số giờ cho những ca làm có trạng thái là "Đã làm" hoặc "Hoàn thành".',
+        payrollNote2: '* Ca Sáng / Ca Chiều: 6 giờ. Ca Tối: 5 giờ.',
+        shiftMorning: 'Ca Sáng (06:00 - 12:00)', shiftAfternoon: 'Ca Chiều (12:00 - 18:00)', shiftEvening: 'Ca Tối (18:00 - 23:00)',
+        roleBaristaFull: 'Barista (Pha chế)', roleCashierFull: 'Cashier (Thu ngân)', roleWaiterFull: 'Waiter (Phục vụ)',
+        statusScheduled: 'Đã xếp lịch', statusDone: 'Đã làm', statusAbsent: 'Vắng', allRoles: 'Tất cả',
         scrollToTop: 'Lên đầu trang',
         printInvoice: 'In hóa đơn', invoiceTitle: 'Hóa đơn', invoiceHint: 'Đưa hóa đơn này kèm món cho khách. Khi thanh toán, khách đưa hóa đơn cho thu ngân.',
         printNow: 'In hóa đơn', closeInvoice: 'Đóng', invoiceLoadFailed: 'Không tải được hóa đơn',
@@ -83,11 +94,12 @@ const dict = {
         cupsAvailable: 'Cốc hiện có', editCupStock: 'Sửa số cốc', updateCups: 'Cập nhật cốc', gotIt: 'Đã hiểu',
         adminPinTitle: 'Mã PIN quản trị', adminPinText: 'Nhập mã PIN để mở dashboard.', unlock: 'Mở khoá', adminPinInvalid: 'Sai mã PIN quản trị.',
         actorAll: 'Tất cả', actorGuest: 'Khách', actorAdmin: 'Admin', actorBarista: 'Pha chế', actorCashier: 'Thu ngân', actorRunner: 'Bồi bàn', noLogs: 'Chưa có log',
-        cookByOrder: 'Nấu theo đơn', cookByItem: 'Nấu theo món', confirmMoveOrderStatus: 'Chuyển đơn #{order} sang trạng thái {status}?'
+        cookByOrder: 'Nấu theo đơn', cookByItem: 'Nấu theo món', confirmMoveOrderStatus: 'Chuyển đơn #{order} sang trạng thái {status}?',
+        addMaterialBtn: 'Thêm nguyên liệu', materialId: 'Mã NL', materialName: 'Tên nguyên liệu', stock: 'Tồn kho', minStock: 'Tối thiểu', unit: 'Đơn vị', importPrice: 'Giá nhập', materialInfo: 'Thông tin nguyên liệu', materialIdFull: 'Mã nguyên liệu (ID)', materialIdPlaceholder: 'VD: CF_01', unitHelp: 'Đơn vị (g, ml...)', importPriceVND: 'Giá nhập (đ)', currentStock: 'Tồn kho hiện tại', minStockLevel: 'Mức tối thiểu', saveMaterial: 'Lưu nguyên liệu', inventoryEmpty: 'Chưa có nguyên liệu nào trong kho.', addNewMaterial: 'Thêm nguyên liệu mới', editMaterial: 'Sửa nguyên liệu:', deleteMaterialConfirm: 'Bạn có chắc chắn muốn xoá nguyên liệu {id}? (Sẽ gây lỗi nếu món ăn đang dùng nguyên liệu này)', systemError: 'Lỗi hệ thống', networkError: 'Mất kết nối mạng'
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
-        dashboard: 'Dashboard', staffOrders: 'Barista', cashier: 'Cashier', runner: 'Waiter', menuAdmin: 'Menu', inventoryAdmin: 'Inventory', tablesAdmin: 'Tables & QR', systemLogs: 'System logs',
+        dashboard: 'Dashboard', staffOrders: 'Barista', cashier: 'Cashier', runner: 'Waiter', menuAdmin: 'Menu', inventoryAdmin: 'Inventory', tablesAdmin: 'Tables & QR', staffAdmin: 'Staff', systemLogs: 'System logs',
         logout: 'Log out', language: 'Language', refresh: 'Refresh', save: 'Save', cancel: 'Cancel', delete: 'Delete', backToPrevious: 'Back',
         heroEyebrow: 'Order at your table', heroTitle: 'coffeshop', heroText: 'Choose, order, and follow your drinks from the table.',
         homeCardTitle: 'For in-store guests', homeFeatureMenu: 'Scan the table QR to order', homeFeatureStatus: 'Track your order by code',
@@ -132,6 +144,17 @@ const dict = {
         revenueToday: 'Today', revenueMonth: 'This month', revenueYear: 'This year',
         soldProducts: 'Products sold', bestSeller: 'Best seller', rangeBestSeller: 'Best sellers in this range', noSalesData: 'No data yet',
         favoriteItems: 'Most loved items',
+        staffSchedule: 'This week\'s schedule', jumpToPayroll: 'Payroll', prevWeek: '< Prev week', nextWeek: 'Next week >',
+        shiftFormTitle: 'Shift assignment', addShiftTitle: 'Add staff to shift', editShiftTitle: 'Edit assignment',
+        staffLabel: 'Staff', dateLabel: 'Date (YYYY-MM-DD)', shiftLabel: 'Shift', roleLabel: 'Role',
+        notesLabel: 'Notes', notesPlaceholder: 'Additional notes...', statusLabel: 'Status', saveShift: 'SAVE SHIFT',
+        payrollSection: 'Payroll (Total hours)', roleFilter: 'Role:', monthFilter: 'Month:',
+        totalShifts: 'Total shifts (Done)', totalHours: 'Total hours', loadingData: 'Loading data...',
+        payrollNote1: '* Only counts hours for shifts with "Done" or "Completed" status.',
+        payrollNote2: '* Morning / Afternoon: 6 hrs. Evening: 5 hrs.',
+        shiftMorning: 'Morning (06:00 - 12:00)', shiftAfternoon: 'Afternoon (12:00 - 18:00)', shiftEvening: 'Evening (18:00 - 23:00)',
+        roleBaristaFull: 'Barista', roleCashierFull: 'Cashier', roleWaiterFull: 'Waiter',
+        statusScheduled: 'Scheduled', statusDone: 'Done', statusAbsent: 'Absent', allRoles: 'All',
         scrollToTop: 'Back to top',
         printInvoice: 'Print invoice', invoiceTitle: 'Invoice', invoiceHint: 'Give this invoice with the order. At payment, the guest shows it to the cashier.',
         printNow: 'Print invoice', closeInvoice: 'Close', invoiceLoadFailed: 'Could not load invoice',
@@ -167,7 +190,8 @@ const dict = {
         cupsAvailable: 'Cups available', editCupStock: 'Edit cups', updateCups: 'Update cups', gotIt: 'Got it',
         adminPinTitle: 'Admin PIN', adminPinText: 'Enter the PIN to unlock the dashboard.', unlock: 'Unlock', adminPinInvalid: 'Incorrect admin PIN.',
         actorAll: 'All', actorGuest: 'Guest', actorAdmin: 'Admin', actorBarista: 'Barista', actorCashier: 'Cashier', actorRunner: 'Waiter', noLogs: 'No logs yet',
-        cookByOrder: 'Cook by Order', cookByItem: 'Cook by Item', confirmMoveOrderStatus: 'Move order #{order} to {status}?'
+        cookByOrder: 'Cook by Order', cookByItem: 'Cook by Item', confirmMoveOrderStatus: 'Move order #{order} to {status}?',
+        addMaterialBtn: 'Add material', materialId: 'Material ID', materialName: 'Material name', stock: 'Stock', minStock: 'Min stock', unit: 'Unit', importPrice: 'Import cost', materialInfo: 'Material details', materialIdFull: 'Material ID', materialIdPlaceholder: 'Ex: CF_01', unitHelp: 'Unit (g, ml...)', importPriceVND: 'Import cost (VND)', currentStock: 'Current stock', minStockLevel: 'Min stock level', saveMaterial: 'Save material', inventoryEmpty: 'No materials in inventory.', addNewMaterial: 'Add new material', editMaterial: 'Edit material:', deleteMaterialConfirm: 'Are you sure you want to delete material {id}? (May cause errors if items are using it)', systemError: 'System error', networkError: 'Network disconnected'
     }
 };
 
@@ -259,6 +283,7 @@ function nav(role) {
             <a class="link" href="${withTab('admin-tables.jsp')}" data-i18n="tablesAdmin">${t('tablesAdmin')}</a>
             <a class="link" href="${withTab('admin-menu.jsp')}" data-i18n="menuAdmin">${t('menuAdmin')}</a>
             <a class="link" href="${withTab('inventory.jsp')}" data-i18n="inventoryAdmin">Kho nguyên liệu</a>
+            <a class="link" href="${withTab('admin-staff.jsp')}" data-i18n="staffAdmin">Nhân viên</a>
             <a class="link" href="${withTab('staff-orders.jsp')}" data-i18n="staffOrders">${t('staffOrders')}</a>
             <a class="link" href="${withTab('cashier.jsp')}" data-i18n="cashier">${t('cashier')}</a>
             <a class="link" href="${withTab('counter-order.jsp')}" data-i18n="counterOrder">${t('counterOrder')}</a>
@@ -319,7 +344,7 @@ async function loadNav() {
 async function logout() {
     const sessionRes = await api('/auth/session');
     const session = sessionRes.ok ? await sessionRes.json() : {};
-    const redirectTarget = session.role === 'admin' ? 'dashboard.jsp' : 'staff-login.jsp';
+    const redirectTarget = session.role === 'admin' ? 'index.html' : 'staff-login.jsp';
     if (session.role === 'cashier') {
         const cashRes = await api('/cash/status');
         const cash = cashRes.ok ? await cashRes.json() : { balance: 0 };

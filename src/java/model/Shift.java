@@ -12,11 +12,27 @@ public class Shift {
     private String hours;
     private String status;
     private String notes;
+    private String assignedRole;
 
     /**
      * Default constructor.
      */
     public Shift() {}
+
+    /**
+     * Constructs a Shift without assignedRole (backward compatibility).
+     */
+    public Shift(String id, int staffId, String staffName, String shiftDate, String shiftName, String hours, String status, String notes) {
+        this.id = id;
+        this.staffId = staffId;
+        this.staffName = staffName;
+        this.shiftDate = shiftDate;
+        this.shiftName = shiftName;
+        this.hours = hours;
+        this.status = status;
+        this.notes = notes;
+        this.assignedRole = null;
+    }
 
     /**
      * Constructs a Shift with full details.
@@ -29,8 +45,9 @@ public class Shift {
      * @param hours the hours worked
      * @param status the status of the shift
      * @param notes any remarks
+     * @param assignedRole the role assigned for this shift
      */
-    public Shift(String id, int staffId, String staffName, String shiftDate, String shiftName, String hours, String status, String notes) {
+    public Shift(String id, int staffId, String staffName, String shiftDate, String shiftName, String hours, String status, String notes, String assignedRole) {
         this.id = id;
         this.staffId = staffId;
         this.staffName = staffName;
@@ -39,6 +56,7 @@ public class Shift {
         this.hours = hours;
         this.status = status;
         this.notes = notes;
+        this.assignedRole = assignedRole;
     }
 
     public String getId() { return id; }
@@ -64,4 +82,7 @@ public class Shift {
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+
+    public String getAssignedRole() { return assignedRole; }
+    public void setAssignedRole(String assignedRole) { this.assignedRole = assignedRole; }
 }

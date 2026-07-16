@@ -68,4 +68,26 @@
     nbproject/build-impl.xml file. 
 
     -->
+    <target name="-init-taskdefs">
+        <echo message="Bypassing NetBeans CopyLibs with standard Ant copy tasks."/>
+        <macrodef name="copylibs">
+            <attribute name="manifest" default=""/>
+            <attribute name="compress" default="false"/>
+            <attribute name="jarfile" default=""/>
+            <attribute name="excludeFromCopy" default=""/>
+            <attribute name="runtimeclasspath" default=""/>
+            <element name="any" implicit="true" optional="true"/>
+            <sequential>
+                <echo message="copylibs task skipped."/>
+            </sequential>
+        </macrodef>
+        <macrodef name="copyfiles">
+            <attribute name="files" default=""/>
+            <attribute name="todir" default=""/>
+            <attribute name="iftldtodir" default=""/>
+            <sequential>
+                <copy file="@{files}" todir="@{todir}" failonerror="false"/>
+            </sequential>
+        </macrodef>
+    </target>
 </project>

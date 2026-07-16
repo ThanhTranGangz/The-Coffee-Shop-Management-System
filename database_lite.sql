@@ -113,6 +113,37 @@ CREATE TABLE dbo.SystemLogs (
     createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 
+IF OBJECT_ID('dbo.Staff','U') IS NULL
+CREATE TABLE dbo.Staff (
+    id INT PRIMARY KEY,
+    name NVARCHAR(120) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    pin VARCHAR(20) NULL,
+    shift NVARCHAR(100) NULL,
+    active BIT NOT NULL DEFAULT 1,
+    username VARCHAR(50) NULL,
+    password VARCHAR(100) NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'Active',
+    overtime BIT NOT NULL DEFAULT 0
+);
+
+IF OBJECT_ID('dbo.Shifts','U') IS NULL
+CREATE TABLE dbo.Shifts (
+    id VARCHAR(50) PRIMARY KEY,
+    staffId INT NOT NULL,
+    staffName NVARCHAR(120) NOT NULL,
+    shiftDate VARCHAR(20) NOT NULL,
+    shiftName NVARCHAR(50) NOT NULL,
+    hours VARCHAR(50) NOT NULL,
+    status NVARCHAR(30) NOT NULL,
+    notes NVARCHAR(255) NULL,
+    assignedRole VARCHAR(20) NULL
+);
+
+IF COL_LENGTH('dbo.Shifts','assignedRole') IS NULL
+ALTER TABLE dbo.Shifts ADD assignedRole VARCHAR(20) NULL;
+
+
 MERGE dbo.Users AS t
 USING (VALUES
     ('admin', '8888', 'admin', N'Quản trị coffeshop'),

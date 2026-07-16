@@ -8,6 +8,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Data Access Object for managing shifts.
@@ -23,7 +25,7 @@ public class ShiftDAO {
      */
     public List<Shift> getAll() {
         List<Shift> shifts = new ArrayList<>();
-        String sql = "SELECT id, staffId, staffName, shiftDate, shiftName, hours, status, notes FROM dbo.Shifts ORDER BY shiftDate DESC, shiftName";
+        String sql = "SELECT id, staffId, staffName, shiftDate, shiftName, hours, status, notes, assignedRole FROM dbo.Shifts ORDER BY shiftDate DESC, shiftName";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql);
@@ -37,7 +39,8 @@ public class ShiftDAO {
                     rs.getString("shiftName"),
                     rs.getString("hours"),
                     rs.getString("status"),
-                    rs.getString("notes")
+                    rs.getString("notes"),
+                    rs.getString("assignedRole")
                 ));
             }
             fallbackShifts = new ArrayList<>(shifts);
@@ -55,10 +58,10 @@ public class ShiftDAO {
      */
     public void save(Shift shift) {
         String sql = "MERGE dbo.Shifts AS target " +
-                     "USING (SELECT ? AS id, ? AS staffId, ? AS staffName, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes) AS source " +
+                     "USING (SELECT ? AS id, ? AS staffId, ? AS staffName, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes, ? AS assignedRole) AS source " +
                      "ON target.id = source.id " +
-                     "WHEN MATCHED THEN UPDATE SET staffId = source.staffId, staffName = source.staffName, shiftDate = source.shiftDate, shiftName = source.shiftName, hours = source.hours, status = source.status, notes = source.notes " +
-                     "WHEN NOT MATCHED THEN INSERT (id, staffId, staffName, shiftDate, shiftName, hours, status, notes) VALUES (source.id, source.staffId, source.staffName, source.shiftDate, source.shiftName, source.hours, source.status, source.notes);";
+                     "WHEN MATCHED THEN UPDATE SET staffId = source.staffId, staffName = source.staffName, shiftDate = source.shiftDate, shiftName = source.shiftName, hours = source.hours, status = source.status, notes = source.notes, assignedRole = source.assignedRole " +
+                     "WHEN NOT MATCHED THEN INSERT (id, staffId, staffName, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES (source.id, source.staffId, source.staffName, source.shiftDate, source.shiftName, source.hours, source.status, source.notes, source.assignedRole);";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
@@ -70,6 +73,7 @@ public class ShiftDAO {
             st.setString(6, shift.getHours());
             st.setString(7, shift.getStatus());
             st.setString(8, shift.getNotes());
+            st.setString(9, shift.getAssignedRole());
             st.executeUpdate();
         } catch (Exception e) {
             System.err.println("Database save failed in ShiftDAO.save(), updating fallback: " + e.getMessage());
@@ -105,5 +109,42 @@ public class ShiftDAO {
             System.err.println("Database delete failed in ShiftDAO.delete(): " + e.getMessage());
         }
         fallbackShifts.removeIf(s -> s.getId().equals(id));
+    }
+    
+    /**
+     * Calculates total hours worked by each staff for a specific month.
+     * Only includes shifts with status 'Đã làm' or 'Hoàn thành'.
+     * 
+     * @param yyyyMM the month in 'YYYY-MM' format (e.g., '2026-07')
+     * @return A list of Maps containing staffName, role, totalShifts, and totalHours
+     */
+    public List<Map<String, Object>> getPayrollByMonth(String yyyyMM) {
+        List<Map<String, Object>> payroll = new ArrayList<>();
+        String sql = "SELECT staffId, staffName, assignedRole, " +
+                     "COUNT(*) as totalShifts, " +
+                     "SUM(CASE WHEN shiftName = N'Ca Tối' THEN 5 ELSE 6 END) as totalHours " +
+                     "FROM dbo.Shifts " +
+                     "WHERE shiftDate LIKE ? AND (status = N'Đã làm' OR status = N'Hoàn thành') " +
+                     "GROUP BY staffId, staffName, assignedRole " +
+                     "ORDER BY staffName ASC";
+                     
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, yyyyMM + "-%");
+            ResultSet rs = st.executeQuery();
+            while (rs.next()) {
+                Map<String, Object> record = new HashMap<>();
+                record.put("staffId", rs.getInt("staffId"));
+                record.put("staffName", rs.getString("staffName"));
+                record.put("role", rs.getString("assignedRole"));
+                record.put("totalShifts", rs.getInt("totalShifts"));
+                record.put("totalHours", rs.getInt("totalHours"));
+                payroll.add(record);
+            }
+        } catch (Exception e) {
+            System.err.println("Database query failed in ShiftDAO.getPayrollByMonth(): " + e.getMessage());
+        }
+        return payroll;
     }
 }

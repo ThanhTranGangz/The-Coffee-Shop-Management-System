@@ -16,19 +16,19 @@
     <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html">coffeshop</a><div class="links" id="nav-links"></div><button id="lang-toggle" class="link lang-toggle" type="button" onclick="toggleLang()">EN</button></div></nav>
     <main class="shell work-shell">
         <div class="work-toolbar">
-            <button class="btn primary" onclick="newItem()">Thêm nguyên liệu</button>
+            <button class="btn primary" onclick="newItem()" data-i18n="addMaterialBtn">Thêm nguyên liệu</button>
         </div>
         <div class="grid side">
             <section class="card" style="padding:0; overflow-x:auto;">
                 <table class="data-table" style="width:100%; text-align:left; border-collapse:collapse; white-space:nowrap;">
                     <thead>
                         <tr style="border-bottom:1px solid var(--border)">
-                            <th style="padding:12px">Mã NL</th>
-                            <th style="padding:12px">Tên nguyên liệu</th>
-                            <th style="padding:12px; text-align:right">Tồn kho</th>
-                            <th style="padding:12px; text-align:right">Tối thiểu</th>
-                            <th style="padding:12px">Đơn vị</th>
-                            <th style="padding:12px; text-align:right">Giá nhập</th>
+                            <th style="padding:12px" data-i18n="materialId">Mã NL</th>
+                            <th style="padding:12px" data-i18n="materialName">Tên nguyên liệu</th>
+                            <th style="padding:12px; text-align:right" data-i18n="stock">Tồn kho</th>
+                            <th style="padding:12px; text-align:right" data-i18n="minStock">Tối thiểu</th>
+                            <th style="padding:12px" data-i18n="unit">Đơn vị</th>
+                            <th style="padding:12px; text-align:right" data-i18n="importPrice">Giá nhập</th>
                             <th style="padding:12px"></th>
                         </tr>
                     </thead>
@@ -39,25 +39,25 @@
             <div class="overlay" id="form-overlay"></div>
             <aside class="card" id="edit-panel">
                 <div class="form-panel-head">
-                    <h2 id="form-title">Thông tin nguyên liệu</h2>
-                    <button type="button" class="btn form-panel-close" onclick="resetForm(); closeEditSheet();">Huỷ</button>
+                    <h2 id="form-title" data-i18n="materialInfo">Thông tin nguyên liệu</h2>
+                    <button type="button" class="btn form-panel-close" onclick="resetForm(); closeEditSheet();" data-i18n="cancel">Huỷ</button>
                 </div>
                 <form class="grid" onsubmit="saveItem(event)">
                     <input id="originalId" type="hidden">
-                    <div><label>Mã nguyên liệu (ID)</label><input id="id" minlength="2" maxlength="50" required placeholder="VD: CF_01"></div>
-                    <div><label>Tên nguyên liệu</label><input id="name" minlength="2" maxlength="100" required></div>
+                    <div><label data-i18n="materialIdFull">Mã nguyên liệu (ID)</label><input id="id" minlength="2" maxlength="50" required placeholder="VD: CF_01" data-i18n-placeholder="materialIdPlaceholder"></div>
+                    <div><label data-i18n="materialName">Tên nguyên liệu</label><input id="name" minlength="2" maxlength="100" required></div>
                     <div class="form-row">
                         <div>
-                            <label>Đơn vị (g, ml...)</label>
+                            <label data-i18n="unitHelp">Đơn vị (g, ml...)</label>
                             <input id="unit" required maxlength="20">
                         </div>
-                        <div><label>Giá nhập (đ)</label><input id="importCost" type="number" min="0" step="1" required></div>
+                        <div><label data-i18n="importPriceVND">Giá nhập (đ)</label><input id="importCost" type="number" min="0" step="1" required></div>
                     </div>
                     <div class="form-row">
-                        <div><label>Tồn kho hiện tại</label><input id="stock" type="number" min="0" step="1" required></div>
-                        <div><label>Mức tối thiểu</label><input id="minStock" type="number" min="0" step="1" required></div>
+                        <div><label data-i18n="currentStock">Tồn kho hiện tại</label><input id="stock" type="number" min="0" step="1" required></div>
+                        <div><label data-i18n="minStockLevel">Mức tối thiểu</label><input id="minStock" type="number" min="0" step="1" required></div>
                     </div>
-                    <button class="btn primary" type="submit">Lưu nguyên liệu</button>
+                    <button class="btn primary" type="submit" data-i18n="saveMaterial">Lưu nguyên liệu</button>
                     <div id="message" class="notice hidden"></div>
                 </form>
             </aside>
