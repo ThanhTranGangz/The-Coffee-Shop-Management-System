@@ -25,6 +25,6 @@
         <section class="work-tabs" id="barista-tabs"></section>
         <section class="status-board" id="orders-board"></section>
     </main>
-    <script src="assets/js/page-staff-orders.js?v=order-confirm-1"></script>
+    <script src="assets/js/page-staff-orders.js?v=single-order-status-1"></script>
 </body>
 </html>

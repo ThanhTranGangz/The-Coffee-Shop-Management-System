@@ -30,6 +30,7 @@ public class LiteApiServlet extends HttpServlet {
     private static final long DUPLICATE_ORDER_WINDOW_MS = 5000;
     private static final String ATTR_GUEST_TABLE_NAME = "guestTableName";
     private static final String ATTR_GUEST_TABLE_CODE = "guestTableCode";
+    private static final String ATTR_GUEST_TABLE_VERIFIED = "guestTableVerified";
     private static final String ATTR_GUEST_ORDER_IDS = "guestOrderIds";
     private static final String ATTR_LAST_GUEST_ORDER_SIGNATURE = "lastGuestOrderSignature";
     private static final String ATTR_LAST_GUEST_ORDER_AT = "lastGuestOrderAt";
@@ -86,7 +87,13 @@ public class LiteApiServlet extends HttpServlet {
                     if (table == null) {
                         error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy bàn.");
                     } else {
-                        lockGuestTable(req, table);
+                        if (role(req).isEmpty()) {
+                            Map<String, Object> locked = lockedGuestTable(req);
+                            if (locked != null && !sameTable(locked, table)) {
+                                resetGuestProgress(req);
+                            }
+                            lockGuestTable(req, table);
+                        }
                         resp.getWriter().write(JsonUtils.toJson(table));
                     }
                     break;
@@ -271,7 +278,7 @@ public class LiteApiServlet extends HttpServlet {
                     if (role(req).isEmpty()) {
                         resp.getWriter().write(JsonUtils.toJson(createGuestOrder(req, body)));
                     } else {
-                        resp.getWriter().write(JsonUtils.toJson(service.createOrder(body)));
+                        resp.getWriter().write(JsonUtils.toJson(service.createOrder(body, role(req), user(req))));
                     }
                     break;
                 case "/orders/status":
@@ -459,24 +466,37 @@ public class LiteApiServlet extends HttpServlet {
 
     private Map<String, Object> createGuestOrder(HttpServletRequest req, Map<String, Object> body) throws Exception {
         HttpSession session = req.getSession(true);
-        List<Integer> orderIds = guestOrderIds(req, false);
-        String activeTableName = service.currentTableForOrderIds(orderIds);
+        String postedTableCode = str(body.get("tableCode"));
+        boolean hasQrTableCode = !postedTableCode.isEmpty();
+        Map<String, Object> requested = requestedTable(body.get("tableCode"), body.get("tableName"));
         Map<String, Object> table;
-        if (!activeTableName.isEmpty()) {
-            table = service.getTableByName(activeTableName);
-        } else {
-            table = lockedGuestTable(req);
-            Map<String, Object> requested = requestedTable(body.get("tableCode"), body.get("tableName"));
-            if (table != null && requested != null && !str(table.get("name")).equals(str(requested.get("name")))) {
-                throw new IllegalArgumentException("Bàn đã được cố định theo QR đang sử dụng.");
+        if (hasQrTableCode) {
+            if (requested == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
+            Map<String, Object> locked = lockedGuestTable(req);
+            if (locked != null && !sameTable(locked, requested)) {
+                resetGuestProgress(req);
             }
-            if (table == null) table = requested;
+            table = requested;
+        } else {
+            List<Integer> orderIds = guestOrderIds(req, false);
+            String activeTableName = service.currentTableForOrderIds(orderIds);
+            if (!activeTableName.isEmpty()) {
+                table = service.getTableByName(activeTableName);
+            } else {
+                table = lockedGuestTable(req);
+                if (table == null || !hasVerifiedGuestTable(req)) {
+                    throw new IllegalArgumentException("Vui lòng quét QR trên bàn để gọi món.");
+                }
+                if (requested != null && !sameTable(table, requested)) {
+                    throw new IllegalArgumentException("Bàn đã được cố định theo QR đang sử dụng.");
+                }
+            }
         }
         if (table == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
 
         body.put("tableName", str(table.get("name")));
         body.put("tableCode", str(table.get("code")));
-        lockGuestTable(req, table);
+        lockGuestTable(req, table, true);
 
         String signature = guestOrderSignature(body);
         long now = System.currentTimeMillis();
@@ -502,16 +522,21 @@ public class LiteApiServlet extends HttpServlet {
     }
 
     private List<Map<String, Object>> guestTableOrders(HttpServletRequest req) throws Exception {
+        Map<String, Object> requested = requestedTable(req.getParameter("tableCode"), req.getParameter("table"));
+        boolean hasQrTableCode = !str(req.getParameter("tableCode")).isEmpty();
+        if (hasQrTableCode && requested != null) {
+            Map<String, Object> locked = lockedGuestTable(req);
+            if (locked != null && !sameTable(locked, requested)) {
+                resetGuestProgress(req);
+            }
+            ensureGuestTableMatches(req, requested, true);
+        }
+
         List<Integer> orderIds = guestOrderIds(req, false);
         if (!orderIds.isEmpty()) {
             List<Map<String, Object>> orders = service.getOpenOrdersByIds(orderIds);
             rememberGuestTableFromOrders(req, orders);
             return orders;
-        }
-
-        Map<String, Object> requested = requestedTable(req.getParameter("tableCode"), req.getParameter("table"));
-        if (requested != null) {
-            ensureGuestTableMatches(req, requested);
         }
         return new ArrayList<>();
     }
@@ -530,19 +555,28 @@ public class LiteApiServlet extends HttpServlet {
         return table;
     }
 
-    private void ensureGuestTableMatches(HttpServletRequest req, Map<String, Object> table) throws Exception {
+    private void ensureGuestTableMatches(HttpServletRequest req, Map<String, Object> table, boolean verified) throws Exception {
         Map<String, Object> locked = lockedGuestTable(req);
         if (locked != null && !str(locked.get("name")).equals(str(table.get("name")))) {
             throw new IllegalArgumentException("Bàn đã được cố định theo QR đang sử dụng.");
         }
-        lockGuestTable(req, table);
+        lockGuestTable(req, table, verified);
     }
 
     private void lockGuestTable(HttpServletRequest req, Map<String, Object> table) {
+        lockGuestTable(req, table, true);
+    }
+
+    private void lockGuestTable(HttpServletRequest req, Map<String, Object> table, boolean verified) {
         if (!role(req).isEmpty() || table == null) return;
         HttpSession session = req.getSession(true);
         session.setAttribute(tabAttr(req, ATTR_GUEST_TABLE_NAME), str(table.get("name")));
         session.setAttribute(tabAttr(req, ATTR_GUEST_TABLE_CODE), str(table.get("code")));
+        if (verified) {
+            session.setAttribute(tabAttr(req, ATTR_GUEST_TABLE_VERIFIED), Boolean.TRUE);
+        } else if (session.getAttribute(tabAttr(req, ATTR_GUEST_TABLE_VERIFIED)) == null) {
+            session.setAttribute(tabAttr(req, ATTR_GUEST_TABLE_VERIFIED), Boolean.FALSE);
+        }
     }
 
     private Map<String, Object> lockedGuestTable(HttpServletRequest req) throws Exception {
@@ -552,6 +586,13 @@ public class LiteApiServlet extends HttpServlet {
         String name = str(session.getAttribute(tabAttr(req, ATTR_GUEST_TABLE_NAME)));
         if (name.isEmpty()) return null;
         return service.getTableByName(name);
+    }
+
+    private boolean hasVerifiedGuestTable(HttpServletRequest req) {
+        if (!role(req).isEmpty()) return false;
+        HttpSession session = req.getSession(false);
+        Object verified = session == null ? null : session.getAttribute(tabAttr(req, ATTR_GUEST_TABLE_VERIFIED));
+        return Boolean.TRUE.equals(verified);
     }
 
     private void rememberGuestTableFromOrders(HttpServletRequest req, List<Map<String, Object>> orders) throws Exception {
@@ -579,6 +620,26 @@ public class LiteApiServlet extends HttpServlet {
         List<Integer> ids = guestOrderIds(req, true);
         if (!ids.contains(orderId)) ids.add(0, orderId);
         while (ids.size() > 50) ids.remove(ids.size() - 1);
+    }
+
+    private boolean sameTable(Map<String, Object> left, Map<String, Object> right) {
+        if (left == null || right == null) return false;
+        int leftId = readInt(left.get("id"), 0);
+        int rightId = readInt(right.get("id"), 0);
+        if (leftId > 0 && rightId > 0) return leftId == rightId;
+        return str(left.get("name")).equals(str(right.get("name")));
+    }
+
+    private void resetGuestProgress(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return;
+        session.removeAttribute(tabAttr(req, ATTR_GUEST_TABLE_NAME));
+        session.removeAttribute(tabAttr(req, ATTR_GUEST_TABLE_CODE));
+        session.removeAttribute(tabAttr(req, ATTR_GUEST_TABLE_VERIFIED));
+        session.removeAttribute(tabAttr(req, ATTR_GUEST_ORDER_IDS));
+        session.removeAttribute(tabAttr(req, ATTR_LAST_GUEST_ORDER_SIGNATURE));
+        session.removeAttribute(tabAttr(req, ATTR_LAST_GUEST_ORDER_AT));
+        session.removeAttribute(tabAttr(req, ATTR_LAST_GUEST_ORDER_ID));
     }
 
     private String guestOrderSignature(Map<String, Object> body) {

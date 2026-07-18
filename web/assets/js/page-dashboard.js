@@ -4,6 +4,7 @@
         let activeRange = 'day';
         let customStart = '';
         let customEnd = '';
+        let statsLoadToken = 0;
         const rangeKeys = ['day', 'week', 'month', 'year', 'all', 'custom'];
 
         document.addEventListener('DOMContentLoaded', async () => {
@@ -51,16 +52,45 @@
         }
 
         async function loadStats() {
+            const token = ++statsLoadToken;
             const dashboardPath = activeRange === 'custom' && customStart && customEnd
                 ? `/dashboard?start=${encodeURIComponent(customStart)}&end=${encodeURIComponent(customEnd)}`
                 : '/dashboard';
-            const [dashboardRes, tableRes, cashRes] = await Promise.all([api(dashboardPath), api('/tables/map'), api('/cash/status')]);
-            dashboardData = await dashboardRes.json();
-            tableMapData = tableRes.ok ? await tableRes.json() : [];
-            cashData = cashRes.ok ? await cashRes.json() : null;
-            if (!customStart) customStart = dashboardData.today || todayInputValue();
-            if (!customEnd) customEnd = dashboardData.today || todayInputValue();
-            renderDashboard();
+            loadTableMap(token);
+            loadCashStatus(token);
+            try {
+                const dashboardRes = await api(dashboardPath);
+                if (token !== statsLoadToken) return;
+                if (!dashboardRes.ok) return;
+                dashboardData = await dashboardRes.json();
+                if (!customStart) customStart = dashboardData.today || todayInputValue();
+                if (!customEnd) customEnd = dashboardData.today || todayInputValue();
+                renderDashboard();
+            } catch (err) {
+                notifyWork(t('networkError'));
+            }
+        }
+
+        async function loadTableMap(token = statsLoadToken) {
+            try {
+                const tableRes = await api('/tables/map');
+                if (token !== statsLoadToken) return;
+                tableMapData = tableRes.ok ? await tableRes.json() : [];
+                renderTableMap(tableMapData, 'table-map');
+            } catch (err) {
+                if (token === statsLoadToken) renderTableMap([], 'table-map');
+            }
+        }
+
+        async function loadCashStatus(token = statsLoadToken) {
+            try {
+                const cashRes = await api('/cash/status');
+                if (token !== statsLoadToken) return;
+                cashData = cashRes.ok ? await cashRes.json() : null;
+                renderCashPanel();
+            } catch (err) {
+                cashData = null;
+            }
         }
 
         function renderDashboard() {
@@ -99,8 +129,6 @@
                     ` : `<div class="notice">${t('noSalesData')}</div>`}
                 </div>
             `;
-
-            renderTableMap(tableMapData, 'table-map');
 
             document.getElementById('details').innerHTML = `
                 <section class="detail-grid">
@@ -308,4 +336,8 @@
             return escapeHtml(value).replace(/`/g, '&#96;');
         }
 
-        window.renderPage = renderDashboard;
+        window.renderPage = () => {
+            renderDashboard();
+            renderCashPanel();
+            renderTableMap(tableMapData, 'table-map');
+        };

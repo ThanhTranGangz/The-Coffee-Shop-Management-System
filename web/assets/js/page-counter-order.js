@@ -83,7 +83,7 @@
                             <div class="stepper">
                                 <button type="button" onclick="changeCounterQty(${index}, -1)">−</button>
                                 <span class="num">${line.quantity}</span>
-                                <button type="button" onclick="changeCounterQty(${index}, 1)">+</button>
+                                <button type="button" onclick="changeCounterQty(${index}, 1)" ${line.quantity >= MAX_QTY ? 'disabled' : ''}>+</button>
                             </div>
                         </div>
                     </div>

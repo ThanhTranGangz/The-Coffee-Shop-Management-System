@@ -28,6 +28,6 @@
         </section>
         <section id="table-orders"></section>
     </main>
-    <script src="assets/js/page-order-status.js?v=order-confirm-1"></script>
+    <script src="assets/js/page-order-status.js?v=table-lock-fix-1"></script>
 </body>
 </html>

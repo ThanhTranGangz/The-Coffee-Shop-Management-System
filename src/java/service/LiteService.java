@@ -4,13 +4,17 @@ import context.DBContext;
 
 import java.sql.*;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class LiteService {
     private static final LiteService INSTANCE = new LiteService();
     private static final int MAX_ITEM_QUANTITY = 20;
+    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter SQL_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final DBContext db = new DBContext();
 
     public static LiteService getInstance() {
@@ -58,6 +62,7 @@ public class LiteService {
         clearOrphanActiveOrders(con);
         ensureTableCodes(con);
         seedMenu(con);
+        ensureInventoryAndRecipes(con);
         seedSalesHistory(con);
         ensureState(con, "cupsAvailable", 120);
         try (Statement st = con.createStatement()) {
@@ -121,6 +126,111 @@ public class LiteService {
         upsertMenuItem(con, "Cheesecake", "Cheesecake", "Bánh ngọt", 45000, "assets/img/menu/pastry.jpg");
     }
 
+    private void ensureInventoryAndRecipes(Connection con) throws Exception {
+        try (Statement st = con.createStatement()) {
+            st.execute("IF OBJECT_ID('dbo.Inventory','U') IS NULL CREATE TABLE dbo.Inventory (id VARCHAR(50) PRIMARY KEY, name NVARCHAR(120) NOT NULL, unit NVARCHAR(20) NOT NULL, stock INT NOT NULL DEFAULT 0, minStock INT NOT NULL DEFAULT 0, importCost INT NOT NULL DEFAULT 0)");
+            st.execute("IF OBJECT_ID('dbo.RecipeItems','U') IS NULL CREATE TABLE dbo.RecipeItems (id VARCHAR(50) PRIMARY KEY, menuItemId VARCHAR(50) NOT NULL, ingredientId VARCHAR(50) NOT NULL, quantity INT NOT NULL)");
+            st.execute("DELETE FROM dbo.RecipeItems WHERE menuItemId LIKE 'm%'");
+        }
+        insertIngredientIfMissing(con, "i1", "Hạt cà phê nguyên chất", "g", 1500, 300, 50);
+        insertIngredientIfMissing(con, "i2", "Sữa đặc", "g", 1000, 200, 40);
+        insertIngredientIfMissing(con, "i3", "Sữa tươi", "ml", 2000, 500, 20);
+        insertIngredientIfMissing(con, "i4", "Kem muối", "ml", 600, 150, 80);
+        insertIngredientIfMissing(con, "i5", "Siro đào", "ml", 600, 100, 60);
+        insertIngredientIfMissing(con, "i6", "Sả tươi", "nhánh", 20, 5, 1000);
+        insertIngredientIfMissing(con, "i7", "Bột matcha", "g", 500, 100, 200);
+        insertIngredientIfMissing(con, "i8", "Lá trà ô long", "g", 500, 100, 100);
+        insertIngredientIfMissing(con, "i9", "Vỏ croissant", "cái", 15, 4, 15000);
+        insertIngredientIfMissing(con, "i10", "Bánh tiramisu", "lát", 15, 3, 25000);
+        insertIngredientIfMissing(con, "i11", "Bột cacao", "g", 800, 150, 120);
+        insertIngredientIfMissing(con, "i12", "Sinh tố xoài", "ml", 1200, 250, 80);
+        insertIngredientIfMissing(con, "i13", "Siro vải", "ml", 800, 150, 60);
+        insertIngredientIfMissing(con, "i14", "Nền trà sen", "ml", 800, 150, 70);
+        insertIngredientIfMissing(con, "i15", "Bánh cheesecake", "lát", 15, 3, 28000);
+        seedMissingRecipes(con);
+    }
+
+    private void insertIngredientIfMissing(Connection con, String id, String name, String unit, int stock, int minStock, int importCost) throws Exception {
+        String sql = "IF NOT EXISTS (SELECT 1 FROM dbo.Inventory WHERE id=?) "
+                + "INSERT INTO dbo.Inventory (id,name,unit,stock,minStock,importCost) VALUES (?,?,?,?,?,?)";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, id);
+            ps.setString(2, id);
+            ps.setString(3, name);
+            ps.setString(4, unit);
+            ps.setInt(5, stock);
+            ps.setInt(6, minStock);
+            ps.setInt(7, importCost);
+            ps.executeUpdate();
+        }
+    }
+
+    private void seedMissingRecipes(Connection con) throws Exception {
+        List<Map<String, Object>> menu = queryRows(con, "SELECT id, nameVi, category FROM dbo.MenuItems WHERE active=1");
+        for (Map<String, Object> item : menu) {
+            int menuId = readInt(item.get("id"), 0);
+            if (menuId <= 0 || recipeLineCount(con, menuId) > 0) continue;
+            List<Map<String, Object>> defaults = defaultRecipeRows(readString(item.get("nameVi"), ""), readString(item.get("category"), ""));
+            if (defaults.isEmpty()) continue;
+            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.RecipeItems (id,menuItemId,ingredientId,quantity) VALUES (?,?,?,?)")) {
+                for (Map<String, Object> row : defaults) {
+                    String ingredientId = readString(row.get("ingredientId"), "");
+                    int quantity = readInt(row.get("quantity"), 0);
+                    if (ingredientId.isEmpty() || quantity <= 0) continue;
+                    ps.setString(1, "AUTO-" + menuId + "-" + ingredientId);
+                    ps.setString(2, String.valueOf(menuId));
+                    ps.setString(3, ingredientId);
+                    ps.setInt(4, quantity);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+        }
+    }
+
+    private int recipeLineCount(Connection con, int menuId) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.RecipeItems WHERE menuItemId=?")) {
+            ps.setString(1, String.valueOf(menuId));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private List<Map<String, Object>> defaultRecipeRows(String nameVi, String category) {
+        String name = fold(nameVi);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (name.contains("bac xiu")) return recipeRows(recipe("i1", 20), recipe("i2", 20), recipe("i4", 50));
+        if (name.contains("ca phe sua")) return recipeRows(recipe("i1", 20), recipe("i2", 30));
+        if (name.contains("ca phe den") || name.contains("espresso")) return recipeRows(recipe("i1", 20));
+        if (name.contains("cappuccino") || (name.contains("latte") && !name.contains("matcha"))) return recipeRows(recipe("i1", 18), recipe("i3", 120));
+        if (name.contains("matcha")) return recipeRows(recipe("i7", 10), recipe("i3", 150));
+        if (name.contains("socola") || name.contains("chocolate")) return recipeRows(recipe("i11", 20), recipe("i3", 150));
+        if (name.contains("xoai") || name.contains("mango")) return recipeRows(recipe("i12", 150));
+        if (name.contains("tra dao")) return recipeRows(recipe("i5", 30), recipe("i6", 1));
+        if (name.contains("tra vai")) return recipeRows(recipe("i13", 30), recipe("i8", 12));
+        if (name.contains("tra sen")) return recipeRows(recipe("i14", 30), recipe("i8", 12));
+        if (name.contains("tra sua")) return recipeRows(recipe("i8", 15), recipe("i3", 100));
+        if (name.contains("croissant")) return recipeRows(recipe("i9", 1));
+        if (name.contains("tiramisu")) return recipeRows(recipe("i10", 1));
+        if (name.contains("cheesecake")) return recipeRows(recipe("i15", 1));
+        if (isDrinkCategory(category)) rows.add(recipe("i3", 100));
+        return rows;
+    }
+
+    @SafeVarargs
+    private final List<Map<String, Object>> recipeRows(Map<String, Object>... rows) {
+        return new ArrayList<>(Arrays.asList(rows));
+    }
+
+    private Map<String, Object> recipe(String ingredientId, int quantity) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("ingredientId", ingredientId);
+        row.put("quantity", quantity);
+        return row;
+    }
+
     private void upsertMenuItem(Connection con, String nameVi, String nameEn, String category, int price, String imagePath) throws Exception {
         int id = 0;
         try (PreparedStatement ps = con.prepareStatement("MERGE dbo.MenuItems AS t USING (SELECT ? nameVi, ? nameEn, ? category, ? price, ? imagePath) AS s ON t.nameVi=s.nameVi WHEN MATCHED THEN UPDATE SET nameEn=s.nameEn, category=s.category, price=s.price, imagePath=s.imagePath, active=1 WHEN NOT MATCHED THEN INSERT(nameVi,nameEn,category,price,imagePath,active) VALUES(s.nameVi,s.nameEn,s.category,s.price,s.imagePath,1);")) {
@@ -150,7 +260,8 @@ public class LiteService {
     }
 
     private void seedSalesHistory(Connection con) throws Exception {
-        boolean enoughHistory = count(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status='Cleared' AND createdAt >= DATEADD(day, -370, CONVERT(date, SYSUTCDATETIME()))") >= 160;
+        LocalDate today = appToday();
+        boolean enoughHistory = countSince(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status='Cleared' AND createdAt >= ?", today.minusDays(370)) >= 160;
 
         List<Map<String, Object>> menu = queryRows(con, "SELECT id, nameVi, category, price FROM dbo.MenuItems WHERE active=1 ORDER BY id");
         for (Map<String, Object> item : menu) {
@@ -161,7 +272,7 @@ public class LiteService {
 
         Random random = new Random(205063);
         if (!enoughHistory) {
-            LocalDate start = LocalDate.now().minusDays(360);
+            LocalDate start = today.minusDays(360);
             for (int day = 0; day <= 360; day += 3) {
                 int orders = 2 + random.nextInt(4);
                 LocalDate date = start.plusDays(day);
@@ -230,7 +341,7 @@ public class LiteService {
     }
 
     private void insertLiveOrder(Connection con, String tableName, List<Map<String, Object>> menu, String status, Random random) throws Exception {
-        int orderId = insertSeedOrder(con, tableName, LocalDate.now() + "T" + String.format(Locale.ROOT, "%02d:%02d:00", 9 + random.nextInt(8), random.nextInt(60)), status);
+        int orderId = insertSeedOrder(con, tableName, appToday() + "T" + String.format(Locale.ROOT, "%02d:%02d:00", 9 + random.nextInt(8), random.nextInt(60)), status);
         Map<String, Object> item = menu.get(random.nextInt(menu.size()));
         String size = isDrink(item) ? "M" : "";
         int price = priceForSize(item, size);
@@ -242,6 +353,16 @@ public class LiteService {
         try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             rs.next();
             return rs.getInt(1);
+        }
+    }
+
+    private int countSince(Connection con, String sql, LocalDate start) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 
@@ -949,6 +1070,10 @@ public class LiteService {
     }
 
     public Map<String, Object> createOrder(Map<String, Object> data) throws Exception {
+        return createOrder(data, "guest", "");
+    }
+
+    public Map<String, Object> createOrder(Map<String, Object> data, String actorRole, String actorName) throws Exception {
         String tableName = readString(data.get("tableName"), "Bàn 1");
         if (getTableByName(tableName) == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
         String phone = readString(data.get("customerPhone"), "");
@@ -959,10 +1084,11 @@ public class LiteService {
         try (Connection con = db.getConnection()) {
             con.setAutoCommit(false);
             int orderId;
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total) VALUES (?,?,?,0)", Statement.RETURN_GENERATED_KEYS)) {
+            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total,createdAt) VALUES (?,?,?,0,?)", Statement.RETURN_GENERATED_KEYS)) {
                 ps.setString(1, tableName);
                 ps.setString(2, phone.isEmpty() ? null : phone);
                 ps.setString(3, note);
+                ps.setString(4, nowSqlTimestamp());
                 ps.executeUpdate();
                 try (ResultSet keys = ps.getGeneratedKeys()) {
                     keys.next();
@@ -972,18 +1098,28 @@ public class LiteService {
 
             int total = 0;
             int totalQuantity = 0;
+            Map<String, Integer> variantQuantities = new LinkedHashMap<>();
             for (Object raw : items) {
                 if (!(raw instanceof Map<?, ?>)) continue;
                 Map<?, ?> item = (Map<?, ?>) raw;
                 int menuId = readInt(item.get("menuItemId"), 0);
                 int requestedQuantity = readInt(item.get("quantity"), 1);
+                if (requestedQuantity < 1) {
+                    throw new IllegalArgumentException("Số lượng món phải lớn hơn 0.");
+                }
                 if (requestedQuantity > MAX_ITEM_QUANTITY) {
                     throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
                 }
-                int quantity = Math.max(1, requestedQuantity);
+                int quantity = requestedQuantity;
                 Map<String, Object> menu = getMenuItem(menuId);
                 if (menu == null) continue;
                 String size = normalizeSize(menu, readString(item.get("size"), ""));
+                String variantKey = menuId + "|" + size;
+                int variantTotal = variantQuantities.getOrDefault(variantKey, 0) + quantity;
+                if (variantTotal > MAX_ITEM_QUANTITY) {
+                    throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
+                }
+                variantQuantities.put(variantKey, variantTotal);
                 int price = priceForSize(menu, size);
                 total += price * quantity;
                 totalQuantity += quantity;
@@ -1005,9 +1141,13 @@ public class LiteService {
                 ps.setInt(3, orderId);
                 ps.executeUpdate();
             }
-            insertSystemLog(con, "guest", phone.isEmpty() ? "Khách" : phone, "ORDER_CREATE",
-                    tableName + " gọi đơn #" + orderNumber + " (" + totalQuantity + " sản phẩm) lúc " + nowLabelVi(),
-                    tableName + " placed order #" + orderNumber + " (" + totalQuantity + " products) at " + nowLabelEn(),
+            String actor = normalizeActor(actorRole);
+            if (actor.isEmpty() || "system".equals(actor)) actor = "guest";
+            String actorDisplay = readString(actorName, "");
+            if (actorDisplay.isEmpty()) actorDisplay = "guest".equals(actor) ? (phone.isEmpty() ? "Khách" : phone) : roleNameVi(actor);
+            insertSystemLog(con, actor, actorDisplay, "ORDER_CREATE",
+                    orderCreateLogVi(actor, tableName, orderNumber, totalQuantity),
+                    orderCreateLogEn(actor, tableName, orderNumber, totalQuantity),
                     orderId);
             con.commit();
             return getOrderById(orderId);
@@ -1142,29 +1282,38 @@ public class LiteService {
     }
 
     private void deductInventoryForOrder(Connection con, int orderId) throws Exception {
-        dao.RecipeDAO recipeDao = new dao.RecipeDAO();
-        dao.InventoryDAO inventoryDao = new dao.InventoryDAO();
-        String sql = "SELECT menuItemId, quantity FROM dbo.OrderItems WHERE orderId=?";
+        Map<String, Integer> deductions = new LinkedHashMap<>();
+        String sql = "SELECT ri.ingredientId, SUM(ri.quantity * oi.quantity) usedQuantity "
+                + "FROM dbo.OrderItems oi "
+                + "JOIN dbo.RecipeItems ri ON ri.menuItemId = CONVERT(VARCHAR(50), oi.menuItemId) "
+                + "WHERE oi.orderId=? "
+                + "GROUP BY ri.ingredientId";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, orderId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    String menuItemId = String.valueOf(rs.getInt("menuItemId"));
-                    int qty = rs.getInt("quantity");
-                    List<model.RecipeItem> recipes = recipeDao.getByMenuItemId(menuItemId);
-                    if (recipes != null && !recipes.isEmpty()) {
-                        for (model.RecipeItem rItem : recipes) {
-                            model.Ingredient ing = inventoryDao.getById(rItem.getIngredientId());
-                            if (ing != null) {
-                                int totalDeduct = rItem.getQuantity() * qty;
-                                ing.setStock(Math.max(0, ing.getStock() - totalDeduct));
-                                inventoryDao.save(ing);
-                            }
-                        }
-                    }
+                    deductions.put(rs.getString("ingredientId"), Math.max(0, rs.getInt("usedQuantity")));
                 }
             }
         }
+        for (Map.Entry<String, Integer> entry : deductions.entrySet()) {
+            int amount = entry.getValue();
+            if (amount <= 0) continue;
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Inventory SET stock = CASE WHEN stock >= ? THEN stock - ? ELSE 0 END WHERE id=?")) {
+                ps.setInt(1, amount);
+                ps.setInt(2, amount);
+                ps.setString(3, entry.getKey());
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    private String nowSqlTimestamp() {
+        return java.time.LocalDateTime.now(APP_ZONE).format(SQL_TIMESTAMP_FORMAT);
+    }
+
+    private LocalDate appToday() {
+        return LocalDate.now(APP_ZONE);
     }
 
     private int consolidateServedBillsForTable(Connection con, String tableName, int preferredOrderId, String actorRole, String actorName) throws Exception {
@@ -1632,6 +1781,22 @@ public class LiteService {
         return "";
     }
 
+    private String orderCreateLogVi(String actorRole, String tableName, int orderNumber, int totalQuantity) {
+        String actor = normalizeActor(actorRole);
+        if ("guest".equals(actor)) {
+            return tableName + " gọi đơn #" + orderNumber + " (" + totalQuantity + " sản phẩm) lúc " + nowLabelVi();
+        }
+        return roleNameVi(actor) + " tạo đơn #" + orderNumber + " cho " + tableName + " (" + totalQuantity + " sản phẩm) lúc " + nowLabelVi();
+    }
+
+    private String orderCreateLogEn(String actorRole, String tableName, int orderNumber, int totalQuantity) {
+        String actor = normalizeActor(actorRole);
+        if ("guest".equals(actor)) {
+            return tableName + " placed order #" + orderNumber + " (" + totalQuantity + " products) at " + nowLabelEn();
+        }
+        return roleNameEn(actor) + " created order #" + orderNumber + " for " + tableName + " (" + totalQuantity + " products) at " + nowLabelEn();
+    }
+
     private String statusLogVi(String actorRole, String from, String to, int orderNumber, String tableName) {
         String actor = normalizeActor(actorRole);
         if ("barista".equals(actor) && "Pending".equals(from) && "Preparing".equals(to)) {
@@ -1685,11 +1850,11 @@ public class LiteService {
     }
 
     private String nowLabelVi() {
-        return java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+        return java.time.LocalDateTime.now(APP_ZONE).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
     }
 
     private String nowLabelEn() {
-        return java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy"));
+        return java.time.LocalDateTime.now(APP_ZONE).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy"));
     }
 
     private String limitLog(String text) {
@@ -1738,41 +1903,47 @@ public class LiteService {
             customStart = customEnd;
             customEnd = tmp;
         }
-        int pending = scalar("SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Pending'");
-        int preparing = scalar("SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Preparing'");
-        int ready = scalar("SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Ready'");
-        int served = scalar("SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Served'");
-        int paid = scalar("SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Paid'");
-        int cleared = scalar("SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Cleared'");
-        stats.put("menuCount", scalar("SELECT COUNT(*) FROM dbo.MenuItems WHERE active=1"));
-        stats.put("orderCount", pending + preparing + ready + served + paid + cleared);
-        stats.put("pendingOrderCount", pending);
-        stats.put("preparingOrderCount", preparing);
-        stats.put("readyOrderCount", ready);
-        stats.put("unpaidOrderCount", served);
-        stats.put("servedOrderCount", paid + cleared);
-        stats.put("unclearedOrderCount", paid);
-        stats.put("clearedOrderCount", cleared);
-        stats.put("activeOrderCount", pending + preparing + ready + served + paid);
-        stats.put("revenue", scalar("SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared')"));
-        stats.put("revenueToday", scalar("SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND CONVERT(date, createdAt)=CONVERT(date, SYSUTCDATETIME())"));
-        stats.put("revenueMonth", scalar("SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1)"));
-        stats.put("revenueYear", scalar("SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= DATEFROMPARTS(YEAR(SYSUTCDATETIME()), 1, 1)"));
-        stats.put("unpaidRevenue", scalar("SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status = 'Served'"));
-        stats.put("openRevenue", scalar("SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Pending','Preparing','Ready')"));
-        stats.put("soldItemCount", scalar("SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared')"));
-        stats.put("soldItemToday", scalar("SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND CONVERT(date, o.createdAt)=CONVERT(date, SYSUTCDATETIME())"));
-        stats.put("soldItemMonth", scalar("SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= DATEFROMPARTS(YEAR(SYSUTCDATETIME()), MONTH(SYSUTCDATETIME()), 1)"));
-        stats.put("soldItemYear", scalar("SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= DATEFROMPARTS(YEAR(SYSUTCDATETIME()), 1, 1)"));
-        stats.put("bestSeller", firstRow("SELECT TOP 1 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
-        stats.put("topProducts", queryRows("SELECT TOP 8 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
-        stats.put("topProductsByRange", getTopProductsByRangeMap(customStart, customEnd));
-        stats.put("rangeDetails", getRangeDetailsMap(customStart, customEnd));
-        stats.put("revenueSeries", getRevenueSeriesMap(customStart, customEnd));
-        stats.put("today", LocalDate.now().toString());
-        if (customStart != null && customEnd != null) {
-            stats.put("customStart", customStart.toString());
-            stats.put("customEnd", customEnd.toString());
+        LocalDate today = appToday();
+        LocalDate tomorrow = today.plusDays(1);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        LocalDate yearStart = today.withDayOfYear(1);
+        try (Connection con = db.getConnection()) {
+            int pending = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Pending'");
+            int preparing = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Preparing'");
+            int ready = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Ready'");
+            int served = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Served'");
+            int paid = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Paid'");
+            int cleared = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Cleared'");
+            stats.put("menuCount", scalar(con, "SELECT COUNT(*) FROM dbo.MenuItems WHERE active=1"));
+            stats.put("orderCount", pending + preparing + ready + served + paid + cleared);
+            stats.put("pendingOrderCount", pending);
+            stats.put("preparingOrderCount", preparing);
+            stats.put("readyOrderCount", ready);
+            stats.put("unpaidOrderCount", served);
+            stats.put("servedOrderCount", paid + cleared);
+            stats.put("unclearedOrderCount", paid);
+            stats.put("clearedOrderCount", cleared);
+            stats.put("activeOrderCount", pending + preparing + ready + served + paid);
+            stats.put("revenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared')"));
+            stats.put("revenueToday", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?", today, tomorrow));
+            stats.put("revenueMonth", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?", monthStart, tomorrow));
+            stats.put("revenueYear", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?", yearStart, tomorrow));
+            stats.put("unpaidRevenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status = 'Served'"));
+            stats.put("openRevenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Pending','Preparing','Ready')"));
+            stats.put("soldItemCount", scalar(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared')"));
+            stats.put("soldItemToday", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?", today, tomorrow));
+            stats.put("soldItemMonth", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?", monthStart, tomorrow));
+            stats.put("soldItemYear", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?", yearStart, tomorrow));
+            stats.put("bestSeller", firstRow(con, "SELECT TOP 1 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
+            stats.put("topProducts", queryRows(con, "SELECT TOP 8 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
+            stats.put("topProductsByRange", getTopProductsByRangeMap(con, customStart, customEnd));
+            stats.put("rangeDetails", getRangeDetailsMap(con, customStart, customEnd));
+            stats.put("revenueSeries", getRevenueSeriesMap(con, customStart, customEnd));
+            stats.put("today", today.toString());
+            if (customStart != null && customEnd != null) {
+                stats.put("customStart", customStart.toString());
+                stats.put("customEnd", customEnd.toString());
+            }
         }
         return stats;
     }
@@ -1784,8 +1955,31 @@ public class LiteService {
         }
     }
 
+    private int scalar(Connection con, String sql) throws Exception {
+        try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
+    private int scalarBetween(Connection con, String sql, LocalDate start, LocalDate endExclusive) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
+            ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
     private Map<String, Object> firstRow(String sql) throws Exception {
         List<Map<String, Object>> list = queryRows(sql);
+        return list.isEmpty() ? new LinkedHashMap<>() : list.get(0);
+    }
+
+    private Map<String, Object> firstRow(Connection con, String sql) throws Exception {
+        List<Map<String, Object>> list = queryRows(con, sql);
         return list.isEmpty() ? new LinkedHashMap<>() : list.get(0);
     }
 
@@ -1801,67 +1995,67 @@ public class LiteService {
         }
     }
 
-    private Map<String, Object> getRevenueSeriesMap(LocalDate customStart, LocalDate customEnd) throws Exception {
-        LocalDate today = LocalDate.now();
+    private Map<String, Object> getRevenueSeriesMap(Connection con, LocalDate customStart, LocalDate customEnd) throws Exception {
+        LocalDate today = appToday();
         LocalDate tomorrow = today.plusDays(1);
         YearMonth firstMonth = YearMonth.from(today.minusMonths(11));
         YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
-        YearMonth allFirstMonth = firstPaidMonth(firstMonth);
+        YearMonth allFirstMonth = firstPaidMonth(con, firstMonth);
 
         Map<String, Object> series = new LinkedHashMap<>();
-        series.put("day", revenueByHour(today, tomorrow));
-        series.put("week", revenueByDay(today.minusDays(6), tomorrow));
-        series.put("month", revenueByDay(today.minusDays(29), tomorrow));
-        series.put("year", revenueByMonth(firstMonth, nextMonth));
-        series.put("all", revenueByMonth(allFirstMonth, nextMonth));
+        series.put("day", revenueByHour(con, today, tomorrow));
+        series.put("week", revenueByDay(con, today.minusDays(6), tomorrow));
+        series.put("month", revenueByDay(con, today.minusDays(29), tomorrow));
+        series.put("year", revenueByMonth(con, firstMonth, nextMonth));
+        series.put("all", revenueByMonth(con, allFirstMonth, nextMonth));
         if (customStart != null && customEnd != null) {
-            series.put("custom", revenueCustom(customStart, customEnd.plusDays(1)));
+            series.put("custom", revenueCustom(con, customStart, customEnd.plusDays(1)));
         }
         return series;
     }
 
-    private Map<String, Object> getTopProductsByRangeMap(LocalDate customStart, LocalDate customEnd) throws Exception {
-        LocalDate today = LocalDate.now();
+    private Map<String, Object> getTopProductsByRangeMap(Connection con, LocalDate customStart, LocalDate customEnd) throws Exception {
+        LocalDate today = appToday();
         LocalDate tomorrow = today.plusDays(1);
         YearMonth firstMonth = YearMonth.from(today.minusMonths(11));
         YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
-        YearMonth allFirstMonth = firstPaidMonth(firstMonth);
+        YearMonth allFirstMonth = firstPaidMonth(con, firstMonth);
 
         Map<String, Object> products = new LinkedHashMap<>();
-        products.put("day", topProductsBetween(today, tomorrow, 8));
-        products.put("week", topProductsBetween(today.minusDays(6), tomorrow, 8));
-        products.put("month", topProductsBetween(today.minusDays(29), tomorrow, 8));
-        products.put("year", topProductsBetween(firstMonth.atDay(1), nextMonth.atDay(1), 8));
-        products.put("all", topProductsBetween(allFirstMonth.atDay(1), nextMonth.atDay(1), 8));
+        products.put("day", topProductsBetween(con, today, tomorrow, 8));
+        products.put("week", topProductsBetween(con, today.minusDays(6), tomorrow, 8));
+        products.put("month", topProductsBetween(con, today.minusDays(29), tomorrow, 8));
+        products.put("year", topProductsBetween(con, firstMonth.atDay(1), nextMonth.atDay(1), 8));
+        products.put("all", topProductsBetween(con, allFirstMonth.atDay(1), nextMonth.atDay(1), 8));
         if (customStart != null && customEnd != null) {
-            products.put("custom", topProductsBetween(customStart, customEnd.plusDays(1), 8));
+            products.put("custom", topProductsBetween(con, customStart, customEnd.plusDays(1), 8));
         }
         return products;
     }
 
-    private Map<String, Object> getRangeDetailsMap(LocalDate customStart, LocalDate customEnd) throws Exception {
-        LocalDate today = LocalDate.now();
+    private Map<String, Object> getRangeDetailsMap(Connection con, LocalDate customStart, LocalDate customEnd) throws Exception {
+        LocalDate today = appToday();
         LocalDate tomorrow = today.plusDays(1);
         YearMonth firstMonth = YearMonth.from(today.minusMonths(11));
         YearMonth nextMonth = YearMonth.from(today).plusMonths(1);
-        YearMonth allFirstMonth = firstPaidMonth(firstMonth);
+        YearMonth allFirstMonth = firstPaidMonth(con, firstMonth);
 
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("day", rangeDetailBetween(today, tomorrow));
-        details.put("week", rangeDetailBetween(today.minusDays(6), tomorrow));
-        details.put("month", rangeDetailBetween(today.minusDays(29), tomorrow));
-        details.put("year", rangeDetailBetween(firstMonth.atDay(1), nextMonth.atDay(1)));
-        details.put("all", rangeDetailBetween(allFirstMonth.atDay(1), nextMonth.atDay(1)));
+        details.put("day", rangeDetailBetween(con, today, tomorrow));
+        details.put("week", rangeDetailBetween(con, today.minusDays(6), tomorrow));
+        details.put("month", rangeDetailBetween(con, today.minusDays(29), tomorrow));
+        details.put("year", rangeDetailBetween(con, firstMonth.atDay(1), nextMonth.atDay(1)));
+        details.put("all", rangeDetailBetween(con, allFirstMonth.atDay(1), nextMonth.atDay(1)));
         if (customStart != null && customEnd != null) {
-            details.put("custom", rangeDetailBetween(customStart, customEnd.plusDays(1)));
+            details.put("custom", rangeDetailBetween(con, customStart, customEnd.plusDays(1)));
         }
         return details;
     }
 
-    private Map<String, Object> rangeDetailBetween(LocalDate start, LocalDate endExclusive) throws Exception {
+    private Map<String, Object> rangeDetailBetween(Connection con, LocalDate start, LocalDate endExclusive) throws Exception {
         Map<String, Object> detail = new LinkedHashMap<>();
         String orderSql = "SELECT COUNT(*) paidOrders, ISNULL(SUM(total),0) revenue FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(orderSql)) {
+        try (PreparedStatement ps = con.prepareStatement(orderSql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
             try (ResultSet rs = ps.executeQuery()) {
@@ -1872,7 +2066,7 @@ public class LiteService {
             }
         }
         String itemSql = "SELECT ISNULL(SUM(oi.quantity),0) soldProducts FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(itemSql)) {
+        try (PreparedStatement ps = con.prepareStatement(itemSql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
             try (ResultSet rs = ps.executeQuery()) {
@@ -1885,16 +2079,16 @@ public class LiteService {
         return detail;
     }
 
-    private List<Map<String, Object>> revenueCustom(LocalDate start, LocalDate endExclusive) throws Exception {
+    private List<Map<String, Object>> revenueCustom(Connection con, LocalDate start, LocalDate endExclusive) throws Exception {
         long days = ChronoUnit.DAYS.between(start, endExclusive);
-        if (days <= 1) return revenueByHour(start, endExclusive);
-        if (days <= 120) return revenueByDay(start, endExclusive);
-        return revenueByMonth(YearMonth.from(start), YearMonth.from(endExclusive.minusDays(1)).plusMonths(1));
+        if (days <= 1) return revenueByHour(con, start, endExclusive);
+        if (days <= 120) return revenueByDay(con, start, endExclusive);
+        return revenueByMonth(con, YearMonth.from(start), YearMonth.from(endExclusive.minusDays(1)).plusMonths(1));
     }
 
-    private YearMonth firstPaidMonth(YearMonth fallback) throws Exception {
+    private YearMonth firstPaidMonth(Connection con, YearMonth fallback) throws Exception {
         String sql = "SELECT MIN(CONVERT(date, createdAt)) firstDate FROM dbo.Orders WHERE status IN ('Paid','Cleared')";
-        try (Connection con = db.getConnection(); Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
+        try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             if (rs.next()) {
                 LocalDate date = readDate(rs.getObject("firstDate"));
                 if (date != null) return YearMonth.from(date);
@@ -1903,7 +2097,7 @@ public class LiteService {
         return fallback;
     }
 
-    private List<Map<String, Object>> revenueByHour(LocalDate start, LocalDate endExclusive) throws Exception {
+    private List<Map<String, Object>> revenueByHour(Connection con, LocalDate start, LocalDate endExclusive) throws Exception {
         Map<String, Integer> values = new LinkedHashMap<>();
         for (int hour = 0; hour < 24; hour++) {
             values.put(String.format(Locale.ROOT, "%02d:00", hour), 0);
@@ -1911,7 +2105,7 @@ public class LiteService {
         String sql = "SELECT DATEPART(hour, createdAt) saleHour, ISNULL(SUM(total),0) revenue "
                 + "FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ? "
                 + "GROUP BY DATEPART(hour, createdAt)";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
             try (ResultSet rs = ps.executeQuery()) {
@@ -1923,7 +2117,7 @@ public class LiteService {
         return seriesRows(values);
     }
 
-    private List<Map<String, Object>> revenueByDay(LocalDate start, LocalDate endExclusive) throws Exception {
+    private List<Map<String, Object>> revenueByDay(Connection con, LocalDate start, LocalDate endExclusive) throws Exception {
         Map<String, Integer> values = new LinkedHashMap<>();
         for (LocalDate day = start; day.isBefore(endExclusive); day = day.plusDays(1)) {
             values.put(day.toString(), 0);
@@ -1931,7 +2125,7 @@ public class LiteService {
         String sql = "SELECT CONVERT(date, createdAt) saleDate, ISNULL(SUM(total),0) revenue "
                 + "FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ? "
                 + "GROUP BY CONVERT(date, createdAt)";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
             try (ResultSet rs = ps.executeQuery()) {
@@ -1944,7 +2138,7 @@ public class LiteService {
         return seriesRows(values);
     }
 
-    private List<Map<String, Object>> revenueByMonth(YearMonth start, YearMonth endExclusive) throws Exception {
+    private List<Map<String, Object>> revenueByMonth(Connection con, YearMonth start, YearMonth endExclusive) throws Exception {
         Map<String, Integer> values = new LinkedHashMap<>();
         for (YearMonth month = start; month.isBefore(endExclusive); month = month.plusMonths(1)) {
             values.put(month.toString(), 0);
@@ -1952,7 +2146,7 @@ public class LiteService {
         String sql = "SELECT CONVERT(char(7), createdAt, 120) saleMonth, ISNULL(SUM(total),0) revenue "
                 + "FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ? "
                 + "GROUP BY CONVERT(char(7), createdAt, 120)";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atDay(1).atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atDay(1).atStartOfDay()));
             try (ResultSet rs = ps.executeQuery()) {
@@ -1965,12 +2159,12 @@ public class LiteService {
         return seriesRows(values);
     }
 
-    private List<Map<String, Object>> topProductsBetween(LocalDate start, LocalDate endExclusive, int limit) throws Exception {
+    private List<Map<String, Object>> topProductsBetween(Connection con, LocalDate start, LocalDate endExclusive, int limit) throws Exception {
         String sql = "SELECT TOP " + Math.max(1, limit) + " oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue "
                 + "FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId "
                 + "WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ? "
                 + "GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
             try (ResultSet rs = ps.executeQuery()) {

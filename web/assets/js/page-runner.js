@@ -299,14 +299,17 @@
                 const previous = runnerOrders.find(order => Number(order.id) === Number(orderId)) || {};
                 const tableName = updated.tableName || previous.tableName || '';
                 const servedOrder = {
-                    id: orderId,
+                    id: updated.id || orderId,
                     orderNumber: updated.orderNumber || previous.orderNumber,
                     tableName,
                     status: 'Served',
                     note: updated.note || previous.note || '',
                     items: updated.items || previous.items || []
                 };
-                runnerOrders = [servedOrder, ...runnerOrders.filter(order => Number(order.id) !== Number(orderId))];
+                runnerOrders = [servedOrder, ...runnerOrders.filter(order => {
+                    const id = Number(order.id);
+                    return id !== Number(orderId) && id !== Number(servedOrder.id);
+                })];
                 runnerTables = runnerTables.map(table => String(table.name || '') === String(tableName)
                     ? Object.assign({}, table, { status: 'Served', busy: true, orderId, orderNumber: servedOrder.orderNumber || table.orderNumber })
                     : table);
@@ -468,9 +471,19 @@
 
         function formatInvoiceTime(value) {
             if (!value) return '—';
-            const date = new Date(value);
+            const text = String(value).trim();
+            const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+            const date = match
+                ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6] || 0))
+                : new Date(text);
             if (Number.isNaN(date.getTime())) return String(value);
-            return date.toLocaleString(lang() === 'en' ? 'en-US' : 'vi-VN');
+            return new Intl.DateTimeFormat(lang() === 'en' ? 'en-US' : 'vi-VN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
         }
 
         function printInvoiceSheet() {

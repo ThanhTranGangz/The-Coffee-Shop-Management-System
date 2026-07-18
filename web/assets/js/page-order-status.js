@@ -6,8 +6,19 @@
         document.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams(location.search);
             const orderNumber = params.get('orderNumber');
-            tableCode = params.get('tableCode') || sessionStorage.getItem('selectedTableCode') || '';
-            tableName = params.get('table') || sessionStorage.getItem('selectedTable') || '';
+            const urlTableCode = params.get('tableCode') || '';
+            const urlTableName = params.get('table') || '';
+            if (urlTableCode) {
+                tableCode = urlTableCode;
+                tableName = '';
+                if (urlTableCode !== sessionStorage.getItem('selectedTableCode')) {
+                    sessionStorage.removeItem('selectedTable');
+                }
+            } else {
+                tableCode = sessionStorage.getItem('selectedTableCode') || '';
+                tableName = urlTableName || sessionStorage.getItem('selectedTable') || '';
+                if (urlTableName) sessionStorage.removeItem('selectedTableCode');
+            }
             if (tableCode || tableName) {
                 loadTableOrders();
                 refreshTimer = setInterval(loadTableOrders, 5000);
@@ -22,6 +33,7 @@
 
         async function loadTableOrders() {
             const box = document.getElementById('table-orders');
+            if (tableCode) await resolveTableName();
             const query = tableCode
                 ? 'tableCode=' + encodeURIComponent(tableCode)
                 : 'table=' + encodeURIComponent(tableName);
@@ -63,6 +75,7 @@
             if (!res.ok) return;
             const table = await res.json();
             tableName = table.name || tableName;
+            tableCode = table.code || tableCode;
             if (tableName) sessionStorage.setItem('selectedTable', tableName);
             if (tableCode) sessionStorage.setItem('selectedTableCode', tableCode);
         }

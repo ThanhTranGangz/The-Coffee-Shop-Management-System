@@ -187,19 +187,10 @@
 
         function itemGroupHtml(item) {
             const next = nextStatus(activeStatus);
-            const orderIds = item.orders.map(o => o.id).join(',');
             const notesHtml = item.notes.map(n => `<span>#${n.orderNumber}: ${escapeHtml(n.note)}</span>`).join('; ');
             
             return `
-                <article class="card order-card hold-card ${next ? '' : 'not-ready'}" data-next="${next || ''}"
-                    onpointerdown="startHoldGroup(event, [${orderIds}], '${next || ''}')"
-                    onpointerup="cancelHold()"
-                    onpointercancel="cancelHold()"
-                    ontouchstart="startHoldGroup(event, [${orderIds}], '${next || ''}')"
-                    ontouchend="cancelHold()"
-                    onmousedown="startHoldGroup(event, [${orderIds}], '${next || ''}')"
-                    onmouseup="cancelHold()"
-                    oncontextmenu="return false">
+                <article class="card order-card ${next ? '' : 'not-ready'}" data-next="${next || ''}">
                     <div class="toolbar order-card-head">
                         <div>
                             <p class="eyebrow">${item.itemSize ? t('size') + ' ' + escapeHtml(item.itemSize) : ''}</p>
@@ -219,27 +210,6 @@
                     </div>
                     ${notesHtml ? `<div class="order-note" style="margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px;"><b>${t('note')}:</b> ${notesHtml}</div>` : ''}
                 </article>`;
-        }
-
-        function startHoldGroup(event, ids, next) {
-            if (!next) return;
-            beginHold(event, () => setStatusGroup(ids, next));
-        }
-
-        async function setStatusGroup(ids, status) {
-            if (!status || !ids || ids.length === 0) return;
-            const promises = ids.map(id => api('/orders/status', {
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ id, status })
-            }));
-            const results = await Promise.all(promises);
-            const allOk = results.every(res => res.ok);
-            if (!allOk) {
-                notifyWork(t('statusMoveFailed'));
-            }
-            if (status === 'Ready') await loadCupStatus();
-            loadOrders({ silent: true });
         }
 
         async function setStatusGroupItem(id, orderNumber, status) {

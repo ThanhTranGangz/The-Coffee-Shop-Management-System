@@ -810,6 +810,12 @@ label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 900; c
     display: none;
 }
 
+.qr-required .table-picker-panel,
+.qr-required .order-layout,
+.qr-required .cart-bar {
+    display: none;
+}
+
 .hold-card {
     position: relative;
     overflow: hidden;
@@ -3705,4 +3711,3 @@ body.invoice-open {
     color: var(--accent);
     transform: translateY(-1px);
 }
-

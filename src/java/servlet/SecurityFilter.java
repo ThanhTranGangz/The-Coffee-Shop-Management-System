@@ -17,7 +17,13 @@ import java.util.List;
 @WebFilter("/*")
 public class SecurityFilter implements Filter {
     private static final String ATTR_ROLE = "role";
-    private final List<String> adminPages = Arrays.asList("/admin-menu.jsp", "/admin-tables.jsp", "/system-logs.jsp");
+    private final List<String> adminPages = Arrays.asList(
+            "/admin-menu.jsp",
+            "/admin-tables.jsp",
+            "/admin-staff.jsp",
+            "/inventory.jsp",
+            "/system-logs.jsp"
+    );
     private final List<String> baristaPages = Arrays.asList("/staff-orders.jsp");
     private final List<String> cashierPages = Arrays.asList("/cashier.jsp", "/counter-order.jsp");
     private final List<String> runnerPages = Arrays.asList("/runner.jsp");

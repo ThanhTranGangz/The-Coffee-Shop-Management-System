@@ -44,6 +44,6 @@
         </div>
     </div>
 
-    <script src="assets/js/page-runner.js?v=invoice-confirm-1"></script>
+    <script src="assets/js/page-runner.js?v=runner-merge-ui-1"></script>
 </body>
 </html>

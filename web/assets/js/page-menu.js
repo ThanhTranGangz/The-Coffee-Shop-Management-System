@@ -16,9 +16,16 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             const params = new URLSearchParams(location.search);
-            preferredTableCode = params.get('tableCode') || '';
-            preferredTable = params.get('table') || sessionStorage.getItem('selectedTable') || '';
-            if (!preferredTableCode) preferredTableCode = sessionStorage.getItem('selectedTableCode') || '';
+            const urlTableCode = params.get('tableCode') || '';
+            const urlTableName = params.get('table') || '';
+            if (urlTableCode && urlTableCode !== sessionStorage.getItem('selectedTableCode')) {
+                sessionStorage.removeItem('selectedTable');
+            }
+            if (urlTableName && !urlTableCode) {
+                sessionStorage.removeItem('selectedTableCode');
+            }
+            preferredTableCode = urlTableCode || sessionStorage.getItem('selectedTableCode') || '';
+            preferredTable = urlTableCode ? '' : (urlTableName || sessionStorage.getItem('selectedTable') || '');
             document.getElementById('search-input').addEventListener('input', event => {
                 searchText = event.target.value.trim();
                 renderPage();
@@ -65,7 +72,11 @@
                 const [menuRes, tableRes] = await Promise.all([api('/menu'), api('/tables')]);
                 menuItems = await menuRes.json();
                 tables = await tableRes.json();
-                await applyQrTable();
+                const qrReady = await applyQrTable();
+                if (!qrReady) {
+                    renderQrRequired(preferredTableCode ? t('qrMissingTable') : t('qrRequired'));
+                    return;
+                }
                 const tableOptions = tables.map(tb => `<option>${escapeHtml(tb.name)}</option>`).join('');
                 document.getElementById('table-select-desktop').innerHTML = tableOptions;
                 document.getElementById('table-select-mobile').innerHTML = tableOptions;
@@ -83,26 +94,47 @@
         }
 
         async function applyQrTable() {
-            if (!preferredTableCode) return;
-            let table = tables.find(tb => tb.code === preferredTableCode);
+            if (!preferredTableCode) return false;
+            const requestedCode = preferredTableCode.trim();
+            let table = tables.find(tb => String(tb.code || '').toUpperCase() === requestedCode.toUpperCase());
             if (!table) {
-                const res = await api('/tables/by-code?code=' + encodeURIComponent(preferredTableCode));
+                const res = await api('/tables/by-code?code=' + encodeURIComponent(requestedCode));
                 if (res.ok) table = await res.json();
             }
             if (table && table.name) {
                 preferredTable = table.name;
+                preferredTableCode = table.code || requestedCode;
                 qrTableName = table.name;
                 lockedTable = true;
                 document.body.classList.add('qr-locked');
                 sessionStorage.setItem('selectedTable', table.name);
                 sessionStorage.setItem('selectedTableCode', preferredTableCode);
+                return true;
             } else {
                 qrTableName = '';
                 lockedTable = false;
                 sessionStorage.removeItem('selectedTableCode');
-                document.getElementById('table-welcome').classList.remove('hidden');
-                document.getElementById('table-welcome-text').textContent = t('qrMissingTable');
+                return false;
             }
+        }
+
+        function renderQrRequired(message) {
+            cart = [];
+            lockedTable = false;
+            qrTableName = '';
+            document.body.classList.add('qr-required');
+            const welcome = document.getElementById('table-welcome');
+            const text = document.getElementById('table-welcome-text');
+            welcome.classList.remove('hidden');
+            text.textContent = message;
+            document.getElementById('chips').innerHTML = '';
+            document.getElementById('menu-list').innerHTML = '';
+            const favorites = document.getElementById('favorites-section');
+            if (favorites) favorites.hidden = true;
+            const submit = document.getElementById('submit-order');
+            if (submit) submit.disabled = true;
+            if (typeof loadNav === 'function') loadNav();
+            updateScrollTop();
         }
 
         function syncTable(source) {
@@ -323,9 +355,16 @@
         function addSheetItem() {
             if (!currentItem) return;
             const note = document.getElementById('sheet-note').value.trim();
+            const existingVariantQty = totalQtyForVariant(currentItem.id, currentSize);
+            const quantityToAdd = Math.min(currentQty, Math.max(0, MAX_QTY - existingVariantQty));
+            if (quantityToAdd <= 0) {
+                closeSheet();
+                renderCart();
+                return;
+            }
             const existing = cart.find(item => item.menuItemId === currentItem.id && item.size === currentSize && item.note === note);
-            if (existing) existing.quantity = Math.min(MAX_QTY, existing.quantity + currentQty);
-            else cart.push({ menuItemId: currentItem.id, size: currentSize, quantity: Math.min(MAX_QTY, currentQty), note });
+            if (existing) existing.quantity += quantityToAdd;
+            else cart.push({ menuItemId: currentItem.id, size: currentSize, quantity: quantityToAdd, note });
             closeSheet();
             renderCart();
         }
@@ -356,7 +395,7 @@
                                 <div class="stepper">
                                     <button type="button" onclick="changeQty(${index}, -1)">−</button>
                                     <span class="num">${line.quantity}</span>
-                                    <button type="button" onclick="changeQty(${index}, 1)" ${line.quantity >= MAX_QTY ? 'disabled' : ''}>+</button>
+                                    <button type="button" onclick="changeQty(${index}, 1)" ${totalQtyForVariant(line.menuItemId, line.size) >= MAX_QTY ? 'disabled' : ''}>+</button>
                                 </div>
                             </div>
                         </div>`;
@@ -372,9 +411,18 @@
 
         function changeQty(index, delta) {
             if (!cart[index]) return;
+            if (delta > 0 && totalQtyForVariant(cart[index].menuItemId, cart[index].size) >= MAX_QTY) return;
             cart[index].quantity = Math.min(MAX_QTY, cart[index].quantity + delta);
             if (cart[index].quantity <= 0) cart.splice(index, 1);
             renderCart();
+        }
+
+        function totalQtyForVariant(menuItemId, size) {
+            return cart.reduce((sum, line) => (
+                line.menuItemId === menuItemId && line.size === size
+                    ? sum + Number(line.quantity || 0)
+                    : sum
+            ), 0);
         }
 
         function removeLine(index) {

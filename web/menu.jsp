@@ -103,6 +103,6 @@
             </button>
         </div>
     </div>
-    <script src="assets/js/page-menu.js?v=scroll-top-1"></script>
+    <script src="assets/js/page-menu.js?v=cart-limit-fix-1"></script>
 </body>
 </html>

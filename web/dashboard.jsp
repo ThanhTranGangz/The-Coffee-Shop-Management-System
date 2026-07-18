@@ -59,6 +59,6 @@
             <div id="details"></div>
         </details>
     </main>
-    <script src="assets/js/page-dashboard.js?v=order-confirm-1"></script>
+    <script src="assets/js/page-dashboard.js?v=dashboard-fast-1"></script>
 </body>
 </html>
