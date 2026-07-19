@@ -20,7 +20,8 @@ import java.util.Map;
 
 public class ExcelUtils {
     private static final String[] TEMPLATE_HEADERS =
-            {"Tên (VI)", "Tên (EN)", "Danh mục", "Giá", "Đường dẫn ảnh", "Đang bán (1/0)"};
+            {"Tên (VI)", "Tên (EN)", "Danh mục", "Giá", "Đường dẫn ảnh", "Đang bán (1/0)",
+             "Size (Tên:Giá thêm)", "Nguyên liệu (Tên/Mã:Số lượng)"};
 
     public static List<Map<String, Object>> parseMenuRows(InputStream in) throws Exception {
         List<Map<String, Object>> result = new ArrayList<>();
@@ -46,6 +47,16 @@ public class ExcelUtils {
                 if (!imagePath.isEmpty()) data.put("imagePath", imagePath);
                 Boolean active = cellBoolean(row, columns.get("active"));
                 if (active != null) data.put("active", active);
+
+                List<Map<String, Object>> sizes = parseSizes(cellText(row, columns.get("sizes")));
+                if (!sizes.isEmpty()) {
+                    data.put("hasSizes", true);
+                    data.put("sizes", sizes);
+                }
+                List<Map<String, Object>> recipes = parseRecipes(cellText(row, columns.get("recipe")));
+                if (!recipes.isEmpty()) {
+                    data.put("recipes", recipes);
+                }
                 result.add(data);
             }
         }
@@ -65,12 +76,12 @@ public class ExcelUtils {
                 Cell cell = header.createCell(i);
                 cell.setCellValue(TEMPLATE_HEADERS[i]);
                 cell.setCellStyle(headerStyle);
-                sheet.setColumnWidth(i, 22 * 256);
+                sheet.setColumnWidth(i, 26 * 256);
             }
 
             Object[][] examples = {
-                    {"Cà phê sữa đá", "Iced Milk Coffee", "Cà phê", 25000, "", 1},
-                    {"Trà đào cam sả", "Peach Lemongrass Tea", "Trà", 35000, "", 1},
+                    {"Cà phê sữa đá", "Iced Milk Coffee", "Cà phê", 25000, "", 1, "M:5000; L:10000", "Hạt cà phê nguyên chất:20; Sữa đặc:30"},
+                    {"Trà đào cam sả", "Peach Lemongrass Tea", "Trà", 35000, "", 1, "", ""},
             };
             for (int r = 0; r < examples.length; r++) {
                 Row row = sheet.createRow(r + 1);
@@ -81,6 +92,8 @@ public class ExcelUtils {
                 row.createCell(3).setCellValue((int) values[3]);
                 row.createCell(4).setCellValue((String) values[4]);
                 row.createCell(5).setCellValue((int) values[5]);
+                row.createCell(6).setCellValue((String) values[6]);
+                row.createCell(7).setCellValue((String) values[7]);
             }
 
             // Note goes in a column past the data columns so the parser never mistakes it for a nameVi cell.
@@ -88,7 +101,11 @@ public class ExcelUtils {
             note.createCell(TEMPLATE_HEADERS.length + 1).setCellValue("Ghi chú: xoá các dòng ví dụ ở trên trước khi nhập món thật. "
                     + "Danh mục hợp lệ: Cà phê, Trà, Đặc biệt, Bánh ngọt. "
                     + "Giá từ 10.000đ-200.000đ và chia hết cho 1.000đ. "
-                    + "Để trống cột Ảnh/Đang bán sẽ dùng giá trị mặc định.");
+                    + "Để trống cột Ảnh/Đang bán sẽ dùng giá trị mặc định. "
+                    + "Cột Size: nhập từng size dạng Tên:Giá_thêm, cách nhau bằng dấu ; (ví dụ M:5000; L:10000). "
+                    + "Size S mặc định là giá gốc (giá thêm 0). Để trống nếu món không có size. "
+                    + "Cột Nguyên liệu: nhập từng nguyên liệu dạng Tên_hoặc_Mã:Số_lượng, cách nhau bằng dấu ; "
+                    + "(ví dụ Hạt cà phê nguyên chất:20; Sữa đặc:30). Tên nguyên liệu phải khớp với kho (mục Kho nguyên liệu).");
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             workbook.write(out);
@@ -110,6 +127,8 @@ public class ExcelUtils {
         columns.putIfAbsent("price", 3);
         columns.putIfAbsent("imagePath", 4);
         columns.putIfAbsent("active", 5);
+        columns.putIfAbsent("sizes", 6);
+        columns.putIfAbsent("recipe", 7);
         return columns;
     }
 
@@ -120,7 +139,61 @@ public class ExcelUtils {
         if (normalizedHeader.equals("gia")) return "price";
         if (normalizedHeader.startsWith("duongdan")) return "imagePath";
         if (normalizedHeader.startsWith("dangban")) return "active";
+        if (normalizedHeader.startsWith("size")) return "sizes";
+        if (normalizedHeader.startsWith("nguyenlieu")) return "recipe";
         return null;
+    }
+
+    // Parses a cell like "M:5000; L:10000" into [{sizeName:M, extraPrice:5000}, {sizeName:L, extraPrice:10000}].
+    private static List<Map<String, Object>> parseSizes(String text) {
+        List<Map<String, Object>> sizes = new ArrayList<>();
+        if (text == null || text.trim().isEmpty()) return sizes;
+        for (String token : text.split("[;\\n]")) {
+            String pair = token.trim();
+            if (pair.isEmpty()) continue;
+            int sep = pair.indexOf(':');
+            String name = (sep >= 0 ? pair.substring(0, sep) : pair).trim();
+            if (name.isEmpty()) continue;
+            String amount = sep >= 0 ? pair.substring(sep + 1) : "";
+            int extra = parseIntSafe(amount);
+            Map<String, Object> size = new LinkedHashMap<>();
+            size.put("sizeName", name);
+            size.put("extraPrice", extra);
+            sizes.add(size);
+        }
+        return sizes;
+    }
+
+    // Parses a cell like "Cà phê:20; Sữa đặc:30" into [{ingredientId:"Cà phê", quantity:20}, ...].
+    // The ingredient token may be a name or a code; the service resolves it to a real id.
+    private static List<Map<String, Object>> parseRecipes(String text) {
+        List<Map<String, Object>> recipes = new ArrayList<>();
+        if (text == null || text.trim().isEmpty()) return recipes;
+        for (String token : text.split("[;\\n]")) {
+            String pair = token.trim();
+            if (pair.isEmpty()) continue;
+            int sep = pair.lastIndexOf(':');
+            if (sep < 0) continue;
+            String ingredient = pair.substring(0, sep).trim();
+            int quantity = parseIntSafe(pair.substring(sep + 1));
+            if (ingredient.isEmpty() || quantity <= 0) continue;
+            Map<String, Object> recipe = new LinkedHashMap<>();
+            recipe.put("ingredientId", ingredient);
+            recipe.put("quantity", quantity);
+            recipes.add(recipe);
+        }
+        return recipes;
+    }
+
+    private static int parseIntSafe(String value) {
+        if (value == null) return 0;
+        String digits = value.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) return 0;
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static String normalize(String value) {

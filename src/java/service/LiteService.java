@@ -582,10 +582,12 @@ public class LiteService {
     public Map<String, Object> importMenuItems(List<Map<String, Object>> rows) {
         List<Map<String, Object>> imported = new ArrayList<>();
         List<Map<String, Object>> skipped = new ArrayList<>();
+        Map<String, String> ingredientLookup = loadIngredientLookup();
         int rowNumber = 1;
         for (Map<String, Object> data : rows) {
             rowNumber++;
             try {
+                resolveImportRecipes(data, ingredientLookup);
                 imported.add(saveMenuItem(data));
             } catch (Exception e) {
                 Map<String, Object> failure = new LinkedHashMap<>();
@@ -601,6 +603,46 @@ public class LiteService {
         result.put("imported", imported);
         result.put("skipped", skipped);
         return result;
+    }
+
+    // Builds a lookup of both ingredient code (id) and ingredient name -> real inventory id,
+    // so an imported recipe cell can reference an ingredient by its friendly name or by its code.
+    private Map<String, String> loadIngredientLookup() {
+        Map<String, String> lookup = new HashMap<>();
+        try (Connection con = db.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT id, name FROM dbo.Inventory");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String id = rs.getString("id");
+                if (id == null) continue;
+                lookup.put(fold(id), id);
+                String name = rs.getString("name");
+                if (name != null && !name.trim().isEmpty()) lookup.putIfAbsent(fold(name), id);
+            }
+        } catch (Exception e) {
+            // Best effort: if the lookup can't be built, recipe tokens are passed through unchanged.
+        }
+        return lookup;
+    }
+
+    // Rewrites each recipe's ingredientId (which may be a name or a code from the Excel cell)
+    // into a real inventory id. Throws with a clear reason when an ingredient can't be matched
+    // so the row is reported in the import's skipped list.
+    private void resolveImportRecipes(Map<String, Object> data, Map<String, String> lookup) {
+        Object raw = data.get("recipes");
+        if (!(raw instanceof List)) return;
+        for (Object entry : (List<?>) raw) {
+            if (!(entry instanceof Map)) continue;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> row = (Map<String, Object>) entry;
+            String token = readString(row.get("ingredientId"), "").trim();
+            if (token.isEmpty()) continue;
+            String resolved = lookup.get(fold(token));
+            if (resolved == null) {
+                throw new IllegalArgumentException("Không tìm thấy nguyên liệu: " + token);
+            }
+            row.put("ingredientId", resolved);
+        }
     }
 
     private void validateMenuItem(int id, String nameVi, String nameEn, String category, int price, String imagePath) {
