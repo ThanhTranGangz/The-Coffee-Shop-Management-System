@@ -97,13 +97,11 @@
         }
 
         function tableDisplayName(name) {
-            const match = String(name || '').match(/Tầng\s*(\d+)\s*-\s*Bàn\s*(\d+)/i);
-            return match ? `${t('floor')} ${match[1]} · ${t('table')} ${match[2]}` : name;
+            return formatTableName(name);
         }
 
         function tableNameShort(name) {
-            const match = String(name || '').match(/Bàn\s*(\d+)/i);
-            return match ? 'B' + match[1] : name;
+            return formatTableShort(name);
         }
 
         function escapeHtml(value) {

@@ -56,6 +56,10 @@
                         </div>
                     </article>`;
             }).join('');
+            const recipeRows = document.getElementById('recipe-rows');
+            if (recipeRows && recipeRows.children.length) {
+                renderRecipeRows(readRecipeRows());
+            }
         }
 
         function imageHtml(item, name) {
@@ -171,10 +175,10 @@
                 return `
                 <div class="recipe-row form-row" style="margin-bottom:0.5rem; display:flex; gap:0.5rem;">
                     <select class="recipe-ing" style="flex:1;">
-                        <option value="">-- Chọn nguyên liệu --</option>
+                        <option value="">${t('selectMaterial')}</option>
                         ${options}
                     </select>
-                    <input type="number" class="recipe-qty" min="1" max="10000" value="${Number(recipe.quantity || 1)}" style="width:80px;" aria-label="Định lượng">
+                    <input type="number" class="recipe-qty" min="1" max="10000" value="${Number(recipe.quantity || 1)}" style="width:80px;" aria-label="${t('recipeQty')}">
                     <button class="btn danger" type="button" onclick="removeRecipeRow(${index})">${t('delete')}</button>
                 </div>
                 `;

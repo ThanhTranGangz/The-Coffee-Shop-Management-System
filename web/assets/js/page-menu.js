@@ -218,9 +218,7 @@
 
         function renderWelcome() {
             if (!qrTableName) return;
-            const text = lang() === 'en'
-                ? `You are seated at ${qrTableName}. Have a lovely day ^^!`
-                : `Bạn đang ngồi ${qrTableName}. Chúc bạn một ngày vui vẻ ^^!`;
+            const text = tf('tableWelcome', { table: qrTableName });
             document.getElementById('table-welcome-text').textContent = text;
             document.getElementById('table-welcome').classList.remove('hidden');
         }

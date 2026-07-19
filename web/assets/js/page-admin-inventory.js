@@ -168,10 +168,10 @@ async function deleteItem(id) {
             items = items.filter(i => i.id !== id);
             render();
         } else {
-            alert('Lỗi: ' + (await res.text()));
+            alert(t('errorPrefix') + ' ' + (await res.text()));
         }
     } catch (err) {
-        alert('Lỗi mạng');
+        alert(t('networkError'));
     }
 }
 

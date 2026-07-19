@@ -236,7 +236,7 @@
                 <article class="${cardClasses}" data-id="${order.id}" data-next="${next || ''}" ${cardAttributes} ${inlineStyle}>
                     <div class="toolbar order-card-head" style="margin-bottom: 8px;">
                         <div>
-                            <p class="eyebrow" style="margin-bottom: 2px;">${escapeHtml(order.tableName)}</p>
+                            <p class="eyebrow" style="margin-bottom: 2px;">${escapeHtml(formatTableName(order.tableName))}</p>
                             <h3 style="margin: 0;">#${order.orderNumber}</h3>
                         </div>
                         <span class="price" style="font-size: 15px; font-weight: 900;">${money(order.total)}</span>

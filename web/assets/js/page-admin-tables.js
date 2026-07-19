@@ -52,7 +52,7 @@
                         <div class="toolbar">
                             <div>
                                 <p class="eyebrow">${t('table')}</p>
-                                <h2>${escapeHtml(table.name)}</h2>
+                                <h2>${escapeHtml(formatTableName(table.name))}</h2>
                             </div>
                             <span class="status ${table.active ? 'ready' : 'served'}">${table.active ? t('activeTable') : t('inactiveTable')}</span>
                         </div>
@@ -106,7 +106,7 @@
         function syncTableName() {
             const floorNo = Number(document.getElementById('floorNo').value || 1);
             const tableNo = Number(document.getElementById('tableNo').value || 0);
-            if (tableNo > 0) document.getElementById('name').value = `Tầng ${floorNo} - Bàn ${tableNo}`;
+            if (tableNo > 0) document.getElementById('name').value = tf('tableNamePattern', { floor: floorNo, no: tableNo });
         }
 
         async function saveTable(event) {

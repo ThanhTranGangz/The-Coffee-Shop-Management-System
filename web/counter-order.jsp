@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
+        <meta name="page-title-key" content="counterOrderTitle">
     <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=stock-limit-1"></script>
+    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
 </head>
 <body>
     <nav class="nav">

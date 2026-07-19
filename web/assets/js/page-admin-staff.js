@@ -22,8 +22,7 @@ function formatDate(date) {
 }
 
 function getDayName(date) {
-    const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-    return days[date.getDay()];
+    return dayName(date.getDay());
 }
 
 async function init() {
@@ -33,7 +32,7 @@ async function init() {
 
 async function fetchStaffAndShifts() {
     try {
-        const query = window.location.search; // includes ?tabSession=...
+        const query = window.location.search;
         const staffResp = await fetch('api/staff' + query);
         if (staffResp.ok) {
             staffList = await staffResp.json();
@@ -50,119 +49,145 @@ async function fetchStaffAndShifts() {
     }
 }
 
-function populateStaffDropdown() {
+function scheduleRoles() {
+    return [
+        { id: 'Barista', label: t('roleBarista'), css: 'role-barista' },
+        { id: 'Cashier', label: t('roleCashier'), css: 'role-cashier' },
+        { id: 'Waiter', label: t('roleRunner'), css: 'role-waiter' }
+    ];
+}
+
+function isStaffActive(staff) {
+    if (!staff) return false;
+    const status = String(staff.status || '');
+    return staff.active !== false && (status === 'Active' || status === '');
+}
+
+function populateStaffDropdown(includeStaffId) {
     const select = document.getElementById('staffId');
-    select.innerHTML = '<option value="">-- Chọn nhân viên --</option>';
-    staffList.forEach(staff => {
-        const option = document.createElement('option');
-        option.value = staff.id;
-        option.textContent = `${staff.name}`;
-        select.appendChild(option);
-    });
+    const keepId = includeStaffId ? Number(includeStaffId) : 0;
+    select.innerHTML = `<option value="">${t('selectStaff')}</option>`;
+    staffList
+        .slice()
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), lang() === 'en' ? 'en' : 'vi'))
+        .forEach(staff => {
+            if (!isStaffActive(staff) && Number(staff.id) !== keepId) return;
+            const option = document.createElement('option');
+            option.value = staff.id;
+            option.textContent = isStaffActive(staff)
+                ? staff.name
+                : `${staff.name} ${t('staffInactiveSuffix')}`;
+            select.appendChild(option);
+        });
+}
+
+function showNotice(text, ok = true) {
+    const msg = document.getElementById('message');
+    if (!msg) {
+        alert(text);
+        return;
+    }
+    msg.textContent = text;
+    msg.className = ok ? 'notice' : 'notice danger';
+    setTimeout(() => { msg.className = 'notice hidden'; }, 3500);
+}
+
+function displayShiftStatus(status) {
+    if (status === 'Đã xếp lịch') return t('statusScheduled');
+    if (status === 'Đã làm' || status === 'Hoàn thành') return t('statusDone');
+    if (status === 'Vắng' || status === 'Nghỉ') return t('statusAbsent');
+    return status;
+}
+
+function statusClassFor(status) {
+    if (status === 'Đã làm' || status === 'Hoàn thành') return 'status-done';
+    if (status === 'Vắng' || status === 'Nghỉ') return 'status-absent';
+    return 'status-pending';
 }
 
 function renderCalendar() {
     const grid = document.getElementById('calendar-grid');
-    grid.innerHTML = ''; // clear
+    grid.innerHTML = '';
 
-    // 1. Render Header Row
-    grid.appendChild(createCell('calendar-header', 'Ca làm'));
-    
+    grid.appendChild(createCell('calendar-header', t('shiftLabel')));
+    grid.appendChild(createCell('calendar-header', t('roleLabel')));
+
     const weekDates = [];
     for (let i = 0; i < 7; i++) {
         const d = new Date(currentWeekStart);
         d.setDate(d.getDate() + i);
         weekDates.push(formatDate(d));
-        grid.appendChild(createCell('calendar-header', `${getDayName(d)}<br><small style="font-weight:normal">${d.getDate()}/${d.getMonth()+1}</small>`));
+        grid.appendChild(createCell('calendar-header', `${getDayName(d)}<br><small style="font-weight:normal">${d.getDate()}/${d.getMonth() + 1}</small>`));
     }
 
-    // 2. Render Shift Rows
     const fixedShifts = [
         { name: 'Ca Sáng', hours: '06:00 - 12:00' },
         { name: 'Ca Chiều', hours: '12:00 - 18:00' },
         { name: 'Ca Tối', hours: '18:00 - 23:00' }
     ];
+    const roles = scheduleRoles();
 
-    fixedShifts.forEach(shiftData => {
-        // Shift Name Cell
-        const nameCell = document.createElement('div');
-        nameCell.className = 'calendar-cell staff-name-col';
-        nameCell.innerHTML = `
-            ${shiftData.name}
-            <span class="staff-role">${shiftData.hours}</span>
-        `;
-        grid.appendChild(nameCell);
+    fixedShifts.forEach((shiftData, shiftIndex) => {
+        roles.forEach((role, roleIndex) => {
+            if (roleIndex === 0) {
+                const nameCell = document.createElement('div');
+                nameCell.className = 'calendar-cell staff-name-col' + (shiftIndex < fixedShifts.length - 1 ? ' shift-band-divider' : '');
+                nameCell.innerHTML = `
+                    ${escapeHtml(shiftNameText(shiftData.name))}
+                    <span class="staff-role">${escapeHtml(shiftData.hours)}</span>
+                `;
+                grid.appendChild(nameCell);
+            }
 
-        // Days Cells
-        weekDates.forEach(dateStr => {
-            const cell = document.createElement('div');
-            cell.className = 'calendar-cell';
-            
-            // Find shifts for this shiftName on this date
-            const shifts = shiftList.filter(s => s.shiftName === shiftData.name && s.date === dateStr);
-            
-            const roles = [
-                { id: 'Barista', label: typeof t === 'function' ? t('roleBarista') : 'Barista' },
-                { id: 'Cashier', label: typeof t === 'function' ? t('roleCashier') : 'Thu ngân' },
-                { id: 'Waiter', label: typeof t === 'function' ? t('roleRunner') : 'Phục vụ' }
-            ];
-            
-            roles.forEach(role => {
-                const roleShifts = shifts.filter(s => s.assignedRole === role.id);
-                
-                const roleGroup = document.createElement('div');
-                roleGroup.className = 'role-group';
-                
-                const roleTitle = document.createElement('div');
-                roleTitle.className = 'role-title';
-                roleTitle.textContent = role.label;
-                roleGroup.appendChild(roleTitle);
-                
-                if (roleShifts.length > 0) {
+            const roleLabel = document.createElement('div');
+            roleLabel.className = `calendar-cell role-label-col ${role.css}` + (roleIndex === roles.length - 1 && shiftIndex < fixedShifts.length - 1 ? ' shift-band-divider' : '');
+            roleLabel.textContent = role.label;
+            grid.appendChild(roleLabel);
+
+            weekDates.forEach(dateStr => {
+                const cell = document.createElement('div');
+                cell.className = `calendar-cell role-day-cell ${role.css}` + (roleIndex === roles.length - 1 && shiftIndex < fixedShifts.length - 1 ? ' shift-band-divider' : '');
+
+                const roleShifts = shiftList.filter(s =>
+                    s.shiftName === shiftData.name
+                    && s.date === dateStr
+                    && String(s.assignedRole || 'Barista') === role.id
+                );
+
+                if (roleShifts.length) {
                     roleShifts.forEach(shift => {
                         const shiftEl = document.createElement('div');
                         shiftEl.className = 'shift-block';
                         shiftEl.style.cursor = 'pointer';
                         shiftEl.onclick = () => editShift(shift);
-                        
-                        let statusClass = 'status-pending';
-                        if (shift.status === 'Đã làm' || shift.status === 'Hoàn thành') statusClass = 'status-done';
-                        if (shift.status === 'Vắng' || shift.status === 'Nghỉ') statusClass = 'status-absent';
-                        
-                        let displayStatus = shift.status;
-                        if (typeof t === 'function') {
-                            if (shift.status === 'Đã xếp lịch') displayStatus = t('statusScheduled');
-                            else if (shift.status === 'Đã làm') displayStatus = t('statusDone');
-                            else if (shift.status === 'Vắng') displayStatus = t('statusAbsent');
-                        }
-                        
                         shiftEl.innerHTML = `
-                            <span class="shift-name">${shift.staffName}</span>
-                            <span class="shift-status ${statusClass}">${displayStatus}</span>
+                            <span class="shift-name">${escapeHtml(shift.staffName)}</span>
+                            <span class="shift-status ${statusClassFor(shift.status)}">${escapeHtml(displayShiftStatus(shift.status))}</span>
                         `;
-                        roleGroup.appendChild(shiftEl);
+                        cell.appendChild(shiftEl);
                     });
                 } else {
                     const warnEl = document.createElement('div');
                     warnEl.className = 'role-warning';
-                    warnEl.innerHTML = `⚠ Thiếu người`;
-                    roleGroup.appendChild(warnEl);
+                    warnEl.textContent = '⚠ ' + t('understaffed');
+                    cell.appendChild(warnEl);
                 }
 
-                // add button for THIS specific role
                 const addBtn = document.createElement('div');
                 addBtn.className = 'role-add-btn';
-                addBtn.innerHTML = '+';
-                addBtn.title = `Thêm ${role.label}`;
+                addBtn.textContent = '+';
+                addBtn.title = tf('addRoleTitle', { role: role.label });
                 addBtn.onclick = () => prepareAddShift(shiftData.name, dateStr, role.id);
-                roleGroup.appendChild(addBtn);
+                cell.appendChild(addBtn);
 
-                cell.appendChild(roleGroup);
+                grid.appendChild(cell);
             });
-
-            grid.appendChild(cell);
         });
     });
+}
+
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
 function createCell(className, html) {
@@ -184,76 +209,76 @@ function nextWeek() {
 
 function prepareAddShift(shiftName, dateStr, roleId) {
     document.getElementById('shiftId').value = '';
+    populateStaffDropdown();
     document.getElementById('staffId').value = '';
     document.getElementById('shiftDate').value = dateStr;
     document.getElementById('shiftName').value = shiftName;
     document.getElementById('assignedRole').value = roleId || 'Barista';
     document.getElementById('notes').value = '';
     document.getElementById('status').value = 'Đã xếp lịch';
-    
-    document.getElementById('form-title').textContent = typeof t === 'function' ? t('addShiftTitle') : 'Thêm nhân viên vào ca';
+
+    document.getElementById('form-title').textContent = t('addShiftTitle');
     document.getElementById('form-title').setAttribute('data-i18n', 'addShiftTitle');
-    
-    // Scroll to form on mobile
     document.getElementById('form-title').scrollIntoView({ behavior: 'smooth' });
 }
 
 function editShift(shift) {
     document.getElementById('shiftId').value = shift.id;
+    populateStaffDropdown(shift.staffId);
     document.getElementById('staffId').value = shift.staffId;
     document.getElementById('shiftDate').value = shift.date;
     document.getElementById('shiftName').value = shift.shiftName;
     document.getElementById('assignedRole').value = shift.assignedRole || 'Barista';
     document.getElementById('notes').value = shift.notes || '';
     document.getElementById('status').value = shift.status;
-    
-    document.getElementById('form-title').textContent = typeof t === 'function' ? t('editShiftTitle') : 'Sửa phân công';
+
+    document.getElementById('form-title').textContent = t('editShiftTitle');
     document.getElementById('form-title').setAttribute('data-i18n', 'editShiftTitle');
-    
-    // Scroll to form on mobile
     document.getElementById('form-title').scrollIntoView({ behavior: 'smooth' });
 }
 
 async function saveShift(e) {
     e.preventDefault();
-    
+
     const shiftId = document.getElementById('shiftId').value;
-    const staffId = parseInt(document.getElementById('staffId').value);
-    
-    // Find staff name
+    const staffId = parseInt(document.getElementById('staffId').value, 10);
+    if (!staffId) {
+        showNotice(t('selectStaffRequired'), false);
+        return;
+    }
+
     const staff = staffList.find(s => s.id === staffId);
-    
     const shiftName = document.getElementById('shiftName').value;
     const shiftDate = document.getElementById('shiftDate').value;
     const status = document.getElementById('status').value;
-    
-    // Validation: Cannot set status to "Đã làm" or "Vắng" for future dates
+    const assignedRole = document.getElementById('assignedRole').value || 'Barista';
+
     if (status === 'Đã làm' || status === 'Vắng') {
         const today = new Date();
-        today.setHours(0,0,0,0);
-        const selectedDate = new Date(shiftDate);
+        today.setHours(0, 0, 0, 0);
+        const selectedDate = new Date(shiftDate + 'T00:00:00');
         if (selectedDate > today) {
-            showMessage('Lỗi: Chỉ có thể đánh dấu "Đã làm" hoặc "Vắng" cho các ca làm trong ngày hôm nay hoặc quá khứ.', false);
+            showNotice(t('shiftStatusDateRule'), false);
             return;
         }
     }
-    
+
     let hours = '06:00 - 12:00';
     if (shiftName === 'Ca Chiều') hours = '12:00 - 18:00';
     if (shiftName === 'Ca Tối') hours = '18:00 - 23:00';
-    
+
     const newShift = {
         id: shiftId,
         staffId: staffId,
         staffName: staff ? staff.name : '',
-        date: document.getElementById('shiftDate').value,
+        date: shiftDate,
         shiftName: shiftName,
         hours: hours,
-        assignedRole: document.getElementById('assignedRole').value,
+        assignedRole: assignedRole,
         notes: document.getElementById('notes').value,
-        status: document.getElementById('status').value
+        status: status
     };
-    
+
     try {
         const query = window.location.search;
         const resp = await fetch('api/shifts' + query, {
@@ -261,42 +286,45 @@ async function saveShift(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newShift)
         });
-        
+
         if (resp.ok) {
             const savedShift = await resp.json();
-            if (shiftId) {
-                const idx = shiftList.findIndex(s => s.id === savedShift.id);
-                if (idx !== -1) shiftList[idx] = savedShift;
-            } else {
-                shiftList.push(savedShift);
-            }
-            
-            // reset form
+            const idx = shiftList.findIndex(s => s.id === savedShift.id);
+            if (idx !== -1) shiftList[idx] = savedShift;
+            else shiftList.push(savedShift);
+
             e.target.reset();
             document.getElementById('shiftId').value = '';
-            document.getElementById('form-title').textContent = typeof t === 'function' ? t('shiftFormTitle') : 'Phân công ca làm';
+            populateStaffDropdown();
+            document.getElementById('form-title').textContent = t('shiftFormTitle');
             document.getElementById('form-title').setAttribute('data-i18n', 'shiftFormTitle');
-            
             renderCalendar();
-            
-            const msg = document.getElementById('message');
-            msg.textContent = typeof t === 'function' ? t('save') + ' OK' : 'Đã lưu ca làm thành công!';
-            msg.className = 'notice';
-            setTimeout(() => { msg.className = 'notice hidden'; }, 3000);
+            showNotice(t('shiftSaved'));
         } else {
-            alert('Lỗi lưu ca làm: ' + await resp.text());
+            const errText = await resp.text();
+            let message = t('shiftSaveFailed');
+            try {
+                const parsed = JSON.parse(errText);
+                if (parsed && parsed.error) message = parsed.error;
+            } catch (_) {
+                if (errText) message = errText;
+            }
+            showNotice(message, false);
         }
     } catch (err) {
-        alert('Lỗi mạng: ' + err.message);
+        showNotice(t('networkErrorShort') + ': ' + err.message, false);
     }
 }
 
 async function deleteShift() {
     const shiftId = document.getElementById('shiftId').value;
-    if (!shiftId) return;
-    
-    if (!confirm('Bạn có chắc chắn muốn xóa ca làm này?')) return;
-    
+    if (!shiftId) {
+        showNotice(t('selectShiftToDelete'), false);
+        return;
+    }
+
+    if (!confirm(t('deleteShiftConfirm'))) return;
+
     try {
         const query = window.location.search;
         const resp = await fetch('api/shifts/delete' + query, {
@@ -304,34 +332,28 @@ async function deleteShift() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: shiftId })
         });
-        
+
         if (resp.ok) {
             shiftList = shiftList.filter(s => s.id !== shiftId);
-            
-            // reset form
-            document.querySelector('.grid').reset();
+            const form = document.querySelector('aside.card form.grid');
+            if (form) form.reset();
             document.getElementById('shiftId').value = '';
-            document.getElementById('form-title').textContent = typeof t === 'function' ? t('shiftFormTitle') : 'Phân công ca làm';
+            populateStaffDropdown();
+            document.getElementById('form-title').textContent = t('shiftFormTitle');
             document.getElementById('form-title').setAttribute('data-i18n', 'shiftFormTitle');
-            
             renderCalendar();
-            
-            const msg = document.getElementById('message');
-            msg.textContent = typeof t === 'function' ? t('delete') + ' OK' : 'Đã xóa ca làm!';
-            msg.className = 'notice';
-            setTimeout(() => { msg.className = 'notice hidden'; }, 3000);
+            showNotice(t('shiftDeleted'));
         } else {
-            alert('Lỗi xóa ca làm: ' + await resp.text());
+            const err = await resp.json().catch(() => ({}));
+            showNotice(err.error || t('shiftDeleteFailed'), false);
         }
     } catch (err) {
-        alert('Lỗi mạng: ' + err.message);
+        showNotice(t('networkErrorShort') + ': ' + err.message, false);
     }
 }
 
-// Initialize on load
 document.addEventListener('DOMContentLoaded', init);
 
-// Payroll logic
 let currentPayrollData = [];
 
 async function initPayroll() {
@@ -345,11 +367,11 @@ async function initPayroll() {
 
 async function fetchPayroll() {
     const tbody = document.getElementById('payroll-tbody');
-    tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">Đang tải dữ liệu...</td></tr>';
-    
+    tbody.innerHTML = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">${t('loadingData')}</td></tr>`;
+
     const yyyyMM = document.getElementById('payrollMonth').value;
     if (!yyyyMM) return;
-    
+
     try {
         const query = window.location.search;
         let url = 'api/payroll' + query;
@@ -358,24 +380,24 @@ async function fetchPayroll() {
         } else {
             url += '?month=' + yyyyMM;
         }
-        
+
         const resp = await fetch(url);
         if (resp.ok) {
             currentPayrollData = await resp.json();
             applyPayrollFilter();
         } else {
-            tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--danger);">Lỗi tải dữ liệu.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--danger);">${t('loadDataFailed')}</td></tr>`;
         }
     } catch (e) {
         console.error('Error fetching payroll', e);
-        tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--danger);">Lỗi mạng.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--danger);">${t('networkErrorShort')}</td></tr>`;
     }
 }
 
 function applyPayrollFilter() {
     const roleFilter = document.getElementById('payrollRoleFilter').value;
     let filteredData = currentPayrollData;
-    
+
     if (roleFilter !== 'All') {
         filteredData = currentPayrollData.filter(item => item.role === roleFilter);
     }
@@ -385,61 +407,63 @@ function applyPayrollFilter() {
 function renderPayroll(data) {
     const tbody = document.getElementById('payroll-tbody');
     tbody.innerHTML = '';
-    
+
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">Không có dữ liệu phù hợp với bộ lọc (hoặc chưa có ca nào "Đã làm").</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">${t('payrollEmpty')}</td></tr>`;
         return;
     }
-    
+
     data.forEach(item => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--line)';
         tr.innerHTML = `
-            <td style="padding: 12px;">${item.staffName}</td>
-            <td style="padding: 12px;">${item.role || 'Chưa rõ'}</td>
+            <td style="padding: 12px;">${escapeHtml(item.staffName)}</td>
+            <td style="padding: 12px;">${escapeHtml(roleScheduleText(item.role) || t('roleUnknown'))}</td>
             <td style="padding: 12px; text-align: center; font-weight: bold;">${item.totalShifts}</td>
-            <td style="padding: 12px; text-align: center; font-weight: bold; color: var(--accent);">${item.totalHours} giờ</td>
+            <td style="padding: 12px; text-align: center; font-weight: bold; color: var(--accent);">${item.totalHours} ${t('hoursUnit')}</td>
         `;
         tbody.appendChild(tr);
     });
 }
-
-// Staff Management Functions
 
 function renderStaffList() {
     const tbody = document.getElementById('staff-list-tbody');
     if (!tbody) return;
     tbody.innerHTML = '';
-    
+
     if (!staffList || staffList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">Chưa có nhân viên nào.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">${t('noStaff')}</td></tr>`;
         return;
     }
-    
-    staffList.forEach(staff => {
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid var(--line)';
-        let statusColor = 'var(--good)';
-        if (staff.status === 'Temp_Inactive') statusColor = 'var(--warn)';
-        if (staff.status === 'Inactive' || staff.status === 'Perm_Inactive') statusColor = 'var(--danger)';
-        
-        tr.innerHTML = `
-            <td style="padding: 12px;">${staff.id}</td>
-            <td style="padding: 12px; font-weight: bold;">${staff.name}</td>
-            <td style="padding: 12px; color: ${statusColor}; font-weight: bold;">${staff.status}</td>
-            <td style="padding: 12px; text-align: right;">
-                <button class="btn" style="padding: 4px 8px; font-size: 12px; margin-right: 5px;" onclick="editStaff(${staff.id})">Sửa</button>
-                <button class="btn" style="padding: 4px 8px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="deleteStaff(${staff.id})">Xóa</button>
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
+
+    staffList
+        .slice()
+        .sort((a, b) => Number(a.id) - Number(b.id))
+        .forEach(staff => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--line)';
+            let statusColor = 'var(--good)';
+            if (staff.status === 'Temp_Inactive') statusColor = 'var(--warn)';
+            if (staff.status === 'Inactive' || staff.status === 'Perm_Inactive') statusColor = 'var(--danger)';
+
+            tr.innerHTML = `
+                <td style="padding: 12px;">${staff.id}</td>
+                <td style="padding: 12px; font-weight: bold;">${escapeHtml(staff.name)}</td>
+                <td style="padding: 12px; color: ${statusColor}; font-weight: bold;">${escapeHtml(staffStatusText(staff.status))}</td>
+                <td style="padding: 12px; text-align: right;">
+                    <button class="btn" style="padding: 4px 8px; font-size: 12px; margin-right: 5px;" onclick="editStaff(${staff.id})">${t('edit')}</button>
+                    <button class="btn" style="padding: 4px 8px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="deleteStaff(${staff.id})">${t('delete')}</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
 }
 
 function openStaffModal() {
     document.getElementById('staffForm').reset();
     document.getElementById('staffIdInput').readOnly = false;
-    document.getElementById('staffModalTitle').textContent = 'Thêm nhân viên';
+    document.getElementById('staffModalTitle').textContent = t('addStaff');
+    applyI18n();
     document.getElementById('staffModal').classList.remove('hidden');
 }
 
@@ -450,20 +474,21 @@ function closeStaffModal() {
 function editStaff(id) {
     const staff = staffList.find(s => s.id === id);
     if (!staff) return;
-    
+
     document.getElementById('staffIdInput').value = staff.id;
     document.getElementById('staffIdInput').readOnly = true;
     document.getElementById('staffNameInput').value = staff.name;
     document.getElementById('staffStatusInput').value = staff.status || 'Active';
-    
-    document.getElementById('staffModalTitle').textContent = 'Sửa nhân viên';
+
+    document.getElementById('staffModalTitle').textContent = t('editStaff');
+    applyI18n();
     document.getElementById('staffModal').classList.remove('hidden');
 }
 
 async function saveStaff(e) {
     e.preventDefault();
     const staff = {
-        id: parseInt(document.getElementById('staffIdInput').value),
+        id: parseInt(document.getElementById('staffIdInput').value, 10),
         name: document.getElementById('staffNameInput').value,
         role: "staff",
         status: document.getElementById('staffStatusInput').value,
@@ -474,7 +499,7 @@ async function saveStaff(e) {
         overtime: false,
         shift: ''
     };
-    
+
     try {
         const query = window.location.search;
         const resp = await fetch('api/staff/save' + query, {
@@ -482,28 +507,28 @@ async function saveStaff(e) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(staff)
         });
-        
+
         if (resp.ok) {
             const saved = await resp.json();
             const idx = staffList.findIndex(s => s.id === saved.id);
             if (idx >= 0) staffList[idx] = saved;
             else staffList.push(saved);
-            
+
             renderStaffList();
-            populateStaffDropdown(); // Also update dropdown in shift form
+            populateStaffDropdown();
             closeStaffModal();
-            alert('Đã lưu nhân viên thành công!');
+            alert(t('staffSaved'));
         } else {
-            alert('Lỗi lưu nhân viên: ' + await resp.text());
+            alert(t('staffSaveFailed') + ' ' + await resp.text());
         }
     } catch (err) {
-        alert('Lỗi mạng: ' + err.message);
+        alert(t('networkErrorShort') + ': ' + err.message);
     }
 }
 
 async function deleteStaff(id) {
-    if (!confirm('Bạn có chắc muốn xóa nhân viên này? Lịch sử ca làm sẽ được giữ lại nhưng nhân viên sẽ chuyển trạng thái Đã nghỉ.')) return;
-    
+    if (!confirm(t('deleteStaffConfirm'))) return;
+
     try {
         const query = window.location.search;
         const resp = await fetch('api/staff/delete' + query, {
@@ -511,9 +536,8 @@ async function deleteStaff(id) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: id })
         });
-        
+
         if (resp.ok) {
-            // Update local state without re-fetching
             const staff = staffList.find(s => s.id === id);
             if (staff) {
                 staff.active = false;
@@ -521,11 +545,18 @@ async function deleteStaff(id) {
             }
             renderStaffList();
             populateStaffDropdown();
-            alert('Đã xóa nhân viên thành công!');
+            alert(t('staffDeleted'));
         } else {
-            alert('Lỗi xóa nhân viên: ' + await resp.text());
+            alert(t('staffDeleteFailed') + ' ' + await resp.text());
         }
     } catch (err) {
-        alert('Lỗi mạng: ' + err.message);
+        alert(t('networkErrorShort') + ': ' + err.message);
     }
 }
+
+window.renderPage = () => {
+    populateStaffDropdown(document.getElementById('staffId')?.value);
+    renderCalendar();
+    renderStaffList();
+    applyPayrollFilter();
+};

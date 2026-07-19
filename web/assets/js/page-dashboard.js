@@ -289,16 +289,11 @@
             const label = status === 'Paid' ? t('needsCleaning') : (status === 'Served' ? t('unpaid') : (busy ? statusText(status) : t('available')));
             return `
                 <div class="table-tile ${busy ? 'busy' : 'free'} ${status === 'Paid' ? 'cleaning' : ''}">
-                    <b>${escapeHtml(tableNameShort(table.name))}</b>
+                    <b>${escapeHtml(formatTableShort(table.name))}</b>
                     <span>${escapeHtml(label)}</span>
                     ${table.orderNumber ? `<em>#${table.orderNumber}</em>` : ''}
                 </div>
             `;
-        }
-
-        function tableNameShort(name) {
-            const match = String(name || '').match(/Bàn\s*(\d+)/i);
-            return match ? 'B' + match[1] : name;
         }
 
         function num(value) {

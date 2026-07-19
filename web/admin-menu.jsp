@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
+        <meta name="page-title-key" content="menuAdminTitle">
     <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=tab-session-2"></script>
+    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
 </head>
 <body>
     <nav class="nav"><div class="nav-inner"><a class="brand" href="index.html">coffeshop</a><div class="links" id="nav-links"></div><button id="lang-toggle" class="link lang-toggle" type="button" onclick="toggleLang()">EN</button></div></nav>
@@ -51,9 +52,9 @@
                     <hr style="margin: 1rem 0; border: none; border-top: 1px solid var(--border);">
                     <h3 style="font-size: 1rem; margin-bottom: 0.5rem;" data-i18n="recipeInfo">Công thức món</h3>
                     <section class="recipe-editor" id="recipe-editor">
-                        <p class="muted">Nhập định lượng nguyên liệu cho món này.</p>
+                        <p class="muted" data-i18n="recipeHelp">Nhập định lượng nguyên liệu cho món này.</p>
                         <div id="recipe-rows"></div>
-                        <button class="btn" type="button" onclick="addRecipeRow()">Thêm nguyên liệu</button>
+                        <button class="btn" type="button" onclick="addRecipeRow()" data-i18n="addMaterialBtn">Thêm nguyên liệu</button>
                     </section>
                     <label><input id="active" type="checkbox" checked style="width:auto"> <span data-i18n="active">Đang bán</span></label>
                     <button class="btn primary" type="submit" data-i18n="save">Lưu</button>

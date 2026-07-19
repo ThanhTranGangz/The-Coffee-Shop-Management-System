@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
+        <meta name="page-title-key" content="menuPageTitle">
     <link rel="stylesheet" href="assets/css/app.css?v=vi-serif-1">
-    <script defer src="assets/js/i18n.js?v=stock-limit-1"></script>
+    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
 </head>
 <body>
     <nav class="nav">
@@ -65,7 +66,7 @@
         </div>
     </main>
 
-    <button class="scroll-top-btn" id="scroll-top-btn" type="button" onclick="scrollToTop()" aria-label="Lên đầu trang" title="Lên đầu trang" hidden>
+    <button class="scroll-top-btn" id="scroll-top-btn" type="button" onclick="scrollToTop()" data-i18n-aria="scrollToTop" data-i18n-title="scrollToTop" aria-label="Lên đầu trang" title="Lên đầu trang" hidden>
         <span aria-hidden="true">↑</span>
     </button>
 

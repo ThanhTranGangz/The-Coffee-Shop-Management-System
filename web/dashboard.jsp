@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
+        <meta name="page-title-key" content="dashboardTitle">
     <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=stock-limit-1"></script>
+    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
 </head>
 <body>
     <div class="pin-intro admin-pin-gate" id="admin-pin-gate">

@@ -87,7 +87,6 @@
         }
 
         function orderHtml(order) {
-            const blocking = Number(order.blockingOrders || 0);
             const payable = isPayableOrder(order);
             return `
                 <article class="card order-card hold-card ${payable ? '' : 'not-ready'}"
@@ -102,13 +101,12 @@
                     oncontextmenu="return false">
                     <div class="toolbar" style="margin-bottom:10px">
                         <div>
-                            <p class="eyebrow">${escapeHtml(order.tableName)}</p>
+                            <p class="eyebrow">${escapeHtml(formatTableName(order.tableName))}</p>
                             <h3>#${order.orderNumber}</h3>
                         </div>
                         <span class="status ${statusClass(order.status)}">${paymentStatusText(order.status)}</span>
                     </div>
                     ${order.note ? `<div class="order-note"><b>${t('orderNote')}</b><span>${escapeHtml(order.note)}</span></div>` : ''}
-                    ${blocking > 0 ? `<div class="notice mini-notice">${t('paymentBlockedUntilServed')} <b>${blocking}</b> ${t('pendingTableItems').toLowerCase()}</div>` : ''}
                     <div class="order-lines">
                         ${(order.items || []).map(it => `<p><span>${escapeHtml(it.itemName)}${it.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(it.itemSize) : ''} x${it.quantity}</span><span class="price">${money(it.price * it.quantity)}</span></p>`).join('')}
                     </div>
@@ -129,7 +127,7 @@
         }
 
         function isPayableOrder(order) {
-            return order && order.status === 'Served' && Number(order.blockingOrders || 0) === 0;
+            return order && order.status === 'Served';
         }
 
         function statusClass(status) {

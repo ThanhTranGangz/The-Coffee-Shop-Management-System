@@ -311,6 +311,21 @@ public class LiteApiServlet extends HttpServlet {
                     if ("runner".equals(currentRole)) sanitizeRunnerOrder(updatedOrder);
                     resp.getWriter().write(JsonUtils.toJson(updatedOrder));
                     break;
+                case "/orders/item-prepare": {
+                    String prepareRole = role(req);
+                    if (!"barista".equals(prepareRole) && !"admin".equals(prepareRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ pha chế được đánh dấu món đã pha.");
+                        return;
+                    }
+                    Map<String, Object> preparedOrder = service.prepareOrderItem(
+                            readInt(body.get("orderId"), 0),
+                            readInt(body.get("menuItemId"), 0),
+                            str(body.get("itemSize")),
+                            prepareRole,
+                            user(req));
+                    resp.getWriter().write(JsonUtils.toJson(preparedOrder));
+                    break;
+                }
                 case "/orders/split":
                     String splitRole = role(req);
                     if (!"cashier".equals(splitRole) && !"admin".equals(splitRole)) {

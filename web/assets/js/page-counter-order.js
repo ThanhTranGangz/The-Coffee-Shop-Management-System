@@ -19,7 +19,7 @@
         }
 
         function renderCounterOrder() {
-            const tableOptions = counterTables.map(table => `<option value="${escapeAttr(table.name)}" ${counterTable === table.name ? 'selected' : ''}>${escapeHtml(table.name)}</option>`).join('');
+            const tableOptions = counterTables.map(table => `<option value="${escapeAttr(table.name)}" ${counterTable === table.name ? 'selected' : ''}>${escapeHtml(formatTableName(table.name))}</option>`).join('');
             document.getElementById('counter-root').innerHTML = `
                 <div class="toolbar compact-toolbar">
                     <div>

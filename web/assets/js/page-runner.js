@@ -124,7 +124,7 @@
                     oncontextmenu="return false">
                     <div class="toolbar order-card-head">
                         <div>
-                            <p class="eyebrow">${escapeHtml(order.tableName)}</p>
+                            <p class="eyebrow">${escapeHtml(formatTableName(order.tableName))}</p>
                             <h3>#${order.orderNumber}</h3>
                         </div>
                         <span class="status ready">${t('serveColumn')}</span>
@@ -146,7 +146,7 @@
                 <article class="card order-card runner-order-card runner-reprint-card">
                     <div class="toolbar order-card-head">
                         <div>
-                            <p class="eyebrow">${escapeHtml(order.tableName)}</p>
+                            <p class="eyebrow">${escapeHtml(formatTableName(order.tableName))}</p>
                             <h3>#${order.orderNumber}</h3>
                         </div>
                         <span class="status served">${t('unpaid')}</span>
@@ -345,12 +345,10 @@
                     tableName,
                     status: 'Served',
                     note: updated.note || previous.note || '',
-                    items: updated.items || previous.items || []
+                    items: updated.items || previous.items || [],
+                    invoicePrinted: updated.invoicePrinted != null ? updated.invoicePrinted : previous.invoicePrinted
                 };
-                runnerOrders = [servedOrder, ...runnerOrders.filter(order => {
-                    const id = Number(order.id);
-                    return id !== Number(orderId) && id !== Number(servedOrder.id);
-                })];
+                runnerOrders = [servedOrder, ...runnerOrders.filter(order => Number(order.id) !== Number(orderId))];
                 runnerTables = runnerTables.map(table => String(table.name || '') === String(tableName)
                     ? Object.assign({}, table, { status: 'Served', busy: true, orderId, orderNumber: servedOrder.orderNumber || table.orderNumber })
                     : table);
@@ -427,13 +425,11 @@
         }
 
         function tableDisplayName(name) {
-            const match = String(name || '').match(/Tầng\s*(\d+)\s*-\s*Bàn\s*(\d+)/i);
-            return match ? `${t('floor')} ${match[1]} · ${t('table')} ${match[2]}` : name;
+            return formatTableName(name);
         }
 
         function tableNameShort(name) {
-            const match = String(name || '').match(/Bàn\s*(\d+)/i);
-            return match ? 'B' + match[1] : name;
+            return formatTableShort(name);
         }
 
         function num(value) {
@@ -481,7 +477,7 @@
                     <div class="invoice-meta">
                         <div>
                             <p class="eyebrow">${t('table')}</p>
-                            <strong>${escapeHtml(order.tableName)}</strong>
+                            <strong>${escapeHtml(formatTableName(order.tableName))}</strong>
                         </div>
                         <div>
                             <p class="eyebrow">${t('orderNumber')}</p>

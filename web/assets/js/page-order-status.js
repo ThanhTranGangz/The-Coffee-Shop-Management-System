@@ -48,7 +48,7 @@
             box.innerHTML = `
                 <section class="card table-order-head">
                     <p class="eyebrow">${t('trackCurrentTable')}</p>
-                    <h2>${escapeHtml(tableName || t('table'))}</h2>
+                    <h2>${escapeHtml(formatTableName(tableName) || t('table'))}</h2>
                     <span class="status ready">${orders.length} ${t('orders')}</span>
                 </section>
                 <section class="table-order-list">
@@ -99,7 +99,7 @@
                 <article class="card order-track-card">
                 <div class="toolbar">
                     <div>
-                        <p class="eyebrow">${escapeHtml(order.tableName)}</p>
+                        <p class="eyebrow">${escapeHtml(formatTableName(order.tableName))}</p>
                         <h2>#${order.orderNumber}</h2>
                     </div>
                     <span class="status ${statusClass(visibleStatus)}">${statusText(visibleStatus)}</span>

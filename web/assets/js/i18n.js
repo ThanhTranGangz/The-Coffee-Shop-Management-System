@@ -100,7 +100,33 @@ const dict = {
         lowStockItemLine: '{name}: còn {stock}/{min} {unit}',
         stockNotEnough: 'Không còn đủ hàng để phục vụ (còn {count}).',
         stockSoldOut: 'Món này hiện đã hết hàng.',
-        menuDisabledByStock: 'Đã tự tắt {count} món vì không còn đủ nguyên liệu.'
+        menuDisabledByStock: 'Đã tự tắt {count} món vì không còn đủ nguyên liệu.',
+        daySun: 'Chủ nhật', dayMon: 'Thứ 2', dayTue: 'Thứ 3', dayWed: 'Thứ 4', dayThu: 'Thứ 5', dayFri: 'Thứ 6', daySat: 'Thứ 7',
+        shiftMorningShort: 'Ca Sáng', shiftAfternoonShort: 'Ca Chiều', shiftEveningShort: 'Ca Tối',
+        selectStaff: '-- Chọn nhân viên --', staffInactiveSuffix: '(đã nghỉ)', understaffed: 'Thiếu người',
+        addRoleTitle: 'Thêm {role}', selectStaffRequired: 'Vui lòng chọn nhân viên.',
+        shiftStatusDateRule: 'Chỉ đánh dấu "Đã làm" hoặc "Vắng" cho hôm nay hoặc ngày đã qua.',
+        shiftSaved: 'Đã lưu ca làm thành công!', shiftDeleted: 'Đã xóa ca làm!',
+        shiftSaveFailed: 'Lỗi lưu ca làm.', shiftDeleteFailed: 'Lỗi xóa ca làm.',
+        selectShiftToDelete: 'Hãy chọn một ca để xóa.', deleteShiftConfirm: 'Bạn có chắc chắn muốn xóa ca làm này?',
+        loadDataFailed: 'Lỗi tải dữ liệu.', networkErrorShort: 'Lỗi mạng.',
+        payrollEmpty: 'Không có dữ liệu phù hợp với bộ lọc (hoặc chưa có ca nào "Đã làm").',
+        hoursUnit: 'giờ', roleUnknown: 'Chưa rõ',
+        staffActive: 'Đang làm', staffInactive: 'Đã nghỉ', staffTempInactive: 'Tạm nghỉ',
+        noStaff: 'Chưa có nhân viên nào.', addStaff: '+ Thêm nhân viên', editStaff: 'Sửa nhân viên', saveStaff: 'LƯU NHÂN VIÊN',
+        staffIdLabel: 'ID Nhân viên (chỉ nhập số)', staffNameLabel: 'Tên nhân viên', actions: 'Thao tác',
+        staffSaved: 'Đã lưu nhân viên thành công!', staffSaveFailed: 'Lỗi lưu nhân viên.',
+        staffDeleted: 'Đã xóa nhân viên thành công!', staffDeleteFailed: 'Lỗi xóa nhân viên.',
+        deleteStaffConfirm: 'Bạn có chắc muốn xóa nhân viên này? Lịch sử ca làm sẽ được giữ lại nhưng nhân viên sẽ chuyển trạng thái Đã nghỉ.',
+        jumpToPayrollTitle: 'Trượt xuống Bảng chấm công', staffAdminTitle: 'Quản lý nhân viên',
+        recipeHelp: 'Nhập định lượng nguyên liệu cho món này.', selectMaterial: '-- Chọn nguyên liệu --', recipeQty: 'Định lượng',
+        tableNamePattern: 'Tầng {floor} - Bàn {no}',
+        errorPrefix: 'Lỗi:', tableWelcome: 'Bạn đang ngồi {table}. Chúc bạn một ngày vui vẻ ^^!',
+        itemNamePlaceholder: 'Tên món', inventoryPageTitle: 'Kho nguyên liệu', menuAdminTitle: 'Quản lý thực đơn',
+        tablesAdminTitle: 'Quản lý bàn & QR', dashboardTitle: 'Dashboard', cashierTitle: 'Thu ngân',
+        runnerTitle: 'Bồi bàn', baristaTitle: 'Pha chế', loginTitle: 'Đăng nhập nhân viên',
+        orderStatusTitle: 'Tra cứu đơn', menuPageTitle: 'Thực đơn', systemLogsTitle: 'Log hệ thống',
+        counterOrderTitle: 'Gọi món tại quầy', transferTableTitle: 'Đổi bàn', homeTitle: 'coffeshop'
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
@@ -201,12 +227,77 @@ const dict = {
         lowStockItemLine: '{name}: {stock}/{min} {unit} left',
         stockNotEnough: 'Not enough stock to serve (only {count} left).',
         stockSoldOut: 'This item is currently sold out.',
-        menuDisabledByStock: 'Automatically disabled {count} item(s) due to insufficient ingredients.'
+        menuDisabledByStock: 'Automatically disabled {count} item(s) due to insufficient ingredients.',
+        daySun: 'Sunday', dayMon: 'Monday', dayTue: 'Tuesday', dayWed: 'Wednesday', dayThu: 'Thursday', dayFri: 'Friday', daySat: 'Saturday',
+        shiftMorningShort: 'Morning', shiftAfternoonShort: 'Afternoon', shiftEveningShort: 'Evening',
+        selectStaff: '-- Select staff --', staffInactiveSuffix: '(inactive)', understaffed: 'Understaffed',
+        addRoleTitle: 'Add {role}', selectStaffRequired: 'Please select a staff member.',
+        shiftStatusDateRule: 'Mark Done or Absent only for today or past dates.',
+        shiftSaved: 'Shift saved!', shiftDeleted: 'Shift deleted!',
+        shiftSaveFailed: 'Could not save shift.', shiftDeleteFailed: 'Could not delete shift.',
+        selectShiftToDelete: 'Select a shift to delete.', deleteShiftConfirm: 'Are you sure you want to delete this shift?',
+        loadDataFailed: 'Failed to load data.', networkErrorShort: 'Network error.',
+        payrollEmpty: 'No matching payroll data (or no completed shifts yet).',
+        hoursUnit: 'hrs', roleUnknown: 'Unknown',
+        staffActive: 'Active', staffInactive: 'Inactive', staffTempInactive: 'Temporarily inactive',
+        noStaff: 'No staff yet.', addStaff: '+ Add staff', editStaff: 'Edit staff', saveStaff: 'SAVE STAFF',
+        staffIdLabel: 'Staff ID (numbers only)', staffNameLabel: 'Staff name', actions: 'Actions',
+        staffSaved: 'Staff saved!', staffSaveFailed: 'Could not save staff.',
+        staffDeleted: 'Staff deleted!', staffDeleteFailed: 'Could not delete staff.',
+        deleteStaffConfirm: 'Delete this staff member? Shift history is kept, but status will become Inactive.',
+        jumpToPayrollTitle: 'Scroll to payroll', staffAdminTitle: 'Staff management',
+        recipeHelp: 'Enter ingredient quantities for this item.', selectMaterial: '-- Select material --', recipeQty: 'Quantity',
+        tableNamePattern: 'Floor {floor} - Table {no}',
+        errorPrefix: 'Error:', tableWelcome: 'You are seated at {table}. Have a lovely day ^^!',
+        itemNamePlaceholder: 'Item name', inventoryPageTitle: 'Inventory', menuAdminTitle: 'Menu management',
+        tablesAdminTitle: 'Tables & QR', dashboardTitle: 'Dashboard', cashierTitle: 'Cashier',
+        runnerTitle: 'Waiter', baristaTitle: 'Barista', loginTitle: 'Staff sign in',
+        orderStatusTitle: 'Order tracking', menuPageTitle: 'Menu', systemLogsTitle: 'System logs',
+        counterOrderTitle: 'Counter order', transferTableTitle: 'Move table', homeTitle: 'coffeshop'
     }
 };
 
 function lang() { return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'vi'; }
 function t(key) { return (dict[lang()] && dict[lang()][key]) || key; }
+function tf(key, vars) {
+    let text = t(key);
+    const data = vars || {};
+    Object.keys(data).forEach(name => {
+        text = text.replace(new RegExp('\\{' + name + '\\}', 'g'), String(data[name]));
+    });
+    return text;
+}
+function shiftNameText(name) {
+    const map = {
+        'Ca Sáng': 'shiftMorningShort',
+        'Ca Chiều': 'shiftAfternoonShort',
+        'Ca Tối': 'shiftEveningShort'
+    };
+    return t(map[name] || name) || name;
+}
+function dayName(index) {
+    return t(['daySun', 'dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat'][index] || 'daySun');
+}
+function staffStatusText(status) {
+    if (status === 'Active') return t('staffActive');
+    if (status === 'Inactive' || status === 'Perm_Inactive') return t('staffInactive');
+    if (status === 'Temp_Inactive') return t('staffTempInactive');
+    return status || '—';
+}
+function roleScheduleText(role) {
+    const map = { Barista: 'roleBarista', Cashier: 'roleCashier', Waiter: 'roleRunner' };
+    return t(map[role] || role) || role;
+}
+function formatTableName(name) {
+    const match = String(name || '').match(/(?:Tầng|Floor)\s*(\d+)\s*-\s*(?:Bàn|Table)\s*(\d+)/i);
+    if (match) return tf('tableNamePattern', { floor: match[1], no: match[2] });
+    return name || '';
+}
+function formatTableShort(name) {
+    const match = String(name || '').match(/(?:Bàn|Table)\s*(\d+)/i);
+    if (match) return (lang() === 'en' ? 'T' : 'B') + match[1];
+    return name || '';
+}
 function tabSessionId() {
     let id = sessionStorage.getItem(TAB_SESSION_KEY);
     if (!id) {
@@ -266,8 +357,18 @@ function toggleLang() {
     setLang(nextLang());
 }
 function applyI18n() {
+    document.documentElement.lang = lang() === 'en' ? 'en' : 'vi';
     document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = t(el.dataset.i18nPlaceholder));
+    document.querySelectorAll('[data-i18n-title]').forEach(el => el.title = t(el.dataset.i18nTitle));
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+    document.querySelectorAll('[data-page-title]').forEach(el => {
+        document.title = t(el.dataset.pageTitle);
+    });
+    const pageTitleMeta = document.querySelector('meta[name="page-title-key"]');
+    if (pageTitleMeta && pageTitleMeta.content) {
+        document.title = t(pageTitleMeta.content);
+    }
     document.querySelectorAll('[data-category-option]').forEach(option => option.textContent = categoryText(option.value));
     document.querySelectorAll('a[href]').forEach(link => {
         const href = link.getAttribute('href');
@@ -292,8 +393,8 @@ function nav(role) {
             <a class="link" href="${withTab('dashboard.jsp')}" data-i18n="dashboard">${t('dashboard')}</a>
             <a class="link" href="${withTab('admin-tables.jsp')}" data-i18n="tablesAdmin">${t('tablesAdmin')}</a>
             <a class="link" href="${withTab('admin-menu.jsp')}" data-i18n="menuAdmin">${t('menuAdmin')}</a>
-            <a class="link" href="${withTab('inventory.jsp')}" data-i18n="inventoryAdmin">Kho nguyên liệu</a>
-            <a class="link" href="${withTab('admin-staff.jsp')}" data-i18n="staffAdmin">Nhân viên</a>
+            <a class="link" href="${withTab('inventory.jsp')}" data-i18n="inventoryAdmin">${t('inventoryAdmin')}</a>
+            <a class="link" href="${withTab('admin-staff.jsp')}" data-i18n="staffAdmin">${t('staffAdmin')}</a>
             <a class="link" href="${withTab('staff-orders.jsp')}" data-i18n="staffOrders">${t('staffOrders')}</a>
             <a class="link" href="${withTab('cashier.jsp')}" data-i18n="cashier">${t('cashier')}</a>
             <a class="link" href="${withTab('counter-order.jsp')}" data-i18n="counterOrder">${t('counterOrder')}</a>

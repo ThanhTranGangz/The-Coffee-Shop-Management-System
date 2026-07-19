@@ -6,8 +6,9 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <title>Quản lý nhân viên - Admin</title>
-        <link rel="stylesheet" href="assets/css/app.css?v=admin-staff-1">
-        <script defer src="assets/js/i18n.js?v=2"></script>
+        <meta name="page-title-key" content="staffAdminTitle">
+        <link rel="stylesheet" href="assets/css/app.css?v=admin-staff-3">
+        <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
         <style>
             /* Custom styles for the staff calendar prototype */
             .staff-calendar {
@@ -22,7 +23,7 @@
 
             .calendar-grid {
                 display: grid;
-                grid-template-columns: 100px repeat(7, minmax(130px, 1fr));
+                grid-template-columns: 88px 82px repeat(7, minmax(118px, 1fr));
                 gap: 1px;
                 background: var(--line);
                 border: 1px solid var(--line);
@@ -30,15 +31,16 @@
 
             .calendar-cell {
                 background: var(--surface);
-                padding: 12px;
-                min-height: 100px;
+                padding: 8px;
+                min-height: 64px;
             }
 
             .calendar-header {
                 background: var(--surface-2);
                 font-weight: bold;
                 text-align: center;
-                padding: 12px;
+                padding: 10px 8px;
+                min-height: auto;
             }
 
             .staff-name-col {
@@ -47,6 +49,9 @@
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
+                align-items: flex-start;
+                grid-row: span 3;
+                border-right: 2px solid var(--line);
             }
 
             .staff-role {
@@ -56,33 +61,61 @@
                 margin-top: 4px;
             }
 
-            .shift-block {
-                margin-bottom: 8px;
-                padding-bottom: 8px;
-                border-bottom: 1px dashed var(--line);
+            .role-label-col {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                font-size: 11px;
+                font-weight: 800;
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+                border-right: 1px solid var(--line);
+                min-height: 72px;
             }
 
-            .shift-block:last-child {
-                margin-bottom: 0;
-                padding-bottom: 0;
-                border-bottom: none;
+            .role-day-cell {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                min-height: 72px;
+            }
+
+            .role-barista,
+            .role-label-col.role-barista,
+            .role-day-cell.role-barista {
+                background: #fff8f1;
+            }
+
+            .role-cashier,
+            .role-label-col.role-cashier,
+            .role-day-cell.role-cashier {
+                background: #f4f8f4;
+            }
+
+            .role-waiter,
+            .role-label-col.role-waiter,
+            .role-day-cell.role-waiter {
+                background: #f7f5f1;
+            }
+
+            .shift-block {
+                margin: 0;
+                padding: 6px 7px;
+                border: 1px solid var(--line);
+                border-radius: 6px;
+                background: rgba(255, 255, 255, 0.72);
             }
 
             .shift-name {
                 font-weight: bold;
                 display: block;
                 margin-bottom: 2px;
-            }
-
-            .shift-time {
-                font-size: 11px;
-                color: var(--ink-soft);
-                display: block;
+                line-height: 1.25;
             }
 
             .shift-status {
                 font-size: 11px;
-                margin-top: 4px;
                 display: inline-block;
             }
 
@@ -98,69 +131,40 @@
                 color: var(--danger);
             }
 
-            .add-shift-btn {
-                color: var(--muted);
-                cursor: pointer;
-                text-align: center;
-                display: block;
-                margin-top: 8px;
-                font-weight: bold;
-            }
-
-            .add-shift-btn:hover {
-                color: var(--accent);
-            }
-
-            /* Sub-roles inside cells */
-            .role-group {
-                border-bottom: 1px dashed var(--line);
-                padding-bottom: 6px;
-                margin-bottom: 6px;
-            }
-
-            .role-group:last-child {
-                border-bottom: none;
-                margin-bottom: 0;
-                padding-bottom: 0;
-            }
-
-            .role-title {
-                font-size: 11px;
-                font-weight: 600;
-                color: var(--ink);
-                text-transform: uppercase;
-                margin-bottom: 4px;
-                opacity: 0.7;
-            }
-
             .role-warning {
                 color: var(--danger);
                 font-size: 11px;
-                margin-bottom: 4px;
+                line-height: 1.3;
             }
 
             .role-add-btn {
                 color: var(--muted);
                 cursor: pointer;
                 text-align: center;
-                font-size: 16px;
-                line-height: 16px;
+                font-size: 15px;
+                line-height: 1;
                 font-weight: bold;
                 border: 1px dashed var(--line);
                 border-radius: 4px;
-                margin-top: 4px;
-                padding: 2px 0;
+                margin-top: auto;
+                padding: 4px 0;
+                background: rgba(255, 255, 255, 0.45);
             }
 
             .role-add-btn:hover {
                 color: var(--accent);
                 border-color: var(--accent);
-                background: rgba(199, 137, 72, 0.05);
+                background: rgba(199, 137, 72, 0.08);
             }
 
-            .calendar-cell {
-                padding: 8px;
-                /* Slightly reduced padding to fit more content */
+            .shift-band-divider {
+                box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.06);
+            }
+
+            #message.notice.danger {
+                color: var(--danger);
+                border-color: rgba(180, 60, 60, 0.35);
+                background: rgba(180, 60, 60, 0.08);
             }
         </style>
     </head>
@@ -190,7 +194,7 @@
                             <button class="btn" type="button"
                                 onclick="document.getElementById('payroll-section').scrollIntoView({ behavior: 'smooth' })"
                                 style="background:var(--accent); color:white; border:none;"
-                                title="Trượt xuống Bảng chấm công" data-i18n="jumpToPayroll">
+                                data-i18n-title="jumpToPayrollTitle" title="Trượt xuống Bảng chấm công" data-i18n="jumpToPayroll">
                                 Bảng Chấm Công
                             </button>
                             <button class="btn" onclick="prevWeek()" data-i18n="prevWeek">&lt; Tuần trước</button>
@@ -321,21 +325,21 @@
             <section id="staff-management-section" class="card" style="margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2 style="margin: 0; font-size: 1.25rem;" data-i18n="staffManagementTitle">Quản lý danh sách nhân viên</h2>
-                    <button class="btn primary" type="button" onclick="openStaffModal()">+ Thêm nhân viên</button>
+                    <button class="btn primary" type="button" onclick="openStaffModal()" data-i18n="addStaff">+ Thêm nhân viên</button>
                 </div>
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; text-align: left;">
                         <thead>
                             <tr style="border-bottom: 1px solid var(--line); background-color: rgba(0,0,0,0.02);">
                                 <th style="padding: 12px; font-weight: bold;">ID</th>
-                                <th style="padding: 12px; font-weight: bold;">Tên nhân viên</th>
-                                <th style="padding: 12px; font-weight: bold;">Trạng thái</th>
-                                <th style="padding: 12px; font-weight: bold; text-align: right;">Thao tác</th>
+                                <th style="padding: 12px; font-weight: bold;" data-i18n="staffNameLabel">Tên nhân viên</th>
+                                <th style="padding: 12px; font-weight: bold;" data-i18n="statusLabel">Trạng thái</th>
+                                <th style="padding: 12px; font-weight: bold; text-align: right;" data-i18n="actions">Thao tác</th>
                             </tr>
                         </thead>
                         <tbody id="staff-list-tbody">
                             <tr>
-                                <td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">Đang tải dữ liệu...</td>
+                                <td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);" data-i18n="loadingData">Đang tải dữ liệu...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -359,23 +363,23 @@
                 <div class="modal-body">
                     <form id="staffForm" onsubmit="saveStaff(event)">
                         <div class="form-group" style="margin-bottom: 15px;">
-                            <label>ID Nhân viên (chỉ nhập số)</label>
+                            <label data-i18n="staffIdLabel">ID Nhân viên (chỉ nhập số)</label>
                             <input type="number" id="staffIdInput" class="input" required>
                         </div>
                         <div class="form-group" style="margin-bottom: 15px;">
-                            <label>Tên nhân viên</label>
+                            <label data-i18n="staffNameLabel">Tên nhân viên</label>
                             <input type="text" id="staffNameInput" class="input" required>
                         </div>
                         <div class="form-group" style="margin-bottom: 15px;">
-                            <label>Trạng thái</label>
+                            <label data-i18n="statusLabel">Trạng thái</label>
                             <select id="staffStatusInput" class="input" required>
-                                <option value="Active">Active (Đang làm)</option>
-                                <option value="Inactive">Inactive (Đã nghỉ)</option>
+                                <option value="Active" data-i18n="staffActive">Đang làm</option>
+                                <option value="Inactive" data-i18n="staffInactive">Đã nghỉ</option>
                             </select>
                         </div>
                         <div style="display: flex; gap: 10px; margin-top: 20px;">
-                            <button type="submit" class="btn primary" style="flex: 1;">LƯU NHÂN VIÊN</button>
-                            <button type="button" class="btn" onclick="closeStaffModal()">HỦY</button>
+                            <button type="submit" class="btn primary" style="flex: 1;" data-i18n="saveStaff">LƯU NHÂN VIÊN</button>
+                            <button type="button" class="btn" onclick="closeStaffModal()" data-i18n="cancel">HỦY</button>
                         </div>
                     </form>
                 </div>
@@ -403,7 +407,7 @@
                 }
             };
         </script>
-        <script src="assets/js/page-admin-staff.js?v=2"></script>
+        <script src="assets/js/page-admin-staff.js?v=4"></script>
     </body>
 
     </html>

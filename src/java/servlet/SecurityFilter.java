@@ -87,7 +87,8 @@ public class SecurityFilter implements Filter {
         String role = role(req);
         if (isAdmin(role)) return true;
         if ("barista".equals(role)) {
-            return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/cups/status");
+            return path.equals("/api/orders") || path.equals("/api/orders/status")
+                    || path.equals("/api/orders/item-prepare") || path.equals("/api/cups/status");
         }
         if ("cashier".equals(role)) {
             return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/split")
