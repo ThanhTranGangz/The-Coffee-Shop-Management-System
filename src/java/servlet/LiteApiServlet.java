@@ -153,11 +153,21 @@ public class LiteApiServlet extends HttpServlet {
                     resp.getWriter().write(JsonUtils.toJson(service.getSystemLogs(req.getParameter("actor"))));
                     break;
                 case "/staff":
+                    boolean isAdminStaffReq = "admin".equals(role(req));
                     java.util.List<java.util.Map<String, Object>> staffList = new dao.StaffDAO().getAll().stream().map(s -> {
                         java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
                         map.put("id", s.getId());
                         map.put("name", s.getName());
                         map.put("role", s.getRole());
+                        if (isAdminStaffReq) {
+                            map.put("shift", s.getShift());
+                            map.put("active", s.isActive());
+                            map.put("username", s.getUsername());
+                            map.put("password", s.getPassword());
+                            map.put("status", s.getStatus());
+                            map.put("overtime", s.isOvertime());
+                            map.put("pin", s.getPin());
+                        }
                         return map;
                     }).collect(java.util.stream.Collectors.toList());
                     resp.getWriter().write(JsonUtils.toJson(staffList));
@@ -346,12 +356,32 @@ public class LiteApiServlet extends HttpServlet {
                     dao.ShiftDAO shiftDAO = new dao.ShiftDAO();
                     String shiftId = str(body.get("id"));
                     if (shiftId.isEmpty()) { shiftId = "s" + System.currentTimeMillis(); }
+                    
+                    int staffIdForShift = readInt(body.get("staffId"), 0);
+                    String shiftDateForShift = str(body.get("date"));
+                    String shiftNameForShift = str(body.get("shiftName"));
+                    
+                    boolean overlap = false;
+                    for (model.Shift existingShift : shiftDAO.getAll()) {
+                        if (existingShift.getStaffId() == staffIdForShift && 
+                            existingShift.getShiftDate().equals(shiftDateForShift) && 
+                            existingShift.getShiftName().equals(shiftNameForShift) &&
+                            !existingShift.getId().equals(shiftId)) {
+                            overlap = true;
+                            break;
+                        }
+                    }
+                    if (overlap) {
+                        error(resp, HttpServletResponse.SC_BAD_REQUEST, "Nhân viên đã được phân công vào ca này.");
+                        return;
+                    }
+                    
                     model.Shift shift = new model.Shift(
                         shiftId,
-                        readInt(body.get("staffId"), 0),
+                        staffIdForShift,
                         str(body.get("staffName")),
-                        str(body.get("date")),
-                        str(body.get("shiftName")),
+                        shiftDateForShift,
+                        shiftNameForShift,
                         str(body.get("hours")),
                         str(body.get("status")),
                         str(body.get("notes")),
@@ -376,6 +406,34 @@ public class LiteApiServlet extends HttpServlet {
                         return;
                     }
                     new dao.ShiftDAO().delete(str(body.get("id")));
+                    resp.getWriter().write("{\"success\":true}");
+                    break;
+                case "/staff/save":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được lưu nhân viên.");
+                        return;
+                    }
+                    model.Staff staff = new model.Staff(
+                        readInt(body.get("id"), 0),
+                        str(body.get("name")),
+                        str(body.get("role")),
+                        str(body.get("pin")),
+                        str(body.get("shift")),
+                        body.get("active") != null ? (Boolean) body.get("active") : true,
+                        str(body.get("username")),
+                        str(body.get("password")),
+                        str(body.get("status")),
+                        body.get("overtime") != null ? (Boolean) body.get("overtime") : false
+                    );
+                    new dao.StaffDAO().save(staff);
+                    resp.getWriter().write(JsonUtils.toJson(staff));
+                    break;
+                case "/staff/delete":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được xóa nhân viên.");
+                        return;
+                    }
+                    new dao.StaffDAO().delete(readInt(body.get("id"), 0));
                     resp.getWriter().write("{\"success\":true}");
                     break;
                 case "/menu/delete":

@@ -1,4 +1,4 @@
-﻿USE CoffeeShopLite;
+USE CoffeeShopLite;
 GO
 
 -- 1. Add assignedRole if missing
@@ -27,19 +27,19 @@ GO
 
 -- 4. Insert dummy shifts for today and tomorrow
 -- We need Barista, Cashier, Waiter for Ca Sáng, Ca Chiều, Ca Tối
-INSERT INTO dbo.Shifts (id, staffId, staffName, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES
+INSERT INTO dbo.Shifts (id, staffId, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES
 -- 2026-07-17 Ca Sáng
-('s1_b', 1, N'Phạm Minh Tuấn', '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Barista'),
-('s1_c', 2, N'Lê Quốc Bảo', '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Cashier'),
-('s1_w1', 3, N'Nguyễn Thu Trà', '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Waiter'),
-('s1_w2', 4, N'Đặng Văn Phong', '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Waiter'),
+('s1_b', 1, '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Barista'),
+('s1_c', 2, '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Cashier'),
+('s1_w1', 3, '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Waiter'),
+('s1_w2', 4, '2026-07-17', N'Ca Sáng', '06:00 - 12:00', N'Đã phân công', '', 'Waiter'),
 
 -- 2026-07-17 Ca Chiều
-('s2_b', 5, N'Trần Tuấn Dũng', '2026-07-17', N'Ca Chiều', '12:00 - 18:00', N'Đã phân công', '', 'Barista'),
-('s2_c', 6, N'Lý Thùy Linh', '2026-07-17', N'Ca Chiều', '12:00 - 18:00', N'Đã phân công', '', 'Cashier'),
-('s2_w', 7, N'Bùi Quang Huy', '2026-07-17', N'Ca Chiều', '12:00 - 18:00', N'Đã phân công', '', 'Waiter'),
+('s2_b', 5, '2026-07-17', N'Ca Chiều', '12:00 - 18:00', N'Đã phân công', '', 'Barista'),
+('s2_c', 6, '2026-07-17', N'Ca Chiều', '12:00 - 18:00', N'Đã phân công', '', 'Cashier'),
+('s2_w', 7, '2026-07-17', N'Ca Chiều', '12:00 - 18:00', N'Đã phân công', '', 'Waiter'),
 
 -- 2026-07-18 Ca Tối (missing Waiter intentionally for UI testing)
-('s3_b', 8, N'Võ Tấn Phát', '2026-07-18', N'Ca Tối', '18:00 - 23:00', N'Đã phân công', '', 'Barista'),
-('s3_c', 9, N'Hồ Ngọc Mai', '2026-07-18', N'Ca Tối', '18:00 - 23:00', N'Đã phân công', '', 'Cashier');
+('s3_b', 8, '2026-07-18', N'Ca Tối', '18:00 - 23:00', N'Đã phân công', '', 'Barista'),
+('s3_c', 9, '2026-07-18', N'Ca Tối', '18:00 - 23:00', N'Đã phân công', '', 'Cashier');
 GO

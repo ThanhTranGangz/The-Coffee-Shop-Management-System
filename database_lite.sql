@@ -131,7 +131,6 @@ IF OBJECT_ID('dbo.Shifts','U') IS NULL
 CREATE TABLE dbo.Shifts (
     id VARCHAR(50) PRIMARY KEY,
     staffId INT NOT NULL,
-    staffName NVARCHAR(120) NOT NULL,
     shiftDate VARCHAR(20) NOT NULL,
     shiftName NVARCHAR(50) NOT NULL,
     hours VARCHAR(50) NOT NULL,

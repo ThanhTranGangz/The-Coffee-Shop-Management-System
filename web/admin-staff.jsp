@@ -7,7 +7,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <title>Quản lý nhân viên - Admin</title>
         <link rel="stylesheet" href="assets/css/app.css?v=admin-staff-1">
-        <script defer src="assets/js/i18n.js?v=admin-staff-1"></script>
+        <script defer src="assets/js/i18n.js?v=2"></script>
         <style>
             /* Custom styles for the staff calendar prototype */
             .staff-calendar {
@@ -317,12 +317,80 @@
                 </div>
             </section>
 
+            <!-- Staff Management Section -->
+            <section id="staff-management-section" class="card" style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h2 style="margin: 0; font-size: 1.25rem;" data-i18n="staffManagementTitle">Quản lý danh sách nhân viên</h2>
+                    <button class="btn primary" type="button" onclick="openStaffModal()">+ Thêm nhân viên</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--line); background-color: rgba(0,0,0,0.02);">
+                                <th style="padding: 12px; font-weight: bold;">ID</th>
+                                <th style="padding: 12px; font-weight: bold;">Tên nhân viên</th>
+                                <th style="padding: 12px; font-weight: bold;">Trạng thái</th>
+                                <th style="padding: 12px; font-weight: bold; text-align: right;">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-list-tbody">
+                            <tr>
+                                <td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">Đang tải dữ liệu...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
             <!-- Scroll to Top Button -->
             <button id="scrollTopBtn" onclick="window.scrollTo({top: 0, behavior: 'smooth'})"
                 style="display: none; position: fixed; bottom: 20px; right: 20px; z-index: 1000; background-color: var(--primary); color: white; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 20px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); align-items: center; justify-content: center;">
                 ↑
             </button>
         </main>
+
+        <!-- Staff Modal -->
+        <div id="staffModal" class="modal hidden">
+            <div class="modal-content" style="max-width: 500px;">
+                <div class="modal-header">
+                    <h2 id="staffModalTitle">Thêm nhân viên</h2>
+                    <button class="btn-close" onclick="closeStaffModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <form id="staffForm" onsubmit="saveStaff(event)">
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label>ID Nhân viên (chỉ nhập số)</label>
+                            <input type="number" id="staffIdInput" class="input" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label>Tên nhân viên</label>
+                            <input type="text" id="staffNameInput" class="input" required>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label>Trạng thái</label>
+                            <select id="staffStatusInput" class="input" required>
+                                <option value="Active">Active (Đang làm)</option>
+                                <option value="Inactive">Inactive (Đã nghỉ)</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 20px;">
+                            <button type="submit" class="btn primary" style="flex: 1;">LƯU NHÂN VIÊN</button>
+                            <button type="button" class="btn" onclick="closeStaffModal()">HỦY</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <style>
+            .modal { display: flex; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+            .modal.hidden { display: none; }
+            .modal-content { background-color: var(--surface); padding: 20px; border-radius: var(--radius); width: 90%; max-width: 600px; box-shadow: var(--shadow-strong); }
+            .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+            .modal-header h2 { margin: 0; font-size: 1.2rem; }
+            .btn-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--muted); }
+            .btn-close:hover { color: var(--danger); }
+            .input { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); box-sizing: border-box; }
+        </style>
 
         <script>
             // Show/hide scroll to top button based on scroll position
@@ -335,7 +403,7 @@
                 }
             };
         </script>
-        <script src="assets/js/page-admin-staff.js?v=admin-staff-1"></script>
+        <script src="assets/js/page-admin-staff.js?v=2"></script>
     </body>
 
     </html>

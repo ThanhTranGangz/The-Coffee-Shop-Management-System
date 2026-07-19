@@ -25,7 +25,9 @@ public class ShiftDAO {
      */
     public List<Shift> getAll() {
         List<Shift> shifts = new ArrayList<>();
-        String sql = "SELECT id, staffId, staffName, shiftDate, shiftName, hours, status, notes, assignedRole FROM dbo.Shifts ORDER BY shiftDate DESC, shiftName";
+        String sql = "SELECT s.id, s.staffId, st.name as staffName, s.shiftDate, s.shiftName, s.hours, s.status, s.notes, s.assignedRole " +
+                     "FROM dbo.Shifts s JOIN dbo.Staff st ON s.staffId = st.id " +
+                     "ORDER BY s.shiftDate DESC, s.shiftName";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql);
@@ -58,22 +60,21 @@ public class ShiftDAO {
      */
     public void save(Shift shift) {
         String sql = "MERGE dbo.Shifts AS target " +
-                     "USING (SELECT ? AS id, ? AS staffId, ? AS staffName, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes, ? AS assignedRole) AS source " +
+                     "USING (SELECT ? AS id, ? AS staffId, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes, ? AS assignedRole) AS source " +
                      "ON target.id = source.id " +
-                     "WHEN MATCHED THEN UPDATE SET staffId = source.staffId, staffName = source.staffName, shiftDate = source.shiftDate, shiftName = source.shiftName, hours = source.hours, status = source.status, notes = source.notes, assignedRole = source.assignedRole " +
-                     "WHEN NOT MATCHED THEN INSERT (id, staffId, staffName, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES (source.id, source.staffId, source.staffName, source.shiftDate, source.shiftName, source.hours, source.status, source.notes, source.assignedRole);";
+                     "WHEN MATCHED THEN UPDATE SET staffId = source.staffId, shiftDate = source.shiftDate, shiftName = source.shiftName, hours = source.hours, status = source.status, notes = source.notes, assignedRole = source.assignedRole " +
+                     "WHEN NOT MATCHED THEN INSERT (id, staffId, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES (source.id, source.staffId, source.shiftDate, source.shiftName, source.hours, source.status, source.notes, source.assignedRole);";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
             st.setString(1, shift.getId());
             st.setInt(2, shift.getStaffId());
-            st.setString(3, shift.getStaffName());
-            st.setString(4, shift.getShiftDate());
-            st.setString(5, shift.getShiftName());
-            st.setString(6, shift.getHours());
-            st.setString(7, shift.getStatus());
-            st.setString(8, shift.getNotes());
-            st.setString(9, shift.getAssignedRole());
+            st.setString(3, shift.getShiftDate());
+            st.setString(4, shift.getShiftName());
+            st.setString(5, shift.getHours());
+            st.setString(6, shift.getStatus());
+            st.setString(7, shift.getNotes());
+            st.setString(8, shift.getAssignedRole());
             st.executeUpdate();
         } catch (Exception e) {
             System.err.println("Database save failed in ShiftDAO.save(), updating fallback: " + e.getMessage());
@@ -120,13 +121,13 @@ public class ShiftDAO {
      */
     public List<Map<String, Object>> getPayrollByMonth(String yyyyMM) {
         List<Map<String, Object>> payroll = new ArrayList<>();
-        String sql = "SELECT staffId, staffName, assignedRole, " +
+        String sql = "SELECT s.staffId, st.name as staffName, s.assignedRole, " +
                      "COUNT(*) as totalShifts, " +
-                     "SUM(CASE WHEN shiftName = N'Ca Tối' THEN 5 ELSE 6 END) as totalHours " +
-                     "FROM dbo.Shifts " +
-                     "WHERE shiftDate LIKE ? AND (status = N'Đã làm' OR status = N'Hoàn thành') " +
-                     "GROUP BY staffId, staffName, assignedRole " +
-                     "ORDER BY staffName ASC";
+                     "SUM(CASE WHEN s.shiftName = N'Ca Tối' THEN 5 ELSE 6 END) as totalHours " +
+                     "FROM dbo.Shifts s JOIN dbo.Staff st ON s.staffId = st.id " +
+                     "WHERE s.shiftDate LIKE ? AND (s.status = N'Đã làm' OR s.status = N'Hoàn thành') " +
+                     "GROUP BY s.staffId, st.name, s.assignedRole " +
+                     "ORDER BY st.name ASC";
                      
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();

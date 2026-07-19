@@ -174,7 +174,7 @@ public class StaffDAO {
      * @param id the unique identifier of the staff member to delete
      */
     public void delete(int id) {
-        String sql = "DELETE FROM dbo.Staff WHERE id=?";
+        String sql = "UPDATE dbo.Staff SET active = 0, status = 'Inactive' WHERE id=?";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
@@ -183,7 +183,14 @@ public class StaffDAO {
         } catch (Exception e) {
             System.err.println("Database delete failed in StaffDAO.delete()");
         }
-        getFallbackStaff().removeIf(s -> s.getId() == id);
+        // Instead of removing from fallback, update it
+        for (Staff s : getFallbackStaff()) {
+            if (s.getId() == id) {
+                s.setActive(false);
+                s.setStatus("Inactive");
+                break;
+            }
+        }
     }
 
     /**

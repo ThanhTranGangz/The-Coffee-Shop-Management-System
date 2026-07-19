@@ -44,6 +44,7 @@ async function fetchStaffAndShifts() {
         }
         populateStaffDropdown();
         renderCalendar();
+        renderStaffList();
     } catch (e) {
         console.error("Error fetching data", e);
     }
@@ -55,7 +56,7 @@ function populateStaffDropdown() {
     staffList.forEach(staff => {
         const option = document.createElement('option');
         option.value = staff.id;
-        option.textContent = `${staff.name} (${staff.role})`;
+        option.textContent = `${staff.name}`;
         select.appendChild(option);
     });
 }
@@ -401,4 +402,130 @@ function renderPayroll(data) {
         `;
         tbody.appendChild(tr);
     });
+}
+
+// Staff Management Functions
+
+function renderStaffList() {
+    const tbody = document.getElementById('staff-list-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    if (!staffList || staffList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">Chưa có nhân viên nào.</td></tr>';
+        return;
+    }
+    
+    staffList.forEach(staff => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--line)';
+        let statusColor = 'var(--good)';
+        if (staff.status === 'Temp_Inactive') statusColor = 'var(--warn)';
+        if (staff.status === 'Inactive' || staff.status === 'Perm_Inactive') statusColor = 'var(--danger)';
+        
+        tr.innerHTML = `
+            <td style="padding: 12px;">${staff.id}</td>
+            <td style="padding: 12px; font-weight: bold;">${staff.name}</td>
+            <td style="padding: 12px; color: ${statusColor}; font-weight: bold;">${staff.status}</td>
+            <td style="padding: 12px; text-align: right;">
+                <button class="btn" style="padding: 4px 8px; font-size: 12px; margin-right: 5px;" onclick="editStaff(${staff.id})">Sửa</button>
+                <button class="btn" style="padding: 4px 8px; font-size: 12px; color: var(--danger); border-color: var(--danger);" onclick="deleteStaff(${staff.id})">Xóa</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function openStaffModal() {
+    document.getElementById('staffForm').reset();
+    document.getElementById('staffIdInput').readOnly = false;
+    document.getElementById('staffModalTitle').textContent = 'Thêm nhân viên';
+    document.getElementById('staffModal').classList.remove('hidden');
+}
+
+function closeStaffModal() {
+    document.getElementById('staffModal').classList.add('hidden');
+}
+
+function editStaff(id) {
+    const staff = staffList.find(s => s.id === id);
+    if (!staff) return;
+    
+    document.getElementById('staffIdInput').value = staff.id;
+    document.getElementById('staffIdInput').readOnly = true;
+    document.getElementById('staffNameInput').value = staff.name;
+    document.getElementById('staffStatusInput').value = staff.status || 'Active';
+    
+    document.getElementById('staffModalTitle').textContent = 'Sửa nhân viên';
+    document.getElementById('staffModal').classList.remove('hidden');
+}
+
+async function saveStaff(e) {
+    e.preventDefault();
+    const staff = {
+        id: parseInt(document.getElementById('staffIdInput').value),
+        name: document.getElementById('staffNameInput').value,
+        role: "staff",
+        status: document.getElementById('staffStatusInput').value,
+        active: document.getElementById('staffStatusInput').value === 'Active',
+        username: "",
+        password: "",
+        pin: "",
+        overtime: false,
+        shift: ''
+    };
+    
+    try {
+        const query = window.location.search;
+        const resp = await fetch('api/staff/save' + query, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(staff)
+        });
+        
+        if (resp.ok) {
+            const saved = await resp.json();
+            const idx = staffList.findIndex(s => s.id === saved.id);
+            if (idx >= 0) staffList[idx] = saved;
+            else staffList.push(saved);
+            
+            renderStaffList();
+            populateStaffDropdown(); // Also update dropdown in shift form
+            closeStaffModal();
+            alert('Đã lưu nhân viên thành công!');
+        } else {
+            alert('Lỗi lưu nhân viên: ' + await resp.text());
+        }
+    } catch (err) {
+        alert('Lỗi mạng: ' + err.message);
+    }
+}
+
+async function deleteStaff(id) {
+    if (!confirm('Bạn có chắc muốn xóa nhân viên này? Lịch sử ca làm sẽ được giữ lại nhưng nhân viên sẽ chuyển trạng thái Đã nghỉ.')) return;
+    
+    try {
+        const query = window.location.search;
+        const resp = await fetch('api/staff/delete' + query, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+        
+        if (resp.ok) {
+            // Update local state without re-fetching
+            const staff = staffList.find(s => s.id === id);
+            if (staff) {
+                staff.active = false;
+                staff.status = 'Inactive';
+            }
+            renderStaffList();
+            populateStaffDropdown();
+            alert('Đã xóa nhân viên thành công!');
+        } else {
+            alert('Lỗi xóa nhân viên: ' + await resp.text());
+        }
+    } catch (err) {
+        alert('Lỗi mạng: ' + err.message);
+    }
 }
