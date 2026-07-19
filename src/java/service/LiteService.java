@@ -37,6 +37,7 @@ public class LiteService {
             st.execute("IF OBJECT_ID('dbo.MenuItemSizes','U') IS NULL CREATE TABLE dbo.MenuItemSizes (id INT IDENTITY PRIMARY KEY, menuItemId INT NOT NULL, sizeName NVARCHAR(20) NOT NULL, extraPrice INT NOT NULL DEFAULT 0, sortOrder INT NOT NULL DEFAULT 0, FOREIGN KEY(menuItemId) REFERENCES dbo.MenuItems(id))");
             st.execute("IF OBJECT_ID('dbo.Orders','U') IS NULL CREATE TABLE dbo.Orders (id INT IDENTITY PRIMARY KEY, orderNumber INT NULL UNIQUE, tableName NVARCHAR(60) NOT NULL, customerPhone VARCHAR(20) NULL, status VARCHAR(30) NOT NULL DEFAULT 'Pending', total INT NOT NULL DEFAULT 0, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
             st.execute("IF COL_LENGTH('dbo.Orders','splitLocked') IS NULL ALTER TABLE dbo.Orders ADD splitLocked BIT NOT NULL DEFAULT 0");
+            st.execute("IF COL_LENGTH('dbo.Orders','invoicePrinted') IS NULL ALTER TABLE dbo.Orders ADD invoicePrinted BIT NOT NULL DEFAULT 0");
             st.execute("IF OBJECT_ID('dbo.OrderItems','U') IS NULL CREATE TABLE dbo.OrderItems (id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, menuItemId INT NOT NULL, itemName NVARCHAR(120) NOT NULL, itemSize VARCHAR(20) NULL, quantity INT NOT NULL, price INT NOT NULL, FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
             st.execute("IF COL_LENGTH('dbo.OrderItems','itemSize') IS NULL ALTER TABLE dbo.OrderItems ADD itemSize VARCHAR(20) NULL");
             st.execute("ALTER TABLE dbo.OrderItems ALTER COLUMN itemSize VARCHAR(20) NULL");
@@ -458,15 +459,12 @@ public class LiteService {
     private Set<Integer> getBestSellerMenuIdsByCategory(Connection con, List<Map<String, Object>> menu) throws Exception {
         Set<Integer> ids = new LinkedHashSet<>();
         Set<Integer> menuIds = new HashSet<>();
-        Map<String, List<Integer>> itemsByCategory = new LinkedHashMap<>();
         for (Map<String, Object> item : menu) {
             int itemId = readInt(item.get("id"), 0);
-            String category = readString(item.get("category"), "");
-            if (itemId <= 0 || category.isEmpty()) continue;
-            menuIds.add(itemId);
-            itemsByCategory.computeIfAbsent(category, key -> new ArrayList<>()).add(itemId);
+            if (itemId > 0) menuIds.add(itemId);
         }
-        Map<String, Integer> topByCategory = new LinkedHashMap<>();
+        if (menuIds.isEmpty()) return ids;
+        Set<String> claimedCategories = new HashSet<>();
         String sql = "SELECT m.category, oi.menuItemId, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue "
                 + "FROM dbo.OrderItems oi "
                 + "JOIN dbo.Orders o ON o.id = oi.orderId "
@@ -478,16 +476,9 @@ public class LiteService {
             while (rs.next()) {
                 String category = readString(rs.getString("category"), "");
                 int menuItemId = rs.getInt("menuItemId");
-                if (category.isEmpty() || menuItemId <= 0 || !menuIds.contains(menuItemId) || topByCategory.containsKey(category)) continue;
-                topByCategory.put(category, menuItemId);
+                if (category.isEmpty() || menuItemId <= 0 || !menuIds.contains(menuItemId) || !claimedCategories.add(category)) continue;
                 ids.add(menuItemId);
             }
-        }
-        for (Map.Entry<String, List<Integer>> entry : itemsByCategory.entrySet()) {
-            if (topByCategory.containsKey(entry.getKey()) || entry.getValue().isEmpty()) continue;
-            int fallbackId = entry.getValue().get(0);
-            topByCategory.put(entry.getKey(), fallbackId);
-            ids.add(fallbackId);
         }
         return ids;
     }
@@ -777,7 +768,7 @@ public class LiteService {
             resolvedTable = readString(table.get("name"), "");
         }
         if (resolvedTable.isEmpty()) throw new IllegalArgumentException("Không tìm thấy bàn.");
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt FROM dbo.Orders "
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders "
                 + "WHERE tableName=? AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, resolvedTable);
@@ -794,7 +785,7 @@ public class LiteService {
     public List<Map<String, Object>> getOpenOrdersByIds(List<Integer> orderIds) throws Exception {
         List<Integer> ids = cleanIds(orderIds);
         if (ids.isEmpty()) return new ArrayList<>();
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt FROM dbo.Orders "
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders "
                 + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             bindIds(ps, ids);
@@ -1083,74 +1074,87 @@ public class LiteService {
 
         try (Connection con = db.getConnection()) {
             con.setAutoCommit(false);
-            int orderId;
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total,createdAt) VALUES (?,?,?,0,?)", Statement.RETURN_GENERATED_KEYS)) {
-                ps.setString(1, tableName);
-                ps.setString(2, phone.isEmpty() ? null : phone);
-                ps.setString(3, note);
-                ps.setString(4, nowSqlTimestamp());
-                ps.executeUpdate();
-                try (ResultSet keys = ps.getGeneratedKeys()) {
-                    keys.next();
-                    orderId = keys.getInt(1);
+            try {
+                int orderId;
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total,createdAt) VALUES (?,?,?,0,?)", Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setString(1, tableName);
+                    ps.setString(2, phone.isEmpty() ? null : phone);
+                    ps.setString(3, note);
+                    ps.setString(4, nowSqlTimestamp());
+                    ps.executeUpdate();
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        keys.next();
+                        orderId = keys.getInt(1);
+                    }
                 }
-            }
 
-            int total = 0;
-            int totalQuantity = 0;
-            Map<String, Integer> variantQuantities = new LinkedHashMap<>();
-            for (Object raw : items) {
-                if (!(raw instanceof Map<?, ?>)) continue;
-                Map<?, ?> item = (Map<?, ?>) raw;
-                int menuId = readInt(item.get("menuItemId"), 0);
-                int requestedQuantity = readInt(item.get("quantity"), 1);
-                if (requestedQuantity < 1) {
-                    throw new IllegalArgumentException("Số lượng món phải lớn hơn 0.");
+                int total = 0;
+                int totalQuantity = 0;
+                Map<String, Integer> variantQuantities = new LinkedHashMap<>();
+                for (Object raw : items) {
+                    if (!(raw instanceof Map<?, ?>)) continue;
+                    Map<?, ?> item = (Map<?, ?>) raw;
+                    int menuId = readInt(item.get("menuItemId"), 0);
+                    int requestedQuantity = readInt(item.get("quantity"), 1);
+                    if (requestedQuantity < 1) {
+                        throw new IllegalArgumentException("Số lượng món phải lớn hơn 0.");
+                    }
+                    if (requestedQuantity > MAX_ITEM_QUANTITY) {
+                        throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
+                    }
+                    int quantity = requestedQuantity;
+                    Map<String, Object> menu = getMenuItem(menuId);
+                    if (menu == null) {
+                        throw new IllegalArgumentException("Món không tồn tại hoặc đã bị xoá.");
+                    }
+                    if (!readBoolean(menu.get("active"), false)) {
+                        String itemName = readString(menu.get("nameVi"), "");
+                        throw new IllegalArgumentException(itemName.isEmpty()
+                                ? "Món hiện không còn phục vụ."
+                                : ("Món \"" + itemName + "\" hiện không còn phục vụ."));
+                    }
+                    String size = normalizeSize(menu, readString(item.get("size"), ""));
+                    String variantKey = menuId + "|" + size;
+                    int variantTotal = variantQuantities.getOrDefault(variantKey, 0) + quantity;
+                    if (variantTotal > MAX_ITEM_QUANTITY) {
+                        throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
+                    }
+                    variantQuantities.put(variantKey, variantTotal);
+                    int price = priceForSize(menu, size);
+                    total += price * quantity;
+                    totalQuantity += quantity;
+                    try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.OrderItems (orderId,menuItemId,itemName,itemSize,quantity,price) VALUES (?,?,?,?,?,?)")) {
+                        ps.setInt(1, orderId);
+                        ps.setInt(2, menuId);
+                        ps.setString(3, readString(menu.get("nameVi"), ""));
+                        ps.setString(4, size.isEmpty() ? null : size);
+                        ps.setInt(5, quantity);
+                        ps.setInt(6, price);
+                        ps.executeUpdate();
+                    }
                 }
-                if (requestedQuantity > MAX_ITEM_QUANTITY) {
-                    throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
-                }
-                int quantity = requestedQuantity;
-                Map<String, Object> menu = getMenuItem(menuId);
-                if (menu == null) continue;
-                String size = normalizeSize(menu, readString(item.get("size"), ""));
-                String variantKey = menuId + "|" + size;
-                int variantTotal = variantQuantities.getOrDefault(variantKey, 0) + quantity;
-                if (variantTotal > MAX_ITEM_QUANTITY) {
-                    throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
-                }
-                variantQuantities.put(variantKey, variantTotal);
-                int price = priceForSize(menu, size);
-                total += price * quantity;
-                totalQuantity += quantity;
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.OrderItems (orderId,menuItemId,itemName,itemSize,quantity,price) VALUES (?,?,?,?,?,?)")) {
-                    ps.setInt(1, orderId);
-                    ps.setInt(2, menuId);
-                    ps.setString(3, readString(menu.get("nameVi"), ""));
-                    ps.setString(4, size.isEmpty() ? null : size);
-                    ps.setInt(5, quantity);
-                    ps.setInt(6, price);
+                if (totalQuantity == 0) throw new IllegalArgumentException("Đơn hàng chưa có món hợp lệ.");
+                int orderNumber = 1000 + orderId;
+                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET orderNumber=?, total=? WHERE id=?")) {
+                    ps.setInt(1, orderNumber);
+                    ps.setInt(2, total);
+                    ps.setInt(3, orderId);
                     ps.executeUpdate();
                 }
+                String actor = normalizeActor(actorRole);
+                if (actor.isEmpty() || "system".equals(actor)) actor = "guest";
+                String actorDisplay = readString(actorName, "");
+                if (actorDisplay.isEmpty()) actorDisplay = "guest".equals(actor) ? (phone.isEmpty() ? "Khách" : phone) : roleNameVi(actor);
+                insertSystemLog(con, actor, actorDisplay, "ORDER_CREATE",
+                        orderCreateLogVi(actor, tableName, orderNumber, totalQuantity),
+                        orderCreateLogEn(actor, tableName, orderNumber, totalQuantity),
+                        orderId);
+                con.commit();
+                return getOrderById(orderId);
+            } catch (Exception e) {
+                con.rollback();
+                throw e;
             }
-            if (totalQuantity == 0) throw new IllegalArgumentException("Đơn hàng chưa có món hợp lệ.");
-            int orderNumber = 1000 + orderId;
-            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET orderNumber=?, total=? WHERE id=?")) {
-                ps.setInt(1, orderNumber);
-                ps.setInt(2, total);
-                ps.setInt(3, orderId);
-                ps.executeUpdate();
-            }
-            String actor = normalizeActor(actorRole);
-            if (actor.isEmpty() || "system".equals(actor)) actor = "guest";
-            String actorDisplay = readString(actorName, "");
-            if (actorDisplay.isEmpty()) actorDisplay = "guest".equals(actor) ? (phone.isEmpty() ? "Khách" : phone) : roleNameVi(actor);
-            insertSystemLog(con, actor, actorDisplay, "ORDER_CREATE",
-                    orderCreateLogVi(actor, tableName, orderNumber, totalQuantity),
-                    orderCreateLogEn(actor, tableName, orderNumber, totalQuantity),
-                    orderId);
-            con.commit();
-            return getOrderById(orderId);
         }
     }
 
@@ -1163,7 +1167,7 @@ public class LiteService {
     }
 
     public List<Map<String, Object>> getOrders(String role, List<Integer> cashierSessionPaidIds) throws Exception {
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt FROM dbo.Orders ";
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders ";
         if ("barista".equals(role)) {
             sql += "WHERE status IN ('Pending','Preparing','Ready') ";
         } else if ("cashier".equals(role)) {
@@ -1863,7 +1867,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getOrderById(int id) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt FROM dbo.Orders WHERE id=?")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders WHERE id=?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
@@ -1879,6 +1883,20 @@ public class LiteService {
         if (order == null) return null;
         order.remove("customerPhone");
         return order;
+    }
+
+    public Map<String, Object> markInvoicePrinted(int id) throws Exception {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Orders SET invoicePrinted=1 WHERE id=? AND status IN ('Ready','Served')")) {
+            ps.setInt(1, id);
+            int updated = ps.executeUpdate();
+            if (updated == 0) {
+                Map<String, Object> order = getOrderById(id);
+                if (order == null) throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
+                throw new IllegalArgumentException("Chỉ đánh dấu đã in cho đơn Ready hoặc Served.");
+            }
+        }
+        return getOrderInvoice(id);
     }
 
     private List<Map<String, Object>> getOrderItems(int orderId) throws Exception {
@@ -2294,7 +2312,11 @@ public class LiteService {
 
     private boolean readBoolean(Object value, boolean fallback) {
         if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
         if (value == null) return fallback;
-        return Boolean.parseBoolean(String.valueOf(value));
+        String text = String.valueOf(value).trim();
+        if ("1".equals(text) || "true".equalsIgnoreCase(text)) return true;
+        if ("0".equals(text) || "false".equalsIgnoreCase(text)) return false;
+        return Boolean.parseBoolean(text);
     }
 }

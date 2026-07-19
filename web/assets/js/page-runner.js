@@ -29,6 +29,7 @@
             const [orderRes, tableRes] = await Promise.all([api('/orders?view=runner'), api('/tables/map')]);
             runnerOrders = orderRes.ok ? await orderRes.json() : [];
             runnerTables = tableRes.ok ? await tableRes.json() : [];
+            syncPrintedInvoiceIdsFromOrders(runnerOrders);
             const servingOrders = currentServingOrders();
             const cleaningTables = currentCleaningTables();
             maybeNotify(servingOrders, cleaningTables, options.silent === true);
@@ -228,16 +229,56 @@
             }
         }
 
-        function isInvoicePrinted(orderId) {
-            return readPrintedInvoiceIds().includes(Number(orderId));
+        function orderInvoicePrinted(order) {
+            if (!order) return false;
+            return order.invoicePrinted === true || order.invoicePrinted === 1 || order.invoicePrinted === '1';
         }
 
-        function markInvoicePrinted(orderId) {
+        function syncPrintedInvoiceIdsFromOrders(orders) {
+            const ids = new Set(readPrintedInvoiceIds());
+            (orders || []).forEach(order => {
+                if (orderInvoicePrinted(order) && Number(order.id) > 0) ids.add(Number(order.id));
+            });
+            sessionStorage.setItem(PRINTED_INVOICE_KEY, JSON.stringify([...ids]));
+        }
+
+        function isInvoicePrinted(orderId) {
+            const id = Number(orderId);
+            if (!id) return false;
+            const order = runnerOrders.find(item => Number(item.id) === id);
+            if (orderInvoicePrinted(order)) return true;
+            return readPrintedInvoiceIds().includes(id);
+        }
+
+        function rememberInvoicePrintedLocally(orderId) {
             const id = Number(orderId);
             if (!id) return;
             const ids = new Set(readPrintedInvoiceIds());
             ids.add(id);
             sessionStorage.setItem(PRINTED_INVOICE_KEY, JSON.stringify([...ids]));
+            const order = runnerOrders.find(item => Number(item.id) === id);
+            if (order) order.invoicePrinted = true;
+        }
+
+        async function markInvoicePrinted(orderId) {
+            const id = Number(orderId);
+            if (!id) return;
+            rememberInvoicePrintedLocally(id);
+            try {
+                const res = await api('/orders/invoice/printed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                if (res.ok) {
+                    const updated = await res.json().catch(() => null);
+                    if (updated && orderInvoicePrinted(updated)) {
+                        rememberInvoicePrintedLocally(id);
+                    }
+                }
+            } catch (err) {
+                // Keep local mark so serve warning still works on this device.
+            }
         }
 
         function confirmServeWithoutInvoice() {
@@ -487,7 +528,16 @@
         }
 
         function printInvoiceSheet() {
-            if (currentInvoiceOrderId) markInvoicePrinted(currentInvoiceOrderId);
+            const orderId = currentInvoiceOrderId;
+            if (!orderId) {
+                window.print();
+                return;
+            }
+            const onAfterPrint = () => {
+                window.removeEventListener('afterprint', onAfterPrint);
+                markInvoicePrinted(orderId);
+            };
+            window.addEventListener('afterprint', onAfterPrint);
             window.print();
         }
 

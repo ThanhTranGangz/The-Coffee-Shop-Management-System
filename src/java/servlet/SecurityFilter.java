@@ -96,6 +96,7 @@ public class SecurityFilter implements Filter {
         }
         if ("runner".equals(role)) {
             return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/invoice")
+                    || path.equals("/api/orders/invoice/printed")
                     || path.equals("/api/tables/map") || path.equals("/api/tables/clear") || path.equals("/api/tables/transfer");
         }
         return false;

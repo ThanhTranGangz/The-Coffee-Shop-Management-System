@@ -310,6 +310,28 @@ public class LiteApiServlet extends HttpServlet {
                     Map<String, Object> splitResult = service.splitOrder(readInt(body.get("id"), 0), splitSelections(body.get("items")), splitRole, user(req));
                     resp.getWriter().write(JsonUtils.toJson(splitResult));
                     break;
+                case "/orders/invoice/printed": {
+                    String printRole = role(req);
+                    if (!"runner".equals(printRole) && !"admin".equals(printRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ bồi bàn được ghi nhận in hóa đơn.");
+                        break;
+                    }
+                    int printedOrderId = readInt(body.get("id"), 0);
+                    Map<String, Object> existingInvoice = service.getOrderById(printedOrderId);
+                    if (existingInvoice == null) {
+                        error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy đơn hàng.");
+                        break;
+                    }
+                    if ("runner".equals(printRole)) {
+                        String status = str(existingInvoice.get("status"));
+                        if (!"Ready".equals(status) && !"Served".equals(status)) {
+                            error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ in được hóa đơn đơn đang phục vụ.");
+                            break;
+                        }
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(service.markInvoicePrinted(printedOrderId)));
+                    break;
+                }
                 case "/menu":
                     Map<String, Object> savedMenu = service.saveMenuItem(body);
                     service.addSystemLog(role(req), user(req), "MENU_SAVE",
@@ -530,6 +552,16 @@ public class LiteApiServlet extends HttpServlet {
                 resetGuestProgress(req);
             }
             ensureGuestTableMatches(req, requested, true);
+            List<Map<String, Object>> orders = service.getOpenOrdersByTable(str(requested.get("code")), str(requested.get("name")));
+            rememberGuestTableFromOrders(req, orders);
+            return orders;
+        }
+
+        Map<String, Object> locked = lockedGuestTable(req);
+        if (requested != null && locked != null && sameTable(locked, requested) && hasVerifiedGuestTable(req)) {
+            List<Map<String, Object>> orders = service.getOpenOrdersByTable(str(locked.get("code")), str(locked.get("name")));
+            rememberGuestTableFromOrders(req, orders);
+            return orders;
         }
 
         List<Integer> orderIds = guestOrderIds(req, false);
