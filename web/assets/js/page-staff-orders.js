@@ -188,9 +188,18 @@
         function itemGroupHtml(item) {
             const next = nextStatus(activeStatus);
             const notesHtml = item.notes.map(n => `<span>#${n.orderNumber}: ${escapeHtml(n.note)}</span>`).join('; ');
+            const orderIdsArr = `[${item.orders.map(o => o.id).join(',')}]`;
             
             return `
-                <article class="card order-card ${next ? '' : 'not-ready'}" data-next="${next || ''}">
+                <article class="card order-card hold-card ${next ? '' : 'not-ready'}" data-next="${next || ''}"
+                    onpointerdown="startHoldGroup(event, ${orderIdsArr}, '${next || ''}')"
+                    onpointerup="cancelHold()"
+                    onpointercancel="cancelHold()"
+                    ontouchstart="startHoldGroup(event, ${orderIdsArr}, '${next || ''}')"
+                    ontouchend="cancelHold()"
+                    onmousedown="startHoldGroup(event, ${orderIdsArr}, '${next || ''}')"
+                    onmouseup="cancelHold()"
+                    oncontextmenu="return false">
                     <div class="toolbar order-card-head">
                         <div>
                             <p class="eyebrow">${item.itemSize ? t('size') + ' ' + escapeHtml(item.itemSize) : ''}</p>
@@ -202,7 +211,15 @@
                         <b>${t('orders')}:</b>
                         <div class="order-chips-list" style="display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: 6px;">
                             ${item.orders.map(o => `
-                                <span class="order-chip-link" onclick="event.stopPropagation(); setStatusGroupItem(${o.id}, ${o.orderNumber}, '${next}')" title="${escapeHtml(o.tableName)}">
+                                <span class="order-chip-link" 
+                                    onclick="event.stopPropagation(); setStatusGroupItem(${o.id}, ${o.orderNumber}, '${next}')"
+                                    onpointerdown="event.stopPropagation()"
+                                    onpointerup="event.stopPropagation()"
+                                    ontouchstart="event.stopPropagation()"
+                                    ontouchend="event.stopPropagation()"
+                                    onmousedown="event.stopPropagation()"
+                                    onmouseup="event.stopPropagation()"
+                                    title="${escapeHtml(o.tableName)}">
                                     #${o.orderNumber} (x${o.quantity})
                                 </span>
                             `).join('')}
@@ -278,6 +295,33 @@
         function startHold(event, id, next) {
             if (!next) return;
             beginHold(event, () => setStatus(id, next));
+        }
+
+        function startHoldGroup(event, orderIds, next) {
+            if (!next || !orderIds || orderIds.length === 0) return;
+            beginHold(event, async () => {
+                let someFailed = false;
+                let failMessage = null;
+                for (const id of orderIds) {
+                    const res = await api('/orders/status', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id, status: next })
+                    });
+                    if (!res.ok) {
+                        someFailed = true;
+                        try {
+                            const err = await res.json();
+                            if (err && err.error) failMessage = err.error;
+                        } catch (e) {}
+                    }
+                }
+                if (someFailed) {
+                    notifyWork(failMessage || t('statusMoveFailed'));
+                }
+                if (next === 'Ready') await loadCupStatus();
+                loadOrders({ silent: true });
+            });
         }
 
         function beginHold(event, action) {
