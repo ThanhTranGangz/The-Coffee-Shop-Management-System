@@ -124,15 +124,14 @@
             let bodyHtml = '';
             
             if (viewMode === 'item') {
-                const groupedItems = groupOrdersByItem(activeOrders);
-                const totalCups = groupedItems.reduce((sum, item) => sum + item.totalQuantity, 0);
-                countLabel = `${groupedItems.length} (${totalCups} ${t('items')})`;
-                bodyHtml = groupedItems.length 
-                    ? groupedItems.map(itemGroupHtml).join('') 
+                // Cook by item mode: still display order cards, but items are individually press-and-holdable
+                bodyHtml = activeOrders.length 
+                    ? activeOrders.map(order => orderHtml(order, true)).join('') 
                     : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
             } else {
+                // Cook by order mode: display order cards, hold the entire card to move status
                 bodyHtml = activeOrders.length 
-                    ? activeOrders.map(orderHtml).join('') 
+                    ? activeOrders.map(order => orderHtml(order, false)).join('') 
                     : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
             }
             
@@ -149,126 +148,105 @@
             `;
         }
 
-        function groupOrdersByItem(orders) {
-            const grouped = {};
-            orders.forEach(order => {
-                const items = order.items || [];
-                items.forEach(it => {
-                    const key = `${it.menuItemId}_${it.itemSize || ''}`;
-                    if (!grouped[key]) {
-                        grouped[key] = {
-                            menuItemId: it.menuItemId,
-                            itemName: it.itemName,
-                            itemSize: it.itemSize || '',
-                            totalQuantity: 0,
-                            orders: [],
-                            notes: []
-                        };
-                    }
-                    grouped[key].totalQuantity += it.quantity;
-                    if (!grouped[key].orders.some(o => o.id === order.id)) {
-                        grouped[key].orders.push({
-                            id: order.id,
-                            orderNumber: order.orderNumber,
-                            quantity: it.quantity,
-                            tableName: order.tableName
-                        });
-                    }
-                    if (order.note) {
-                        grouped[key].notes.push({
-                            orderNumber: order.orderNumber,
-                            note: order.note
-                        });
-                    }
-                });
-            });
-            return Object.values(grouped);
-        }
-
-        function itemGroupHtml(item) {
-            const next = nextStatus(activeStatus);
-            const notesHtml = item.notes.map(n => `<span>#${n.orderNumber}: ${escapeHtml(n.note)}</span>`).join('; ');
-            const orderIdsArr = `[${item.orders.map(o => o.id).join(',')}]`;
-            
-            return `
-                <article class="card order-card hold-card ${next ? '' : 'not-ready'}" data-next="${next || ''}"
-                    onpointerdown="startHoldGroup(event, ${orderIdsArr}, '${next || ''}')"
-                    onpointerup="cancelHold()"
-                    onpointercancel="cancelHold()"
-                    ontouchstart="startHoldGroup(event, ${orderIdsArr}, '${next || ''}')"
-                    ontouchend="cancelHold()"
-                    onmousedown="startHoldGroup(event, ${orderIdsArr}, '${next || ''}')"
-                    onmouseup="cancelHold()"
-                    oncontextmenu="return false">
-                    <div class="toolbar order-card-head">
-                        <div>
-                            <p class="eyebrow">${item.itemSize ? t('size') + ' ' + escapeHtml(item.itemSize) : ''}</p>
-                            <h3>${escapeHtml(item.itemName)}</h3>
-                        </div>
-                        <span class="price">x${item.totalQuantity}</span>
-                    </div>
-                    <div class="order-note" style="margin-top: 8px;">
-                        <b>${t('orders')}:</b>
-                        <div class="order-chips-list" style="display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: 6px;">
-                            ${item.orders.map(o => `
-                                <span class="order-chip-link" 
-                                    onclick="event.stopPropagation(); setStatusGroupItem(${o.id}, ${o.orderNumber}, '${next}')"
-                                    onpointerdown="event.stopPropagation()"
-                                    onpointerup="event.stopPropagation()"
-                                    ontouchstart="event.stopPropagation()"
-                                    ontouchend="event.stopPropagation()"
-                                    onmousedown="event.stopPropagation()"
-                                    onmouseup="event.stopPropagation()"
-                                    title="${escapeHtml(o.tableName)}">
-                                    #${o.orderNumber} (x${o.quantity})
-                                </span>
-                            `).join('')}
-                        </div>
-                    </div>
-                    ${notesHtml ? `<div class="order-note" style="margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px;"><b>${t('note')}:</b> ${notesHtml}</div>` : ''}
-                </article>`;
-        }
-
-        async function setStatusGroupItem(id, orderNumber, status) {
-            if (!status) return;
-            const nextLabel = t(statusKeys[status]);
-            const msg = t('confirmMoveOrderStatus')
-                .replace('{order}', orderNumber)
-                .replace('{status}', nextLabel);
-            if (confirm(msg)) {
-                await setStatus(id, status);
-            }
-        }
-
         function setActiveStatus(status) {
             activeStatus = status;
             loadOrders({ silent: true });
         }
 
-        function orderHtml(order) {
+        function orderHtml(order, itemInteractive = false) {
             const next = nextStatus(order.status);
-            return `
-                <article class="card order-card hold-card ${next ? '' : 'not-ready'}" data-id="${order.id}" data-next="${next || ''}"
-                    onpointerdown="startHold(event, ${order.id}, '${next || ''}')"
+            
+            let cardAttributes = '';
+            let cardClasses = `card order-card ${next ? '' : 'not-ready'}`;
+            let inlineStyle = itemInteractive ? 'style="height: auto; min-height: 246px;"' : '';
+            
+            if (!itemInteractive && next) {
+                cardClasses += ' hold-card';
+                cardAttributes = `
+                    onpointerdown="startHold(event, ${order.id}, '${next}')"
                     onpointerup="cancelHold()"
                     onpointercancel="cancelHold()"
-                    ontouchstart="startHold(event, ${order.id}, '${next || ''}')"
+                    ontouchstart="startHold(event, ${order.id}, '${next}')"
                     ontouchend="cancelHold()"
-                    onmousedown="startHold(event, ${order.id}, '${next || ''}')"
+                    onmousedown="startHold(event, ${order.id}, '${next}')"
                     onmouseup="cancelHold()"
-                    oncontextmenu="return false">
-                    <div class="toolbar order-card-head">
-                        <div>
-                            <p class="eyebrow">${escapeHtml(order.tableName)}</p>
-                            <h3>#${order.orderNumber}</h3>
+                    oncontextmenu="return false"
+                `;
+            }
+            
+            let itemsHtml = '';
+            if (itemInteractive) {
+                itemsHtml = (order.items || []).map(it => {
+                    const prep = it.preparedQty || 0;
+                    const isCompleted = prep >= it.quantity;
+                    const canHoldItem = next && !isCompleted;
+                    
+                    const progressText = `${prep}/${it.quantity}`;
+                    const statusBadge = isCompleted 
+                        ? `<span class="status ready" style="padding: 2px 8px; font-size: 10px; font-weight: bold;">✓ ${t('readyColumn')}</span>`
+                        : prep > 0 
+                            ? `<span class="status preparing" style="padding: 2px 8px; font-size: 10px; font-weight: bold;">${progressText}</span>`
+                            : `<span class="status pending" style="padding: 2px 8px; font-size: 10px; font-weight: bold;">0/${it.quantity}</span>`;
+                    
+                    return `
+                        <div class="${canHoldItem ? 'hold-card' : ''}" 
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 6px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-2); position: relative; overflow: hidden; user-select: none;"
+                            ${canHoldItem ? `
+                                onpointerdown="startHoldItem(event, ${order.id}, ${it.menuItemId}, '${it.itemSize || ''}')"
+                                onpointerup="cancelHold()"
+                                onpointercancel="cancelHold()"
+                                ontouchstart="startHoldItem(event, ${order.id}, ${it.menuItemId}, '${it.itemSize || ''}')"
+                                ontouchend="cancelHold()"
+                                onmousedown="startHoldItem(event, ${order.id}, ${it.menuItemId}, '${it.itemSize || ''}')"
+                                onmouseup="cancelHold()"
+                                oncontextmenu="return false; event.stopPropagation();"
+                            ` : ''}>
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <span style="font-weight: 800; color: var(--ink);">${escapeHtml(it.itemName)}</span>
+                                ${it.itemSize ? `<span class="eyebrow" style="margin-bottom: 0; font-size: 9px;">${t('size') + ' ' + escapeHtml(it.itemSize)}</span>` : ''}
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="price" style="font-size: 13px;">x${it.quantity}</span>
+                                ${statusBadge}
+                            </div>
                         </div>
-                        <span class="price">${money(order.total)}</span>
+                    `;
+                }).join('');
+            } else {
+                itemsHtml = (order.items || []).map(it => {
+                    const prep = it.preparedQty || 0;
+                    const isCompleted = prep >= it.quantity;
+                    const progressText = prep > 0 ? ` <span class="price" style="font-size: 11px; margin-left: 4px;">(${prep}/${it.quantity})</span>` : '';
+                    const strikeStyle = isCompleted ? 'text-decoration: line-through; opacity: 0.6;' : '';
+                    
+                    return `
+                        <p style="margin: 0; padding: 6px 0; border-bottom: 1px dashed var(--line); display: flex; justify-content: space-between; align-items: baseline; ${strikeStyle}">
+                            <span>
+                                <b>${escapeHtml(it.itemName)}</b>
+                                ${it.itemSize ? `<span class="eyebrow" style="margin-left: 6px; font-size: 10px; margin-bottom: 0;">${escapeHtml(it.itemSize)}</span>` : ''}
+                                ${progressText}
+                            </span>
+                            <span class="price">x${it.quantity}</span>
+                        </p>
+                    `;
+                }).join('');
+            }
+            
+            return `
+                <article class="${cardClasses}" data-id="${order.id}" data-next="${next || ''}" ${cardAttributes} ${inlineStyle}>
+                    <div class="toolbar order-card-head" style="margin-bottom: 8px;">
+                        <div>
+                            <p class="eyebrow" style="margin-bottom: 2px;">${escapeHtml(order.tableName)}</p>
+                            <h3 style="margin: 0;">#${order.orderNumber}</h3>
+                        </div>
+                        <span class="price" style="font-size: 15px; font-weight: 900;">${money(order.total)}</span>
                     </div>
-                    ${order.note ? `<div class="order-note"><b>${t('orderNote')}</b><span>${escapeHtml(order.note)}</span></div>` : ''}
-                    <div class="order-lines">
-                        ${(order.items || []).map(it => `<p>${escapeHtml(it.itemName)}${it.itemSize ? ' · ' + t('size') + ' ' + escapeHtml(it.itemSize) : ''} x${it.quantity} <span class="price">${money(it.price * it.quantity)}</span></p>`).join('')}
+                    ${order.note ? `<div class="order-note" style="margin-top: 2px; margin-bottom: 8px;"><b>${t('orderNote')}:</b> <span>${escapeHtml(order.note)}</span></div>` : ''}
+                    <div class="order-lines" style="flex: 1; overflow-y: auto; display: block; margin: 4px 0;">
+                        ${itemsHtml}
                     </div>
-                </article>`;
+                </article>
+            `;
         }
 
         function nextStatus(status) {
@@ -297,30 +275,20 @@
             beginHold(event, () => setStatus(id, next));
         }
 
-        function startHoldGroup(event, orderIds, next) {
-            if (!next || !orderIds || orderIds.length === 0) return;
+        function startHoldItem(event, orderId, menuItemId, itemSize) {
             beginHold(event, async () => {
-                let someFailed = false;
-                let failMessage = null;
-                for (const id of orderIds) {
-                    const res = await api('/orders/status', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ id, status: next })
-                    });
-                    if (!res.ok) {
-                        someFailed = true;
-                        try {
-                            const err = await res.json();
-                            if (err && err.error) failMessage = err.error;
-                        } catch (e) {}
-                    }
+                const res = await api('/orders/item-prepare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderId, menuItemId, itemSize })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    notifyWork(err.error || t('statusMoveFailed'));
+                } else {
+                    await loadCupStatus();
+                    loadOrders({ silent: true });
                 }
-                if (someFailed) {
-                    notifyWork(failMessage || t('statusMoveFailed'));
-                }
-                if (next === 'Ready') await loadCupStatus();
-                loadOrders({ silent: true });
             });
         }
 
