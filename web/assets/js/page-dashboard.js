@@ -110,6 +110,7 @@
             `).join('');
             renderCustomControls();
             renderCashPanel();
+            renderLowStockPanel();
             document.getElementById('chart-total').textContent = money(chartTotal);
             document.getElementById('chart').innerHTML = lineChart(currentSeries);
 
@@ -166,6 +167,32 @@
                     <b>${money(cashData.balance)}</b>
                 </div>
                 <button class="btn primary" type="button" onclick="adminWithdrawCash()">${t('withdrawCash')}</button>
+            `;
+        }
+
+        function renderLowStockPanel() {
+            const panel = document.getElementById('low-stock-panel');
+            if (!panel || !dashboardData) return;
+            const low = Array.isArray(dashboardData.lowStockItems) ? dashboardData.lowStockItems : [];
+            if (!low.length) {
+                panel.classList.add('hidden');
+                panel.innerHTML = '';
+                return;
+            }
+            panel.classList.remove('hidden');
+            panel.innerHTML = `
+                <div class="notice error" style="margin:0">
+                    <strong>${escapeHtml(t('lowStockWarning'))}</strong>
+                    <div style="margin-top:6px">${escapeHtml(t('lowStockBanner').replace('{count}', String(low.length)))}</div>
+                    <div style="margin-top:8px">${low.slice(0, 6).map(ing => escapeHtml(
+                        t('lowStockItemLine')
+                            .replace('{name}', ing.name || ing.id)
+                            .replace('{stock}', String(ing.stock))
+                            .replace('{min}', String(ing.minStock))
+                            .replace('{unit}', ing.unit || '')
+                    )).join(' · ')}</div>
+                    <a class="btn" style="margin-top:10px" href="${withTab('inventory.jsp')}">${t('inventoryAdmin')}</a>
+                </div>
             `;
         }
 

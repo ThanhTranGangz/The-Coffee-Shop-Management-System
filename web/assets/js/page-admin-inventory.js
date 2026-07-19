@@ -13,10 +13,40 @@ async function loadData() {
     }
 }
 
+function lowStockItems() {
+    return items.filter(ing => Number(ing.stock) <= Number(ing.minStock));
+}
+
+function renderLowStockAlert() {
+    const box = document.getElementById('low-stock-alert');
+    if (!box) return;
+    const low = lowStockItems();
+    if (!low.length) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+    }
+    box.classList.remove('hidden');
+    box.innerHTML = `
+        <h3>${escapeHtml(t('lowStockWarning'))}</h3>
+        <p>${escapeHtml(t('lowStockBanner').replace('{count}', String(low.length)))}</p>
+        <ul>
+            ${low.map(ing => `<li>${escapeHtml(
+                t('lowStockItemLine')
+                    .replace('{name}', ing.name || ing.id)
+                    .replace('{stock}', String(ing.stock))
+                    .replace('{min}', String(ing.minStock))
+                    .replace('{unit}', ing.unit || '')
+            )}</li>`).join('')}
+        </ul>
+    `;
+}
+
 function render() {
     const tbody = document.getElementById('items-tbody');
     if (!tbody) return;
-    
+    renderLowStockAlert();
+
     tbody.innerHTML = '';
     if (items.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:2rem" class="muted">${t('inventoryEmpty')}</td></tr>`;
@@ -26,7 +56,7 @@ function render() {
     items.forEach(ing => {
         const isLow = ing.stock <= ing.minStock;
         const stockClass = isLow ? 'stock-low' : 'stock-ok';
-        
+
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid var(--border)';
         tr.innerHTML = `
@@ -55,7 +85,7 @@ function newItem() {
     document.getElementById('stock').value = 0;
     document.getElementById('minStock').value = 0;
     document.getElementById('importCost').value = 0;
-    
+
     document.getElementById('form-title').textContent = t('addNewMaterial');
     document.getElementById('message').className = 'notice hidden';
     openEditSheet();
@@ -64,17 +94,17 @@ function newItem() {
 function edit(id) {
     const ing = items.find(i => i.id === id);
     if (!ing) return;
-    
+
     editingId = id;
     document.getElementById('originalId').value = id;
     document.getElementById('id').value = ing.id;
-    document.getElementById('id').readOnly = true; // Không cho đổi ID khi sửa
+    document.getElementById('id').readOnly = true;
     document.getElementById('name').value = ing.name;
     document.getElementById('unit').value = ing.unit;
     document.getElementById('stock').value = ing.stock;
     document.getElementById('minStock').value = ing.minStock;
     document.getElementById('importCost').value = ing.importCost;
-    
+
     document.getElementById('form-title').textContent = t('editMaterial') + ' ' + ing.name;
     document.getElementById('message').className = 'notice hidden';
     openEditSheet();
@@ -90,30 +120,31 @@ async function saveItem(event) {
         minStock: parseInt(document.getElementById('minStock').value) || 0,
         importCost: parseInt(document.getElementById('importCost').value) || 0
     };
-    
+
     if (!payload.id || !payload.name) return;
-    
+
     const msg = document.getElementById('message');
     msg.className = 'notice hidden';
-    
+
     try {
         const res = await api('/inventory/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        
+
         if (res.ok) {
             const saved = await res.json();
             const idx = items.findIndex(i => i.id === payload.id);
             if (idx >= 0) items[idx] = saved;
             else items.push(saved);
-            
-            // Nếu có đổi ID (trong lý thuyết form readonly nhưng nếu API có hỗ trợ),
-            // nhưng hiện tại form đã set ID là readonly khi edit, nên ko cần lo đổi ID.
-            
             render();
             closeEditSheet();
+            if (Number(saved.disabledMenuCount) > 0) {
+                notifyWork(t('menuDisabledByStock').replace('{count}', String(saved.disabledMenuCount)));
+            } else if (Number(saved.stock) <= Number(saved.minStock)) {
+                notifyWork(t('lowStockWarning') + ': ' + (saved.name || saved.id));
+            }
         } else {
             const err = await res.json().catch(()=>({}));
             msg.textContent = err.error || t('systemError');
@@ -146,7 +177,6 @@ async function deleteItem(id) {
 
 function openEditSheet() {
     document.body.classList.add('editing');
-    // Scroll mượt tới vùng form
     if (window.innerWidth < 1024) {
         setTimeout(() => {
             const panel = document.getElementById('edit-panel');
@@ -160,7 +190,6 @@ function closeEditSheet() {
 }
 
 function resetForm() {
-    // Không làm gì, reset fields đã được handle trong newItem
 }
 
 function escapeHtml(str) {

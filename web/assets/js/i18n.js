@@ -94,7 +94,12 @@ const dict = {
         adminPinTitle: 'Mã PIN quản trị', adminPinText: 'Nhập mã PIN để mở dashboard.', unlock: 'Mở khoá', adminPinInvalid: 'Sai mã PIN quản trị.',
         actorAll: 'Tất cả', actorGuest: 'Khách', actorAdmin: 'Admin', actorBarista: 'Pha chế', actorCashier: 'Thu ngân', actorRunner: 'Bồi bàn', noLogs: 'Chưa có log',
         cookByOrder: 'Nấu theo đơn', cookByItem: 'Nấu theo món', confirmMoveOrderStatus: 'Chuyển đơn #{order} sang trạng thái {status}?',
-        addMaterialBtn: 'Thêm nguyên liệu', materialId: 'Mã NL', materialName: 'Tên nguyên liệu', stock: 'Tồn kho', minStock: 'Tối thiểu', unit: 'Đơn vị', importPrice: 'Giá nhập', materialInfo: 'Thông tin nguyên liệu', materialIdFull: 'Mã nguyên liệu (ID)', materialIdPlaceholder: 'VD: CF_01', unitHelp: 'Đơn vị (g, ml...)', importPriceVND: 'Giá nhập (đ)', currentStock: 'Tồn kho hiện tại', minStockLevel: 'Mức tối thiểu', saveMaterial: 'Lưu nguyên liệu', inventoryEmpty: 'Chưa có nguyên liệu nào trong kho.', addNewMaterial: 'Thêm nguyên liệu mới', editMaterial: 'Sửa nguyên liệu:', deleteMaterialConfirm: 'Bạn có chắc chắn muốn xoá nguyên liệu {id}? (Sẽ gây lỗi nếu món ăn đang dùng nguyên liệu này)', systemError: 'Lỗi hệ thống', networkError: 'Mất kết nối mạng'
+        addMaterialBtn: 'Thêm nguyên liệu', materialId: 'Mã NL', materialName: 'Tên nguyên liệu', stock: 'Tồn kho', minStock: 'Tối thiểu', unit: 'Đơn vị', importPrice: 'Giá nhập', materialInfo: 'Thông tin nguyên liệu', materialIdFull: 'Mã nguyên liệu (ID)', materialIdPlaceholder: 'VD: CF_01', unitHelp: 'Đơn vị (g, ml...)', importPriceVND: 'Giá nhập (đ)', currentStock: 'Tồn kho hiện tại', minStockLevel: 'Mức tối thiểu', saveMaterial: 'Lưu nguyên liệu', inventoryEmpty: 'Chưa có nguyên liệu nào trong kho.', addNewMaterial: 'Thêm nguyên liệu mới', editMaterial: 'Sửa nguyên liệu:', deleteMaterialConfirm: 'Bạn có chắc chắn muốn xoá nguyên liệu {id}? (Sẽ gây lỗi nếu món ăn đang dùng nguyên liệu này)', systemError: 'Lỗi hệ thống', networkError: 'Mất kết nối mạng',
+        lowStockWarning: 'Cảnh báo sắp hết hàng', lowStockBanner: 'Có {count} nguyên liệu dưới mức tối thiểu — cần nhập thêm.',
+        lowStockItemLine: '{name}: còn {stock}/{min} {unit}',
+        stockNotEnough: 'Không còn đủ hàng để phục vụ (còn {count}).',
+        stockSoldOut: 'Món này hiện đã hết hàng.',
+        menuDisabledByStock: 'Đã tự tắt {count} món vì không còn đủ nguyên liệu.'
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
@@ -189,7 +194,12 @@ const dict = {
         adminPinTitle: 'Admin PIN', adminPinText: 'Enter the PIN to unlock the dashboard.', unlock: 'Unlock', adminPinInvalid: 'Incorrect admin PIN.',
         actorAll: 'All', actorGuest: 'Guest', actorAdmin: 'Admin', actorBarista: 'Barista', actorCashier: 'Cashier', actorRunner: 'Waiter', noLogs: 'No logs yet',
         cookByOrder: 'Cook by Order', cookByItem: 'Cook by Item', confirmMoveOrderStatus: 'Move order #{order} to {status}?',
-        addMaterialBtn: 'Add material', materialId: 'Material ID', materialName: 'Material name', stock: 'Stock', minStock: 'Min stock', unit: 'Unit', importPrice: 'Import cost', materialInfo: 'Material details', materialIdFull: 'Material ID', materialIdPlaceholder: 'Ex: CF_01', unitHelp: 'Unit (g, ml...)', importPriceVND: 'Import cost (VND)', currentStock: 'Current stock', minStockLevel: 'Min stock level', saveMaterial: 'Save material', inventoryEmpty: 'No materials in inventory.', addNewMaterial: 'Add new material', editMaterial: 'Edit material:', deleteMaterialConfirm: 'Are you sure you want to delete material {id}? (May cause errors if items are using it)', systemError: 'System error', networkError: 'Network disconnected'
+        addMaterialBtn: 'Add material', materialId: 'Material ID', materialName: 'Material name', stock: 'Stock', minStock: 'Min stock', unit: 'Unit', importPrice: 'Import cost', materialInfo: 'Material details', materialIdFull: 'Material ID', materialIdPlaceholder: 'Ex: CF_01', unitHelp: 'Unit (g, ml...)', importPriceVND: 'Import cost (VND)', currentStock: 'Current stock', minStockLevel: 'Min stock level', saveMaterial: 'Save material', inventoryEmpty: 'No materials in inventory.', addNewMaterial: 'Add new material', editMaterial: 'Edit material:', deleteMaterialConfirm: 'Are you sure you want to delete material {id}? (May cause errors if items are using it)', systemError: 'System error', networkError: 'Network disconnected',
+        lowStockWarning: 'Low stock warning', lowStockBanner: '{count} ingredient(s) are at or below minimum — please restock.',
+        lowStockItemLine: '{name}: {stock}/{min} {unit} left',
+        stockNotEnough: 'Not enough stock to serve (only {count} left).',
+        stockSoldOut: 'This item is currently sold out.',
+        menuDisabledByStock: 'Automatically disabled {count} item(s) due to insufficient ingredients.'
     }
 };
 

@@ -83,7 +83,7 @@
                             <div class="stepper">
                                 <button type="button" onclick="changeCounterQty(${index}, -1)">−</button>
                                 <span class="num">${line.quantity}</span>
-                                <button type="button" onclick="changeCounterQty(${index}, 1)" ${line.quantity >= MAX_QTY ? 'disabled' : ''}>+</button>
+                                <button type="button" onclick="changeCounterQty(${index}, 1)" ${remainingCounterQty(line.menuItemId, index) <= 0 || line.quantity >= MAX_QTY ? 'disabled' : ''}>+</button>
                             </div>
                         </div>
                     </div>
@@ -95,6 +95,14 @@
             const item = counterMenu.find(menu => menu.id === id);
             if (!item) return;
             const normalizedSize = sizeOptions(item).length ? size : '';
+            const remaining = remainingCounterQty(id);
+            if (remaining <= 0) {
+                counterMessage = availableCounterQty(item) <= 0
+                    ? t('stockSoldOut')
+                    : t('stockNotEnough').replace('{count}', String(availableCounterQty(item)));
+                renderCounterOrder();
+                return;
+            }
             const existing = counterCart.find(line => line.menuItemId === id && line.size === normalizedSize);
             if (existing) existing.quantity = Math.min(MAX_QTY, existing.quantity + 1);
             else counterCart.push({ menuItemId: id, size: normalizedSize, quantity: 1 });
@@ -104,9 +112,36 @@
 
         function changeCounterQty(index, delta) {
             if (!counterCart[index]) return;
+            if (delta > 0) {
+                const line = counterCart[index];
+                if (line.quantity >= MAX_QTY) return;
+                if (remainingCounterQty(line.menuItemId, index) <= 0) {
+                    const item = counterMenu.find(menu => menu.id === line.menuItemId);
+                    counterMessage = t('stockNotEnough').replace('{count}', String(availableCounterQty(item)));
+                    renderCounterOrder();
+                    return;
+                }
+            }
             counterCart[index].quantity = Math.min(MAX_QTY, counterCart[index].quantity + delta);
             if (counterCart[index].quantity <= 0) counterCart.splice(index, 1);
+            counterMessage = '';
             renderCounterOrder();
+        }
+
+        function availableCounterQty(item) {
+            const value = Number(item && item.availableQty);
+            if (!Number.isFinite(value)) return MAX_QTY;
+            return Math.max(0, Math.min(MAX_QTY, Math.floor(value)));
+        }
+
+        function remainingCounterQty(menuItemId, excludeIndex = -1) {
+            const item = counterMenu.find(menu => menu.id === menuItemId);
+            const inCart = counterCart.reduce((sum, line, index) => (
+                index !== excludeIndex && line.menuItemId === menuItemId
+                    ? sum + Number(line.quantity || 0)
+                    : sum
+            ), 0);
+            return Math.max(0, availableCounterQty(item) - inCart);
         }
 
         function counterTotal() {
@@ -148,9 +183,11 @@
                     counterNote = '';
                     counterMessage = `${t('orderCreated')} #${order.orderNumber}`;
                     notifyWork(counterMessage);
+                    await loadCounterData();
                 } else {
                     const err = await res.json().catch(() => ({}));
                     counterMessage = err.error || t('orderError');
+                    await loadCounterData();
                 }
             } finally {
                 counterSubmitting = false;

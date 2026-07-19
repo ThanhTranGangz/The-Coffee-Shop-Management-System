@@ -6,10 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop - Kho nguyên liệu</title>
     <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=tab-session-2"></script>
+    <script defer src="assets/js/i18n.js?v=stock-limit-1"></script>
     <style>
         .stock-low { color: var(--danger); font-weight: 600; }
         .stock-ok { color: var(--success); }
+        .low-stock-alert {
+            margin-bottom: 16px;
+            padding: 14px 16px;
+            border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+            background: color-mix(in srgb, var(--danger) 10%, transparent);
+            border-radius: 12px;
+        }
+        .low-stock-alert h3 { margin: 0 0 6px; color: var(--danger); font-size: 1rem; }
+        .low-stock-alert p { margin: 0 0 8px; }
+        .low-stock-alert ul { margin: 0; padding-left: 1.2rem; }
     </style>
 </head>
 <body>
@@ -18,6 +28,7 @@
         <div class="work-toolbar">
             <button class="btn primary" onclick="newItem()" data-i18n="addMaterialBtn">Thêm nguyên liệu</button>
         </div>
+        <div id="low-stock-alert" class="low-stock-alert hidden"></div>
         <div class="grid side">
             <section class="card" style="padding:0; overflow-x:auto;">
                 <table class="data-table" style="width:100%; text-align:left; border-collapse:collapse; white-space:nowrap;">
@@ -68,7 +79,7 @@
         <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
     </button>
 
-    <script src="assets/js/page-admin-inventory.js?v=2"></script>
+    <script src="assets/js/page-admin-inventory.js?v=3"></script>
     <script>
         window.addEventListener('scroll', function() {
             const btn = document.getElementById('scrollToTopBtn');

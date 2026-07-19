@@ -397,9 +397,16 @@ public class LiteApiServlet extends HttpServlet {
                     ing.setMinStock(readInt(body.get("minStock"), 0));
                     ing.setImportCost(readInt(body.get("importCost"), 0));
                     new dao.InventoryDAO().save(ing);
+                    int disabledMenus = service.refreshMenuAvailability();
                     service.addSystemLog(role(req), user(req), "INVENTORY_SAVE",
-                            "Admin lưu nguyên liệu " + ing.getId() + " - " + ing.getName(), "Admin saved ingredient " + ing.getId() + " - " + ing.getName(), null);
-                    resp.getWriter().write(JsonUtils.toJson(ing.toMap()));
+                            "Admin lưu nguyên liệu " + ing.getId() + " - " + ing.getName()
+                                    + (disabledMenus > 0 ? (" (tắt " + disabledMenus + " món hết hàng)") : ""),
+                            "Admin saved ingredient " + ing.getId() + " - " + ing.getName()
+                                    + (disabledMenus > 0 ? (" (disabled " + disabledMenus + " out-of-stock items)") : ""),
+                            null);
+                    java.util.Map<String, Object> savedIng = new java.util.LinkedHashMap<>(ing.toMap());
+                    savedIng.put("disabledMenuCount", disabledMenus);
+                    resp.getWriter().write(JsonUtils.toJson(savedIng));
                     break;
                 case "/inventory/delete":
                     if (!"admin".equals(role(req))) {
@@ -408,9 +415,14 @@ public class LiteApiServlet extends HttpServlet {
                     }
                     String ingId = str(body.get("id"));
                     new dao.InventoryDAO().delete(ingId);
+                    int disabledAfterDelete = service.refreshMenuAvailability();
                     service.addSystemLog(role(req), user(req), "INVENTORY_DELETE",
-                            "Admin xoá nguyên liệu " + ingId, "Admin deleted ingredient " + ingId, null);
-                    resp.getWriter().write("{\"message\":\"Ingredient deleted\"}");
+                            "Admin xoá nguyên liệu " + ingId
+                                    + (disabledAfterDelete > 0 ? (" (tắt " + disabledAfterDelete + " món hết hàng)") : ""),
+                            "Admin deleted ingredient " + ingId
+                                    + (disabledAfterDelete > 0 ? (" (disabled " + disabledAfterDelete + " out-of-stock items)") : ""),
+                            null);
+                    resp.getWriter().write("{\"message\":\"Ingredient deleted\",\"disabledMenuCount\":" + disabledAfterDelete + "}");
                     break;
                 case "/tables":
                     Map<String, Object> savedTable = service.saveTable(body);

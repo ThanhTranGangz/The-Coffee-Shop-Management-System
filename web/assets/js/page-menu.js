@@ -38,9 +38,12 @@
                 }
             });
             document.getElementById('sheet-plus').addEventListener('click', () => {
-                if (currentQty < MAX_QTY) {
+                const maxQty = maxSelectableQty(currentItem);
+                if (currentQty < maxQty) {
                     currentQty++;
                     syncSheet();
+                } else {
+                    notifyStockLimit(currentItem, maxQty);
                 }
             });
             document.getElementById('sheet-add').addEventListener('click', addSheetItem);
@@ -307,6 +310,11 @@
         function openSheet(id) {
             currentItem = menuItems.find(item => item.id === id);
             if (!currentItem) return;
+            const remaining = remainingQtyForItem(currentItem.id);
+            if (remaining <= 0) {
+                alert(t('stockSoldOut'));
+                return;
+            }
             currentQty = 1;
             const sizes = sizeOptions(currentItem);
             currentSize = sizes.length ? sizes[0].code : '';
@@ -324,10 +332,41 @@
             document.getElementById('item-sheet').classList.remove('show');
         }
 
+        function availableQty(item) {
+            const value = Number(item && item.availableQty);
+            if (!Number.isFinite(value)) return MAX_QTY;
+            return Math.max(0, Math.min(MAX_QTY, Math.floor(value)));
+        }
+
+        function remainingQtyForItem(menuItemId, excludeIndex = -1) {
+            const item = menuItems.find(menu => menu.id === menuItemId);
+            const inCart = cart.reduce((sum, line, index) => (
+                index !== excludeIndex && line.menuItemId === menuItemId
+                    ? sum + Number(line.quantity || 0)
+                    : sum
+            ), 0);
+            return Math.max(0, availableQty(item) - inCart);
+        }
+
+        function maxSelectableQty(item) {
+            if (!item) return 1;
+            return Math.max(0, remainingQtyForItem(item.id));
+        }
+
+        function notifyStockLimit(item, available) {
+            if (!available) {
+                alert(t('stockSoldOut'));
+                return;
+            }
+            alert(t('stockNotEnough').replace('{count}', String(available)));
+        }
+
         function syncSheet() {
+            const maxQty = maxSelectableQty(currentItem);
+            if (currentQty > maxQty) currentQty = Math.max(1, maxQty);
             document.getElementById('sheet-qty').textContent = currentQty;
             document.getElementById('sheet-minus').disabled = currentQty <= 1;
-            document.getElementById('sheet-plus').disabled = currentQty >= MAX_QTY;
+            document.getElementById('sheet-plus').disabled = currentQty >= maxQty;
             const unit = currentItem ? priceFor(currentItem, currentSize) : 0;
             document.getElementById('sheet-price').textContent = money(unit);
             document.getElementById('sheet-total').textContent = money(unit * currentQty);
@@ -355,12 +394,23 @@
         function addSheetItem() {
             if (!currentItem) return;
             const note = document.getElementById('sheet-note').value.trim();
-            const existingVariantQty = totalQtyForVariant(currentItem.id, currentSize);
-            const quantityToAdd = Math.min(currentQty, Math.max(0, MAX_QTY - existingVariantQty));
-            if (quantityToAdd <= 0) {
+            const remaining = remainingQtyForItem(currentItem.id);
+            if (remaining <= 0) {
+                notifyStockLimit(currentItem, availableQty(currentItem));
                 closeSheet();
                 renderCart();
                 return;
+            }
+            const existingVariantQty = totalQtyForVariant(currentItem.id, currentSize);
+            const quantityToAdd = Math.min(currentQty, remaining, Math.max(0, MAX_QTY - existingVariantQty));
+            if (quantityToAdd <= 0) {
+                notifyStockLimit(currentItem, availableQty(currentItem));
+                closeSheet();
+                renderCart();
+                return;
+            }
+            if (quantityToAdd < currentQty) {
+                notifyStockLimit(currentItem, availableQty(currentItem));
             }
             const existing = cart.find(item => item.menuItemId === currentItem.id && item.size === currentSize && item.note === note);
             if (existing) existing.quantity += quantityToAdd;
@@ -395,7 +445,7 @@
                                 <div class="stepper">
                                     <button type="button" onclick="changeQty(${index}, -1)">−</button>
                                     <span class="num">${line.quantity}</span>
-                                    <button type="button" onclick="changeQty(${index}, 1)" ${totalQtyForVariant(line.menuItemId, line.size) >= MAX_QTY ? 'disabled' : ''}>+</button>
+                                    <button type="button" onclick="changeQty(${index}, 1)" ${remainingQtyForItem(line.menuItemId, index) <= 0 || totalQtyForVariant(line.menuItemId, line.size) >= MAX_QTY ? 'disabled' : ''}>+</button>
                                 </div>
                             </div>
                         </div>`;
@@ -411,8 +461,17 @@
 
         function changeQty(index, delta) {
             if (!cart[index]) return;
-            if (delta > 0 && totalQtyForVariant(cart[index].menuItemId, cart[index].size) >= MAX_QTY) return;
-            cart[index].quantity = Math.min(MAX_QTY, cart[index].quantity + delta);
+            if (delta > 0) {
+                const line = cart[index];
+                if (totalQtyForVariant(line.menuItemId, line.size) >= MAX_QTY) return;
+                if (remainingQtyForItem(line.menuItemId, index) <= 0) {
+                    const menu = menuItems.find(item => item.id === line.menuItemId);
+                    notifyStockLimit(menu, availableQty(menu));
+                    return;
+                }
+            }
+            const nextQty = cart[index].quantity + delta;
+            cart[index].quantity = Math.min(MAX_QTY, nextQty);
             if (cart[index].quantity <= 0) cart.splice(index, 1);
             renderCart();
         }
@@ -480,9 +539,11 @@
                         : `order-status.jsp?table=${encodeURIComponent(order.tableName || selectedTable())}`;
                     msg.innerHTML = `<strong>${t('orderSent')}</strong><br>${t('orderNumber')}: ${order.orderNumber}<br><a class="btn primary" style="margin-top:10px" href="${withTab(statusUrl)}">${t('viewStatus')}</a>`;
                     cart = [];
+                    await loadData();
                 } else {
                     const err = await res.json().catch(() => ({}));
                     msg.textContent = err.error || t('orderError');
+                    await loadData();
                 }
             } finally {
                 isSubmitting = false;

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
     <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=tab-session-2"></script>
+    <script defer src="assets/js/i18n.js?v=stock-limit-1"></script>
 </head>
 <body>
     <div class="pin-intro admin-pin-gate" id="admin-pin-gate">
@@ -36,6 +36,7 @@
             <button class="btn primary" onclick="loadStats()" data-i18n="refresh">Làm mới</button>
         </section>
         <section class="cash-strip admin-cash-strip" id="cash-panel"></section>
+        <section id="low-stock-panel" class="hidden"></section>
 
         <section class="revenue-dashboard-grid">
             <article class="card revenue-chart-card">
@@ -59,6 +60,6 @@
             <div id="details"></div>
         </details>
     </main>
-    <script src="assets/js/page-dashboard.js?v=dashboard-fast-1"></script>
+    <script src="assets/js/page-dashboard.js?v=stock-limit-1"></script>
 </body>
 </html>

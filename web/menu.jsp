@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
     <link rel="stylesheet" href="assets/css/app.css?v=vi-serif-1">
-    <script defer src="assets/js/i18n.js?v=scroll-top-1"></script>
+    <script defer src="assets/js/i18n.js?v=stock-limit-1"></script>
 </head>
 <body>
     <nav class="nav">
@@ -103,6 +103,6 @@
             </button>
         </div>
     </div>
-    <script src="assets/js/page-menu.js?v=cart-limit-fix-1"></script>
+    <script src="assets/js/page-menu.js?v=stock-limit-1"></script>
 </body>
 </html>

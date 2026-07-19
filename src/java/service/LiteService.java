@@ -445,14 +445,23 @@ public class LiteService {
             dao.RecipeDAO recipeDao = new dao.RecipeDAO();
             java.util.Map<String, java.util.List<model.RecipeItem>> allRecipes = recipeDao.getAllRecipesMappedByMenuItemId();
             java.util.Map<Integer, java.util.List<Map<String, Object>>> allSizes = getAllMenuSizesMapped(con);
+            Map<String, Integer> stockMap = getIngredientStockMap(con);
+            Map<Integer, Integer> reservedMap = getReservedMenuQuantityMap(con);
             
+            List<Map<String, Object>> visible = new ArrayList<>();
             for (Map<String, Object> item : menu) {
                 int itemId = readInt(item.get("id"), 0);
+                List<model.RecipeItem> recipes = allRecipes.getOrDefault(String.valueOf(itemId), new java.util.ArrayList<>());
+                int availableQty = availableQuantity(recipes, stockMap, reservedMap.getOrDefault(itemId, 0));
                 item.put("sizes", allSizes.getOrDefault(itemId, new java.util.ArrayList<>()));
-                item.put("recipes", allRecipes.getOrDefault(String.valueOf(itemId), new java.util.ArrayList<>()).stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
+                item.put("recipes", recipes.stream().map(r -> r.toMap()).collect(java.util.stream.Collectors.toList()));
                 item.put("bestSeller", bestSellerIds.contains(itemId));
+                item.put("availableQty", availableQty);
+                if (includeInactive || recipes.isEmpty() || availableQty > 0) {
+                    visible.add(item);
+                }
             }
-            return menu;
+            return visible;
         }
     }
 
@@ -1064,6 +1073,7 @@ public class LiteService {
         return createOrder(data, "guest", "");
     }
 
+    @SuppressWarnings("unchecked")
     public Map<String, Object> createOrder(Map<String, Object> data, String actorRole, String actorName) throws Exception {
         String tableName = readString(data.get("tableName"), "Bàn 1");
         if (getTableByName(tableName) == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
@@ -1091,6 +1101,13 @@ public class LiteService {
                 int total = 0;
                 int totalQuantity = 0;
                 Map<String, Integer> variantQuantities = new LinkedHashMap<>();
+                Map<Integer, Integer> requestedByMenu = new LinkedHashMap<>();
+                Map<Integer, String> menuNames = new LinkedHashMap<>();
+                List<Map<String, Object>> normalizedLines = new ArrayList<>();
+                Map<String, Integer> stockMap = getIngredientStockMap(con);
+                Map<Integer, Integer> reservedMap = getReservedMenuQuantityMap(con);
+                dao.RecipeDAO recipeDao = new dao.RecipeDAO();
+
                 for (Object raw : items) {
                     if (!(raw instanceof Map<?, ?>)) continue;
                     Map<?, ?> item = (Map<?, ?>) raw;
@@ -1120,7 +1137,41 @@ public class LiteService {
                         throw new IllegalArgumentException("Mỗi món chỉ được chọn tối đa " + MAX_ITEM_QUANTITY + " sản phẩm.");
                     }
                     variantQuantities.put(variantKey, variantTotal);
-                    int price = priceForSize(menu, size);
+                    requestedByMenu.put(menuId, requestedByMenu.getOrDefault(menuId, 0) + quantity);
+                    menuNames.put(menuId, readString(menu.get("nameVi"), ""));
+                    Map<String, Object> line = new LinkedHashMap<>();
+                    line.put("menu", menu);
+                    line.put("menuId", menuId);
+                    line.put("size", size);
+                    line.put("quantity", quantity);
+                    line.put("price", priceForSize(menu, size));
+                    normalizedLines.add(line);
+                }
+
+                for (Map.Entry<Integer, Integer> entry : requestedByMenu.entrySet()) {
+                    int menuId = entry.getKey();
+                    int requested = entry.getValue();
+                    List<model.RecipeItem> recipes = recipeDao.getByMenuItemId(String.valueOf(menuId));
+                    int available = availableQuantity(recipes, stockMap, reservedMap.getOrDefault(menuId, 0));
+                    if (!recipes.isEmpty() && requested > available) {
+                        String itemName = menuNames.getOrDefault(menuId, "");
+                        if (available <= 0) {
+                            throw new IllegalArgumentException(itemName.isEmpty()
+                                    ? "Món hiện không còn đủ hàng để phục vụ."
+                                    : ("Món \"" + itemName + "\" hiện không còn đủ hàng để phục vụ."));
+                        }
+                        throw new IllegalArgumentException(itemName.isEmpty()
+                                ? ("Chỉ còn " + available + " suất, không đủ số lượng đã chọn.")
+                                : ("Món \"" + itemName + "\" chỉ còn " + available + " suất, không đủ số lượng đã chọn."));
+                    }
+                }
+
+                for (Map<String, Object> line : normalizedLines) {
+                    Map<String, Object> menu = (Map<String, Object>) line.get("menu");
+                    int menuId = readInt(line.get("menuId"), 0);
+                    String size = readString(line.get("size"), "");
+                    int quantity = readInt(line.get("quantity"), 0);
+                    int price = readInt(line.get("price"), 0);
                     total += price * quantity;
                     totalQuantity += quantity;
                     try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.OrderItems (orderId,menuItemId,itemName,itemSize,quantity,price) VALUES (?,?,?,?,?,?)")) {
@@ -1149,6 +1200,7 @@ public class LiteService {
                         orderCreateLogVi(actor, tableName, orderNumber, totalQuantity),
                         orderCreateLogEn(actor, tableName, orderNumber, totalQuantity),
                         orderId);
+                deactivateUnavailableMenuItems(con, requestedByMenu.keySet());
                 con.commit();
                 return getOrderById(orderId);
             } catch (Exception e) {
@@ -1260,6 +1312,7 @@ public class LiteService {
                     setStateValue(con, "cupsAvailable", cups - requiredCups);
                 }
                 deductInventoryForOrder(con, id);
+                deactivateUnavailableMenuItems(con, null);
             }
             if ("Served".equals(currentStatus) && "Paid".equals(status)) {
                 int notServedYet = countOpenOrders(con, tableName, "('Pending','Preparing','Ready')");
@@ -1310,6 +1363,105 @@ public class LiteService {
                 ps.executeUpdate();
             }
         }
+    }
+
+    public List<Map<String, Object>> getLowStockIngredients() throws Exception {
+        try (Connection con = db.getConnection()) {
+            return getLowStockIngredients(con);
+        }
+    }
+
+    public int refreshMenuAvailability() throws Exception {
+        try (Connection con = db.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                int disabled = deactivateUnavailableMenuItems(con, null);
+                con.commit();
+                return disabled;
+            } catch (Exception e) {
+                con.rollback();
+                throw e;
+            }
+        }
+    }
+
+    private List<Map<String, Object>> getLowStockIngredients(Connection con) throws Exception {
+        String sql = "SELECT id, name, unit, stock, minStock, importCost FROM dbo.Inventory "
+                + "WHERE stock <= minStock ORDER BY stock ASC, name ASC";
+        try (PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            return rows(rs);
+        }
+    }
+
+    private Map<String, Integer> getIngredientStockMap(Connection con) throws Exception {
+        Map<String, Integer> stock = new LinkedHashMap<>();
+        try (PreparedStatement ps = con.prepareStatement("SELECT id, stock FROM dbo.Inventory");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                stock.put(rs.getString("id"), Math.max(0, rs.getInt("stock")));
+            }
+        }
+        return stock;
+    }
+
+    private Map<Integer, Integer> getReservedMenuQuantityMap(Connection con) throws Exception {
+        Map<Integer, Integer> reserved = new LinkedHashMap<>();
+        String sql = "SELECT oi.menuItemId, SUM(oi.quantity) quantity "
+                + "FROM dbo.OrderItems oi "
+                + "JOIN dbo.Orders o ON o.id = oi.orderId "
+                + "WHERE o.status IN ('Pending','Preparing') AND oi.menuItemId IS NOT NULL AND oi.menuItemId > 0 "
+                + "GROUP BY oi.menuItemId";
+        try (PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                reserved.put(rs.getInt("menuItemId"), Math.max(0, rs.getInt("quantity")));
+            }
+        }
+        return reserved;
+    }
+
+    private int availableQuantity(List<model.RecipeItem> recipes, Map<String, Integer> stockMap, int reservedServings) {
+        if (recipes == null || recipes.isEmpty()) return MAX_ITEM_QUANTITY;
+        int maxByStock = Integer.MAX_VALUE;
+        boolean hasRequirement = false;
+        for (model.RecipeItem recipe : recipes) {
+            int need = Math.max(0, recipe.getQuantity());
+            if (need <= 0) continue;
+            hasRequirement = true;
+            int stock = stockMap.getOrDefault(recipe.getIngredientId(), 0);
+            maxByStock = Math.min(maxByStock, stock / need);
+        }
+        if (!hasRequirement) return MAX_ITEM_QUANTITY;
+        return Math.max(0, Math.min(MAX_ITEM_QUANTITY, maxByStock - Math.max(0, reservedServings)));
+    }
+
+    private int deactivateUnavailableMenuItems(Connection con, Collection<Integer> menuItemIds) throws Exception {
+        Map<String, Integer> stockMap = getIngredientStockMap(con);
+        Map<Integer, Integer> reservedMap = getReservedMenuQuantityMap(con);
+        dao.RecipeDAO recipeDao = new dao.RecipeDAO();
+        java.util.Map<String, java.util.List<model.RecipeItem>> allRecipes = recipeDao.getAllRecipesMappedByMenuItemId();
+        List<Integer> candidates = new ArrayList<>();
+        if (menuItemIds == null) {
+            try (PreparedStatement ps = con.prepareStatement("SELECT id FROM dbo.MenuItems WHERE active=1");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) candidates.add(rs.getInt("id"));
+            }
+        } else {
+            for (Integer id : menuItemIds) {
+                if (id != null && id > 0) candidates.add(id);
+            }
+        }
+        int disabled = 0;
+        for (Integer menuId : candidates) {
+            List<model.RecipeItem> recipes = allRecipes.getOrDefault(String.valueOf(menuId), new ArrayList<>());
+            if (recipes.isEmpty()) continue;
+            int available = availableQuantity(recipes, stockMap, reservedMap.getOrDefault(menuId, 0));
+            if (available > 0) continue;
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.MenuItems SET active=0 WHERE id=? AND active=1")) {
+                ps.setInt(1, menuId);
+                disabled += ps.executeUpdate();
+            }
+        }
+        return disabled;
     }
 
     private String nowSqlTimestamp() {
@@ -1957,6 +2109,7 @@ public class LiteService {
             stats.put("topProductsByRange", getTopProductsByRangeMap(con, customStart, customEnd));
             stats.put("rangeDetails", getRangeDetailsMap(con, customStart, customEnd));
             stats.put("revenueSeries", getRevenueSeriesMap(con, customStart, customEnd));
+            stats.put("lowStockItems", getLowStockIngredients(con));
             stats.put("today", today.toString());
             if (customStart != null && customEnd != null) {
                 stats.put("customStart", customStart.toString());
