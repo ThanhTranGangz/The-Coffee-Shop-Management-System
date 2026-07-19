@@ -323,7 +323,7 @@ public class LiteApiServlet extends HttpServlet {
                         break;
                     }
                     if ("runner".equals(printRole)) {
-                        String status = str(existingInvoice.get("status"));
+                        status = str(existingInvoice.get("status"));
                         if (!"Ready".equals(status) && !"Served".equals(status)) {
                             error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ in được hóa đơn đơn đang phục vụ.");
                             break;
