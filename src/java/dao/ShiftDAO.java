@@ -53,6 +53,38 @@ public class ShiftDAO {
         return shifts;
     }
 
+    public boolean existsOverlap(int staffId, String shiftDate, String shiftName, String excludeId) {
+        if (staffId <= 0 || shiftDate == null || shiftDate.isEmpty() || shiftName == null || shiftName.isEmpty()) {
+            return false;
+        }
+        String sql = "SELECT COUNT(*) FROM dbo.Shifts WHERE staffId=? AND shiftDate=? AND shiftName=?"
+                + (excludeId != null && !excludeId.isEmpty() ? " AND id<>?" : "");
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setInt(1, staffId);
+            st.setString(2, shiftDate);
+            st.setString(3, shiftName);
+            if (excludeId != null && !excludeId.isEmpty()) {
+                st.setString(4, excludeId);
+            }
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) return true;
+            }
+        } catch (Exception e) {
+            System.err.println("Database overlap check failed in ShiftDAO.existsOverlap(): " + e.getMessage());
+            for (Shift existing : fallbackShifts) {
+                if (existing.getStaffId() == staffId
+                        && shiftDate.equals(existing.getShiftDate())
+                        && shiftName.equals(existing.getShiftName())
+                        && (excludeId == null || excludeId.isEmpty() || !excludeId.equals(existing.getId()))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * Saves a new shift or updates an existing one in the database.
      * 
@@ -77,7 +109,8 @@ public class ShiftDAO {
             st.setString(8, shift.getAssignedRole());
             st.executeUpdate();
         } catch (Exception e) {
-            System.err.println("Database save failed in ShiftDAO.save(), updating fallback: " + e.getMessage());
+            System.err.println("Database save failed in ShiftDAO.save(): " + e.getMessage());
+            throw new IllegalStateException(e.getMessage(), e);
         }
 
         int idx = -1;

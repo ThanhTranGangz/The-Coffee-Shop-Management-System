@@ -49,6 +49,12 @@ public class LiteService {
             st.execute("IF OBJECT_ID('dbo.Staff','U') IS NULL CREATE TABLE dbo.Staff (id INT PRIMARY KEY, name NVARCHAR(120) NOT NULL, role VARCHAR(20) NOT NULL, pin VARCHAR(20) NULL, shift NVARCHAR(100) NULL, active BIT NOT NULL DEFAULT 1, username VARCHAR(50) NULL, password VARCHAR(100) NULL, status VARCHAR(30) NOT NULL DEFAULT 'Active', overtime BIT NOT NULL DEFAULT 0)");
             st.execute("IF OBJECT_ID('dbo.Shifts','U') IS NULL CREATE TABLE dbo.Shifts (id VARCHAR(50) PRIMARY KEY, staffId INT NOT NULL, staffName NVARCHAR(120) NOT NULL, shiftDate VARCHAR(20) NOT NULL, shiftName NVARCHAR(50) NOT NULL, hours VARCHAR(50) NOT NULL, status NVARCHAR(30) NOT NULL, notes NVARCHAR(255) NULL, assignedRole VARCHAR(30) NULL)");
             st.execute("IF COL_LENGTH('dbo.Shifts','assignedRole') IS NULL ALTER TABLE dbo.Shifts ADD assignedRole VARCHAR(30) NULL");
+            try {
+                st.execute("WITH d AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY staffId, shiftDate, shiftName ORDER BY id) rn FROM dbo.Shifts) DELETE FROM dbo.Shifts WHERE id IN (SELECT id FROM d WHERE rn > 1)");
+            } catch (Exception ignored) {}
+            try {
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Shifts_StaffDateName' AND object_id=OBJECT_ID('dbo.Shifts')) CREATE UNIQUE INDEX UX_Shifts_StaffDateName ON dbo.Shifts(staffId, shiftDate, shiftName)");
+            } catch (Exception ignored) {}
             seed(con);
         } catch (Exception e) {
             System.err.println("LiteService init failed: " + e.getMessage());

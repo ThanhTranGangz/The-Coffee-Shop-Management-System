@@ -370,27 +370,24 @@ public class LiteApiServlet extends HttpServlet {
                     }
                     dao.ShiftDAO shiftDAO = new dao.ShiftDAO();
                     String shiftId = str(body.get("id"));
-                    if (shiftId.isEmpty()) { shiftId = "s" + System.currentTimeMillis(); }
-                    
+                    boolean isNewShift = shiftId.isEmpty();
+                    if (isNewShift) {
+                        shiftId = "s" + System.currentTimeMillis() + "-" + Math.abs(java.util.UUID.randomUUID().toString().hashCode());
+                    }
+
                     int staffIdForShift = readInt(body.get("staffId"), 0);
                     String shiftDateForShift = str(body.get("date"));
                     String shiftNameForShift = str(body.get("shiftName"));
-                    
-                    boolean overlap = false;
-                    for (model.Shift existingShift : shiftDAO.getAll()) {
-                        if (existingShift.getStaffId() == staffIdForShift && 
-                            existingShift.getShiftDate().equals(shiftDateForShift) && 
-                            existingShift.getShiftName().equals(shiftNameForShift) &&
-                            !existingShift.getId().equals(shiftId)) {
-                            overlap = true;
-                            break;
-                        }
-                    }
-                    if (overlap) {
-                        error(resp, HttpServletResponse.SC_BAD_REQUEST, "Nhân viên đã được phân công vào ca này.");
+                    if (staffIdForShift <= 0 || shiftDateForShift.isEmpty() || shiftNameForShift.isEmpty()) {
+                        error(resp, HttpServletResponse.SC_BAD_REQUEST, "Thiếu thông tin phân công ca.");
                         return;
                     }
-                    
+
+                    if (shiftDAO.existsOverlap(staffIdForShift, shiftDateForShift, shiftNameForShift, isNewShift ? "" : shiftId)) {
+                        error(resp, HttpServletResponse.SC_BAD_REQUEST, "SHIFT_OVERLAP");
+                        return;
+                    }
+
                     model.Shift shift = new model.Shift(
                         shiftId,
                         staffIdForShift,
@@ -402,7 +399,15 @@ public class LiteApiServlet extends HttpServlet {
                         str(body.get("notes")),
                         str(body.get("assignedRole"))
                     );
-                    shiftDAO.save(shift);
+                    try {
+                        shiftDAO.save(shift);
+                    } catch (Exception saveErr) {
+                        if (shiftDAO.existsOverlap(staffIdForShift, shiftDateForShift, shiftNameForShift, isNewShift ? "" : shiftId)) {
+                            error(resp, HttpServletResponse.SC_BAD_REQUEST, "SHIFT_OVERLAP");
+                            return;
+                        }
+                        throw saveErr;
+                    }
                     java.util.Map<String, Object> sMap = new java.util.LinkedHashMap<>();
                     sMap.put("id", shift.getId());
                     sMap.put("staffId", shift.getStaffId());

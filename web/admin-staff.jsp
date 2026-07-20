@@ -8,7 +8,7 @@
         <title>Quản lý nhân viên - Admin</title>
         <meta name="page-title-key" content="staffAdminTitle">
         <link rel="stylesheet" href="assets/css/app.css?v=admin-staff-3">
-        <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
+        <script defer src="assets/js/i18n.js?v=i18n-sync-2"></script>
         <style>
             /* Custom styles for the staff calendar prototype */
             .staff-calendar {
@@ -407,7 +407,7 @@
                 }
             };
         </script>
-        <script src="assets/js/page-admin-staff.js?v=4"></script>
+        <script src="assets/js/page-admin-staff.js?v=5"></script>
     </body>
 
     </html>

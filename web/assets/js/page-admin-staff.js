@@ -39,7 +39,7 @@ async function fetchStaffAndShifts() {
         }
         const shiftResp = await fetch('api/shifts' + query);
         if (shiftResp.ok) {
-            shiftList = await shiftResp.json();
+            shiftList = dedupeShifts(await shiftResp.json());
         }
         populateStaffDropdown();
         renderCalendar();
@@ -47,6 +47,27 @@ async function fetchStaffAndShifts() {
     } catch (e) {
         console.error("Error fetching data", e);
     }
+}
+
+function dedupeShifts(list) {
+    const seen = new Set();
+    const result = [];
+    (Array.isArray(list) ? list : []).forEach(shift => {
+        const key = `${Number(shift.staffId)}|${shift.date}|${shift.shiftName}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        result.push(shift);
+    });
+    return result;
+}
+
+function availableStaffForShift(shiftName, dateStr, excludeStaffId) {
+    const taken = new Set(
+        shiftList
+            .filter(s => s.shiftName === shiftName && s.date === dateStr && Number(s.staffId) !== Number(excludeStaffId || 0))
+            .map(s => Number(s.staffId))
+    );
+    return staffList.filter(staff => isStaffActive(staff) && !taken.has(Number(staff.id)));
 }
 
 function scheduleRoles() {
@@ -63,15 +84,23 @@ function isStaffActive(staff) {
     return staff.active !== false && (status === 'Active' || status === '');
 }
 
-function populateStaffDropdown(includeStaffId) {
+function populateStaffDropdown(includeStaffId, shiftName, dateStr) {
     const select = document.getElementById('staffId');
     const keepId = includeStaffId ? Number(includeStaffId) : 0;
     select.innerHTML = `<option value="">${t('selectStaff')}</option>`;
-    staffList
+    const candidates = (shiftName && dateStr)
+        ? availableStaffForShift(shiftName, dateStr, keepId)
+        : staffList.filter(isStaffActive);
+
+    const keepStaff = keepId ? staffList.find(s => Number(s.id) === keepId) : null;
+    const list = keepStaff && !candidates.some(s => Number(s.id) === keepId)
+        ? [keepStaff, ...candidates]
+        : candidates;
+
+    list
         .slice()
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), lang() === 'en' ? 'en' : 'vi'))
         .forEach(staff => {
-            if (!isStaffActive(staff) && Number(staff.id) !== keepId) return;
             const option = document.createElement('option');
             option.value = staff.id;
             option.textContent = isStaffActive(staff)
@@ -148,11 +177,11 @@ function renderCalendar() {
                 const cell = document.createElement('div');
                 cell.className = `calendar-cell role-day-cell ${role.css}` + (roleIndex === roles.length - 1 && shiftIndex < fixedShifts.length - 1 ? ' shift-band-divider' : '');
 
-                const roleShifts = shiftList.filter(s =>
+                const roleShifts = dedupeShifts(shiftList.filter(s =>
                     s.shiftName === shiftData.name
                     && s.date === dateStr
                     && String(s.assignedRole || 'Barista') === role.id
-                );
+                ));
 
                 if (roleShifts.length) {
                     roleShifts.forEach(shift => {
@@ -209,7 +238,7 @@ function nextWeek() {
 
 function prepareAddShift(shiftName, dateStr, roleId) {
     document.getElementById('shiftId').value = '';
-    populateStaffDropdown();
+    populateStaffDropdown(0, shiftName, dateStr);
     document.getElementById('staffId').value = '';
     document.getElementById('shiftDate').value = dateStr;
     document.getElementById('shiftName').value = shiftName;
@@ -224,7 +253,7 @@ function prepareAddShift(shiftName, dateStr, roleId) {
 
 function editShift(shift) {
     document.getElementById('shiftId').value = shift.id;
-    populateStaffDropdown(shift.staffId);
+    populateStaffDropdown(shift.staffId, shift.shiftName, shift.date);
     document.getElementById('staffId').value = shift.staffId;
     document.getElementById('shiftDate').value = shift.date;
     document.getElementById('shiftName').value = shift.shiftName;
@@ -237,8 +266,27 @@ function editShift(shift) {
     document.getElementById('form-title').scrollIntoView({ behavior: 'smooth' });
 }
 
+let savingShift = false;
+
+function hasShiftOverlap(staffId, shiftDate, shiftName, excludeId) {
+    return shiftList.some(s =>
+        Number(s.staffId) === Number(staffId)
+        && String(s.date) === String(shiftDate)
+        && String(s.shiftName) === String(shiftName)
+        && String(s.id || '') !== String(excludeId || '')
+    );
+}
+
+function mapShiftError(raw) {
+    if (!raw) return t('shiftSaveFailed');
+    if (raw === 'SHIFT_OVERLAP' || /đã được phân công|already assigned/i.test(raw)) return t('shiftOverlap');
+    if (/Thiếu thông tin|incomplete/i.test(raw)) return t('shiftMissingInfo');
+    return raw;
+}
+
 async function saveShift(e) {
     e.preventDefault();
+    if (savingShift) return;
 
     const shiftId = document.getElementById('shiftId').value;
     const staffId = parseInt(document.getElementById('staffId').value, 10);
@@ -252,6 +300,16 @@ async function saveShift(e) {
     const shiftDate = document.getElementById('shiftDate').value;
     const status = document.getElementById('status').value;
     const assignedRole = document.getElementById('assignedRole').value || 'Barista';
+
+    if (!shiftDate || !shiftName) {
+        showNotice(t('shiftMissingInfo'), false);
+        return;
+    }
+
+    if (hasShiftOverlap(staffId, shiftDate, shiftName, shiftId)) {
+        showNotice(t('shiftOverlap'), false);
+        return;
+    }
 
     if (status === 'Đã làm' || status === 'Vắng') {
         const today = new Date();
@@ -279,6 +337,7 @@ async function saveShift(e) {
         status: status
     };
 
+    savingShift = true;
     try {
         const query = window.location.search;
         const resp = await fetch('api/shifts' + query, {
@@ -305,14 +364,16 @@ async function saveShift(e) {
             let message = t('shiftSaveFailed');
             try {
                 const parsed = JSON.parse(errText);
-                if (parsed && parsed.error) message = parsed.error;
+                if (parsed && parsed.error) message = mapShiftError(parsed.error);
             } catch (_) {
-                if (errText) message = errText;
+                if (errText) message = mapShiftError(errText);
             }
             showNotice(message, false);
         }
     } catch (err) {
         showNotice(t('networkErrorShort') + ': ' + err.message, false);
+    } finally {
+        savingShift = false;
     }
 }
 
