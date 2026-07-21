@@ -78,6 +78,127 @@ public class LiteService {
             st.execute("UPDATE dbo.Users SET role='admin', fullName=N'Quản trị coffeshop' WHERE username='admin'");
             st.execute("UPDATE dbo.Users SET password='1111', role='barista', fullName=N'Pha chế coffeshop' WHERE username='staff'");
         }
+        seedStaffAndShifts(con);
+    }
+
+    private void seedStaffAndShifts(Connection con) throws Exception {
+        // Step 1: Ensure at least 5 staff exist (use MERGE to avoid conflicts)
+        boolean hadStaff;
+        try (Statement st = con.createStatement()) {
+            java.sql.ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM dbo.Staff");
+            rs.next();
+            hadStaff = rs.getInt(1) > 0;
+        }
+
+        if (!hadStaff) {
+            String[][] staffData = {
+                {"1", "Nguyễn Văn An",   "staff", "1001", "", "1", "", "", "Active", "0"},
+                {"2", "Trần Thị Bích",   "staff", "1002", "", "1", "", "", "Active", "0"},
+                {"3", "Lê Hoàng Cường",  "staff", "1003", "", "1", "", "", "Active", "0"},
+                {"4", "Phạm Minh Đức",   "staff", "1004", "", "1", "", "", "Active", "0"},
+                {"5", "Hoàng Thị Em",    "staff", "1005", "", "1", "", "", "Active", "0"}
+            };
+
+            String staffSql = "MERGE dbo.Staff AS t USING (SELECT ? AS id) AS s ON t.id = s.id " +
+                               "WHEN NOT MATCHED THEN INSERT (id, name, role, pin, shift, active, username, password, status, overtime) " +
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+            try (java.sql.PreparedStatement ps = con.prepareStatement(staffSql)) {
+                for (String[] s : staffData) {
+                    int id = Integer.parseInt(s[0]);
+                    ps.setInt(1, id);
+                    ps.setInt(2, id);
+                    ps.setNString(3, s[1]);
+                    ps.setString(4, s[2]);
+                    ps.setString(5, s[3]);
+                    ps.setNString(6, s[4]);
+                    ps.setInt(7, Integer.parseInt(s[5]));
+                    ps.setString(8, s[6]);
+                    ps.setString(9, s[7]);
+                    ps.setString(10, s[8]);
+                    ps.setInt(11, Integer.parseInt(s[9]));
+                    ps.executeUpdate();
+                }
+            }
+            System.out.println("[LiteService] Seeded 5 staff members.");
+        }
+
+        // Step 2: Seed shifts for this week if none exist yet
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate monday = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        String mondayStr = monday.toString();
+        String sundayStr = monday.plusDays(6).toString();
+
+        // Check if this week already has any shifts
+        boolean weekHasShifts = false;
+        try (java.sql.PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.Shifts WHERE shiftDate BETWEEN ? AND ?")) {
+            ps.setString(1, mondayStr);
+            ps.setString(2, sundayStr);
+            java.sql.ResultSet rs = ps.executeQuery();
+            rs.next();
+            weekHasShifts = rs.getInt(1) > 0;
+        }
+
+        if (weekHasShifts) {
+            System.out.println("[LiteService] Week of " + mondayStr + " already has shifts, skipping seed.");
+            return;
+        }
+
+        // Load actual staff from DB to use their real IDs and names
+        java.util.List<int[]> staffIds = new java.util.ArrayList<>();
+        java.util.Map<Integer, String> staffNames = new java.util.LinkedHashMap<>();
+        try (Statement st = con.createStatement()) {
+            java.sql.ResultSet rs = st.executeQuery("SELECT TOP 5 id, name FROM dbo.Staff WHERE active=1 AND (status='Active' OR status IS NULL OR status='') ORDER BY id");
+            while (rs.next()) {
+                int sid = rs.getInt("id");
+                staffIds.add(new int[]{sid});
+                staffNames.put(sid, rs.getString("name"));
+            }
+        }
+
+        if (staffIds.size() < 3) {
+            System.out.println("[LiteService] Not enough active staff (" + staffIds.size() + ") to seed shifts.");
+            return;
+        }
+
+        // Build shift plan using actual staff IDs
+        String[][] roles = {{"Barista"}, {"Cashier"}, {"Waiter"}};
+        String[][] shifts = {
+            {"Ca Sáng",  "06:00 - 12:00"},
+            {"Ca Chiều", "12:00 - 18:00"},
+            {"Ca Tối",   "18:00 - 23:00"}
+        };
+
+        String shiftSql = "INSERT INTO dbo.Shifts (id, staffId, shiftDate, shiftName, hours, status, notes, assignedRole) " +
+                           "SELECT ?, ?, ?, ?, ?, N'Đã xếp lịch', '', ? " +
+                           "WHERE NOT EXISTS (SELECT 1 FROM dbo.Shifts WHERE staffId=? AND shiftDate=? AND shiftName=?)";
+        int count = 0;
+        try (java.sql.PreparedStatement ps = con.prepareStatement(shiftSql)) {
+            int staffCount = staffIds.size();
+            int rotateIdx = 0;
+            for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+                String date = monday.plusDays(dayOffset).toString();
+                for (String[] shift : shifts) {
+                    for (String[] role : roles) {
+                        int staffId = staffIds.get(rotateIdx % staffCount)[0];
+                        String staffName = staffNames.get(staffId);
+                        String shiftId = "seed-" + (++count) + "-" + System.currentTimeMillis();
+
+                        ps.setString(1, shiftId);
+                        ps.setInt(2, staffId);
+                        ps.setString(3, date);
+                        ps.setNString(4, shift[0]);
+                        ps.setString(5, shift[1]);
+                        ps.setString(6, role[0]);
+                        ps.setInt(7, staffId);
+                        ps.setString(8, date);
+                        ps.setNString(9, shift[0]);
+                        ps.executeUpdate();
+                        rotateIdx++;
+                    }
+                }
+            }
+        }
+        System.out.println("[LiteService] Seeded " + count + " shifts for week of " + mondayStr);
     }
 
     private void ensureStandardTables(Connection con) throws Exception {

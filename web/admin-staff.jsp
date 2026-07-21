@@ -197,6 +197,11 @@
                                 data-i18n-title="jumpToPayrollTitle" title="Trượt xuống Bảng chấm công" data-i18n="jumpToPayroll">
                                 Bảng Chấm Công
                             </button>
+                            <button class="btn" id="carryOverBtn" type="button" onclick="carryOverShifts()"
+                                style="background:#2e7d32; color:white; border:none; white-space:nowrap;"
+                                title="Sao chép lịch tuần này sang tuần tới" data-i18n="carryOverShifts">
+                                📋 Sao chép → Tuần sau
+                            </button>
                             <button class="btn" onclick="prevWeek()" data-i18n="prevWeek">&lt; Tuần trước</button>
                             <button class="btn" onclick="nextWeek()" data-i18n="nextWeek">Tuần sau &gt;</button>
                         </div>

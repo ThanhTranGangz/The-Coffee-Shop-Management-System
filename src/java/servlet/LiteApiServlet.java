@@ -11,6 +11,7 @@ import com.google.zxing.EncodeHintType;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
 import service.LiteService;
+import service.ShiftAutoScheduler;
 import utils.ExcelUtils;
 import utils.JsonUtils;
 
@@ -427,6 +428,23 @@ public class LiteApiServlet extends HttpServlet {
                     }
                     new dao.ShiftDAO().delete(str(body.get("id")));
                     resp.getWriter().write("{\"success\":true}");
+                    break;
+                case "/shifts/carry-over":
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được sao chép lịch.");
+                        return;
+                    }
+                    java.time.LocalDate todayForCarry = java.time.LocalDate.now();
+                    java.time.LocalDate currentMon = todayForCarry.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                    java.time.LocalDate nextMon = currentMon.plusWeeks(1);
+                    int copied = ShiftAutoScheduler.carryOver(currentMon.toString(), nextMon.toString());
+                    java.util.Map<String, Object> carryResult = new java.util.LinkedHashMap<>();
+                    carryResult.put("success", true);
+                    carryResult.put("copied", copied);
+                    if (copied == 0) {
+                        carryResult.put("message", "Tuần tới đã có lịch hoặc tuần này chưa có lịch.");
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(carryResult));
                     break;
                 case "/staff/save":
                     if (!"admin".equals(role(req))) {

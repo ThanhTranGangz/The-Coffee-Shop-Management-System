@@ -236,6 +236,45 @@ function nextWeek() {
     renderCalendar();
 }
 
+async function carryOverShifts() {
+    if (!confirm('Bạn muốn sao chép toàn bộ lịch tuần này sang tuần tới?\n\n(Nếu tuần tới đã có lịch, hệ thống sẽ không thực hiện)')) {
+        return;
+    }
+
+    const btn = document.getElementById('carryOverBtn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Đang xử lý...';
+
+    try {
+        const query = window.location.search;
+        const resp = await fetch('api/shifts/carry-over' + query, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+        });
+
+        if (resp.ok) {
+            const result = await resp.json();
+            if (result.copied > 0) {
+                showNotice('✅ Đã sao chép ' + result.copied + ' ca làm sang tuần tới!');
+                // Refresh shift data
+                await fetchStaffAndShifts();
+            } else {
+                showNotice(result.message || 'Tuần tới đã có lịch hoặc tuần này chưa có lịch.', false);
+            }
+        } else {
+            const err = await resp.json().catch(() => ({}));
+            showNotice(err.error || 'Sao chép lịch thất bại.', false);
+        }
+    } catch (err) {
+        showNotice('Lỗi kết nối: ' + err.message, false);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
 function prepareAddShift(shiftName, dateStr, roleId) {
     document.getElementById('shiftId').value = '';
     populateStaffDropdown(0, shiftName, dateStr);

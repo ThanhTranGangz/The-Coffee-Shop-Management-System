@@ -181,4 +181,71 @@ public class ShiftDAO {
         }
         return payroll;
     }
+
+    /**
+     * Retrieves all shifts for a specific week (Monday to Sunday).
+     *
+     * @param mondayDate the Monday date in 'YYYY-MM-DD' format
+     * @return a list of shifts within the week
+     */
+    public List<Shift> getShiftsByWeek(String mondayDate) {
+        List<Shift> shifts = new ArrayList<>();
+        // Calculate Sunday = Monday + 6 days
+        java.time.LocalDate monday = java.time.LocalDate.parse(mondayDate);
+        String sundayDate = monday.plusDays(6).toString();
+
+        String sql = "SELECT s.id, s.staffId, st.name as staffName, s.shiftDate, s.shiftName, s.hours, s.status, s.notes, s.assignedRole " +
+                     "FROM dbo.Shifts s JOIN dbo.Staff st ON s.staffId = st.id " +
+                     "WHERE s.shiftDate BETWEEN ? AND ? " +
+                     "ORDER BY s.shiftDate, s.shiftName";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, mondayDate);
+            st.setString(2, sundayDate);
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    shifts.add(new Shift(
+                        rs.getString("id"),
+                        rs.getInt("staffId"),
+                        rs.getString("staffName"),
+                        rs.getString("shiftDate"),
+                        rs.getString("shiftName"),
+                        rs.getString("hours"),
+                        rs.getString("status"),
+                        rs.getString("notes"),
+                        rs.getString("assignedRole")
+                    ));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Database fetch failed in ShiftDAO.getShiftsByWeek(): " + e.getMessage());
+        }
+        return shifts;
+    }
+
+    /**
+     * Checks whether any shifts exist for a specific week (Monday to Sunday).
+     *
+     * @param mondayDate the Monday date in 'YYYY-MM-DD' format
+     * @return true if at least one shift exists in the week
+     */
+    public boolean hasShiftsInWeek(String mondayDate) {
+        java.time.LocalDate monday = java.time.LocalDate.parse(mondayDate);
+        String sundayDate = monday.plusDays(6).toString();
+
+        String sql = "SELECT COUNT(*) FROM dbo.Shifts WHERE shiftDate BETWEEN ? AND ?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, mondayDate);
+            st.setString(2, sundayDate);
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) return true;
+            }
+        } catch (Exception e) {
+            System.err.println("Database check failed in ShiftDAO.hasShiftsInWeek(): " + e.getMessage());
+        }
+        return false;
+    }
 }
