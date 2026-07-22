@@ -442,7 +442,7 @@ public class LiteApiServlet extends HttpServlet {
                     carryResult.put("success", true);
                     carryResult.put("copied", copied);
                     if (copied == 0) {
-                        carryResult.put("message", "Tuần tới đã có lịch hoặc tuần này chưa có lịch.");
+                        carryResult.put("message", "Không có ca làm mới nào được sao chép (tuần này chưa có lịch hoặc tất cả các ca đều đã tồn tại ở tuần tới).");
                     }
                     resp.getWriter().write(JsonUtils.toJson(carryResult));
                     break;

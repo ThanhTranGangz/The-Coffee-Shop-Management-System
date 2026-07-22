@@ -47,12 +47,6 @@ public class ShiftAutoScheduler {
      * @return the number of shifts copied, or 0 if the target week already has shifts
      */
     public static int carryOver(String sourceMondayDate, String targetMondayDate) {
-        // Check if target week already has shifts
-        if (shiftDAO.hasShiftsInWeek(targetMondayDate)) {
-            System.out.println("[ShiftAutoScheduler] Target week " + targetMondayDate + " already has shifts. Skipping.");
-            return 0;
-        }
-
         // Get all shifts from the source week
         List<Shift> sourceShifts = shiftDAO.getShiftsByWeek(sourceMondayDate);
         if (sourceShifts.isEmpty()) {
@@ -63,12 +57,26 @@ public class ShiftAutoScheduler {
         LocalDate sourceMonday = LocalDate.parse(sourceMondayDate);
         LocalDate targetMonday = LocalDate.parse(targetMondayDate);
 
+        // Pre-calculate which shift slots are already filled in the target week
+        // We only want to skip copying if the slot was filled BEFORE the copy started.
+        List<Shift> targetShifts = shiftDAO.getShiftsByWeek(targetMondayDate);
+        java.util.Set<String> preFilledSlots = new java.util.HashSet<>();
+        for (Shift s : targetShifts) {
+            preFilledSlots.add(s.getShiftDate() + "_" + s.getShiftName());
+        }
+
         int copied = 0;
         for (Shift source : sourceShifts) {
             // Calculate new date: shift date + 7 days (difference between target and source week)
             LocalDate sourceDate = LocalDate.parse(source.getShiftDate());
             long dayOffset = sourceDate.getDayOfWeek().getValue() - DayOfWeek.MONDAY.getValue();
             LocalDate targetDate = targetMonday.plusDays(dayOffset);
+
+            // Check if this specific shift slot was ALREADY filled before we started copying
+            String slotKey = targetDate.toString() + "_" + source.getShiftName();
+            if (preFilledSlots.contains(slotKey)) {
+                continue; // Skip this one, because the slot was already manually scheduled
+            }
 
             // Create new shift with new ID, new date, status reset, notes cleared
             String newId = "s" + System.currentTimeMillis() + "-" + Math.abs(UUID.randomUUID().toString().hashCode());

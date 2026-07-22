@@ -86,6 +86,33 @@ public class ShiftDAO {
     }
 
     /**
+     * Checks if a specific shift slot (date + shiftName) already has ANY staff assigned.
+     */
+    public boolean isShiftSlotFilled(String shiftDate, String shiftName) {
+        if (shiftDate == null || shiftDate.isEmpty() || shiftName == null || shiftName.isEmpty()) {
+            return false;
+        }
+        String sql = "SELECT COUNT(*) FROM dbo.Shifts WHERE shiftDate=? AND shiftName=?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, shiftDate);
+            st.setString(2, shiftName);
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) return true;
+            }
+        } catch (Exception e) {
+            System.err.println("Database check failed in ShiftDAO.isShiftSlotFilled(): " + e.getMessage());
+            for (Shift existing : fallbackShifts) {
+                if (shiftDate.equals(existing.getShiftDate()) && shiftName.equals(existing.getShiftName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Saves a new shift or updates an existing one in the database.
      * 
      * @param shift the shift to save or update
