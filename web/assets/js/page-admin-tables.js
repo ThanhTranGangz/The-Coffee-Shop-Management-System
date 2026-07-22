@@ -1,4 +1,4 @@
-        let tables = [];
+﻿        let tables = [];
 
         document.addEventListener('DOMContentLoaded', () => {
             const baseInput = document.getElementById('base-url');
@@ -40,7 +40,7 @@
 
         window.renderPage = function() {
             const list = document.getElementById('table-list');
-            const visibleTables = tables.filter(table => table.floorNo && table.tableNo);
+            const visibleTables = tables.filter(table => true);
             list.innerHTML = visibleTables.map(table => `
                 <article class="card qr-card ${table.active ? '' : 'inactive'}">
                     <div class="qr-preview">

@@ -66,18 +66,13 @@ public class AuthServlet extends HttpServlet {
             String role = session != null ? (String) session.getAttribute("auth_role") : null;
             String user = session != null ? (String) session.getAttribute("auth_user") : null;
             String username = session != null ? (String) session.getAttribute("auth_username") : null;
-            String memberPhone = session != null ? (String) session.getAttribute("member_phone") : null;
 
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("authenticated", role != null);
             payload.put("role", role);
             payload.put("user", user);
-                        payload.put("memberAuthenticated", memberPhone != null);
-            payload.put("memberPhone", memberPhone);
-            if (memberPhone != null) {
-                model.Member member = stateService.getMemberByPhone(memberPhone);
-                payload.put("memberName", member != null ? member.getName() : memberPhone);
-            }
+
+            
             resp.getWriter().write(JsonUtils.toJson(payload));
             return;
         }

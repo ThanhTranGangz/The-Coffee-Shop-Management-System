@@ -70,15 +70,7 @@ public class BrewApiServlet extends HttpServlet {
             case "/menu":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getMenu()));
                 break;
-            case "/vouchers":
-                HttpSession session = req.getSession(false);
-                String role = session != null ? (String) session.getAttribute("auth_role") : null;
-                if ("manager".equals(role)) {
-                    resp.getWriter().write(JsonUtils.toJson(stateService.getVouchers()));
-                } else {
-                    resp.getWriter().write(JsonUtils.toJson(stateService.getActiveVouchers()));
-                }
-                break;
+
             case "/tables":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getTables()));
                 break;
@@ -119,24 +111,7 @@ public class BrewApiServlet extends HttpServlet {
             case "/shifts":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getShifts()));
                 break;
-            case "/members":
-                resp.getWriter().write(JsonUtils.toJson(stateService.getMembers()));
-                break;
-            case "/members/profile":
-                String phone = req.getParameter("phone");
-                if (phone != null) {
-                    Member m = stateService.getMemberByPhone(phone);
-                    if (m != null) {
-                        resp.getWriter().write(JsonUtils.toJson(m));
-                    } else {
-                        resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                        resp.getWriter().write("{\"error\": \"Không tìm thấy thành viên!\"}");
-                    }
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                    resp.getWriter().write("{\"error\": \"Missing phone parameter.\"}");
-                }
-                break;
+
             case "/reports/historical":
                 resp.getWriter().write(JsonUtils.toJson(stateService.getHistoricalReports()));
                 break;
@@ -189,22 +164,6 @@ public class BrewApiServlet extends HttpServlet {
                 stateService.deleteMenuItem(id);
                 resp.getWriter().write("{\"message\": \"Menu item deleted.\"}");
 
-            } else if (pathInfo.equals("/vouchers")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String code = (String) reqMap.get("code");
-                String name = (String) reqMap.get("name");
-                int discountAmount = readInt(reqMap.get("discountAmount"), 0);
-                int pointCost = readInt(reqMap.get("pointCost"), 0);
-                boolean active = readBoolean(reqMap.get("active"), true);
-
-                Voucher voucher = stateService.saveVoucher(code, name, discountAmount, pointCost, active);
-                resp.getWriter().write(JsonUtils.toJson(voucher));
-
-            } else if (pathInfo.equals("/vouchers/delete")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String code = (String) reqMap.get("code");
-                stateService.deleteVoucher(code);
-                resp.getWriter().write("{\"message\": \"Voucher deleted.\"}");
 
             } else if (pathInfo.equals("/orders")) {
                 int currentHour = java.time.LocalTime.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).getHour();
@@ -220,11 +179,7 @@ public class BrewApiServlet extends HttpServlet {
                 String tableCode = (String) reqMap.get("tableCode");
                 List<Map<String, Object>> items = (List<Map<String, Object>>) reqMap.get("items");
                 String notes = (String) reqMap.getOrDefault("notes", "");
-                String memberPhone = (String) reqMap.get("memberPhone");
-                String appliedVoucherCode = (String) reqMap.get("appliedVoucherCode");
-                HttpSession memberSession = req.getSession(false);
-                String sessionMemberPhone = memberSession != null ? (String) memberSession.getAttribute("member_phone") : null;
-                boolean validMemberSession = memberPhone != null && memberPhone.equals(sessionMemberPhone);
+
 
                 if ((tableId == null || tableId.trim().isEmpty()) && tableCode != null) {
                     Table codedTable = stateService.getTableByCode(tableCode);
@@ -240,23 +195,8 @@ public class BrewApiServlet extends HttpServlet {
                 }
 
                 int discountAmount = 0;
-                if (validMemberSession && appliedVoucherCode != null && !appliedVoucherCode.trim().isEmpty()) {
-                    Member member = stateService.getMemberByPhone(memberPhone);
-                    if (member != null && member.getVouchers().contains(appliedVoucherCode)) {
-                        discountAmount = stateService.getVoucherValue(appliedVoucherCode);
-                    }
-                }
-
                 String orderNotes = notes == null ? "" : notes;
-                if (discountAmount > 0 && appliedVoucherCode != null && !appliedVoucherCode.trim().isEmpty()) {
-                    String voucherNote = "Voucher " + appliedVoucherCode.trim() + " chiết khấu " + discountAmount + " VND";
-                    orderNotes = orderNotes.trim().isEmpty() ? voucherNote : orderNotes + " | " + voucherNote;
-                }
-
                 Order newOrder = stateService.placeOrder(tableId, items, orderNotes, discountAmount);
-                if (validMemberSession) {
-                    stateService.recordMemberOrder(memberPhone, appliedVoucherCode, newOrder.getTotalAmount());
-                }
                 resp.setStatus(HttpServletResponse.SC_CREATED);
                 resp.getWriter().write(JsonUtils.toJson(newOrder));
 
@@ -508,98 +448,7 @@ public class BrewApiServlet extends HttpServlet {
                 }
                 stateService.deleteShift(id);
                 resp.getWriter().write("{\"message\": \"Shift deleted successfully.\"}");
-            } else if (pathInfo.equals("/members")) {
-                Map<String, Object> mData = JsonUtils.parseObject(body);
-                String mPhone = (String) mData.get("phone");
-                String mName = (String) mData.get("name");
-                String mRank = (String) mData.getOrDefault("rank", "Silver");
-                int mPoints = mData.containsKey("points") ? ((Number) mData.get("points")).intValue() : 50;
-                String mEmail = (String) mData.getOrDefault("email", "");
-                String mPref = (String) mData.getOrDefault("pref", "Espresso");
-                String mDiscount = (String) mData.getOrDefault("discount", "Giảm 5% tổng hoá đơn");
 
-                Member member = new Member(mPhone, mName, mRank, mPoints, mEmail, mPref, mDiscount);
-                stateService.saveMember(member);
-                resp.getWriter().write(JsonUtils.toJson(member));
-            } else if (pathInfo.equals("/members/delete")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String phone = (String) reqMap.get("phone");
-                stateService.deleteMember(phone);
-                resp.getWriter().write("{\"message\": \"Member deleted.\"}");
-            } else if (pathInfo.equals("/members/points")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String phone = (String) reqMap.get("phone");
-                int points = readInt(reqMap.get("points"), 0);
-                Member member = stateService.addMemberPoints(phone, points);
-                resp.getWriter().write(JsonUtils.toJson(member));
-            } else if (pathInfo.equals("/members/voucher")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String phone = (String) reqMap.get("phone");
-                String code = (String) reqMap.get("code");
-                Member member = stateService.giftVoucherToMember(phone, code);
-                resp.getWriter().write(JsonUtils.toJson(member));
-            } else if (pathInfo.equals("/members/login")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String lPhone = (String) reqMap.get("phone");
-                String lPassword = (String) reqMap.get("password");
-                Member m = stateService.authenticateMember(lPhone, lPassword);
-                if (m != null) {
-                    HttpSession session = req.getSession(true);
-                    session.removeAttribute("auth_role");
-                    session.removeAttribute("auth_user");
-                    session.removeAttribute("auth_username");
-                    session.setAttribute("member_phone", m.getPhone());
-                    resp.getWriter().write(JsonUtils.toJson(m));
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    resp.getWriter().write("{\"error\": \"Sai số điện thoại hoặc mật khẩu!\"}");
-                }
-            } else if (pathInfo.equals("/members/register")) {
-                Map<String, Object> mData = JsonUtils.parseObject(body);
-                String mPhone = (String) mData.get("phone");
-                String mName = (String) mData.get("name");
-                String mPassword = (String) mData.getOrDefault("password", "123456");
-                String mEmail = (String) mData.getOrDefault("email", "");
-                String mPref = (String) mData.getOrDefault("pref", "Espresso");
-
-                Member existing = stateService.getMemberByPhone(mPhone);
-                if (existing != null) {
-                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                    resp.getWriter().write("{\"error\": \"Số điện thoại đã tồn tại!\"}");
-                } else {
-                    Member newM = new Member(mPhone, mName, "Silver", 50, mEmail, mPref, "Giảm 5% tổng hoá đơn");
-                    stateService.saveMember(newM, mPassword);
-                    HttpSession session = req.getSession(true);
-                    session.removeAttribute("auth_role");
-                    session.removeAttribute("auth_user");
-                    session.removeAttribute("auth_username");
-                    session.setAttribute("member_phone", newM.getPhone());
-                    resp.getWriter().write(JsonUtils.toJson(newM));
-                }
-            } else if (pathInfo.equals("/members/logout")) {
-                HttpSession session = req.getSession(false);
-                if (session != null) {
-                    session.removeAttribute("member_phone");
-                }
-                resp.getWriter().write("{\"message\": \"Member logged out.\"}");
-            } else if (pathInfo.equals("/members/redeem")) {
-                Map<String, Object> reqMap = JsonUtils.parseObject(body);
-                String rPhone = (String) reqMap.get("phone");
-                String code = (String) reqMap.get("code");
-                HttpSession session = req.getSession(false);
-                String sessionPhone = session != null ? (String) session.getAttribute("member_phone") : null;
-                if (sessionPhone == null || !sessionPhone.equals(rPhone)) {
-                    resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    resp.getWriter().write("{\"error\": \"Vui lòng đăng nhập đúng tài khoản hội viên.\"}");
-                    return;
-                }
-                if (stateService.redeemVoucher(rPhone, code)) {
-                    Member rMember = stateService.getMemberByPhone(rPhone);
-                    resp.getWriter().write(JsonUtils.toJson(rMember));
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                    resp.getWriter().write("{\"error\": \"Không đủ điểm hoặc mã voucher không hợp lệ.\"}");
-                }
             } else if (pathInfo.equals("/shop/toggle")) {
                 Map<String, Object> reqMap = JsonUtils.parseObject(body);
                 boolean closed = (Boolean) reqMap.get("closed");

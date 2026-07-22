@@ -4,10 +4,9 @@ import dao.MenuDAO;
 import dao.TableDAO;
 import dao.OrderDAO;
 import dao.StaffDAO;
-import dao.MemberDAO;
 import dao.InventoryDAO;
 import dao.ShiftDAO;
-import dao.VoucherDAO;
+
 import service.BrewStateService;
 import websocket.BrewWebSocketHandler;
 
@@ -23,10 +22,9 @@ public class AppContext {
     private final TableDAO tableDAO;
     private final OrderDAO orderDAO;
     private final StaffDAO staffDAO;
-    private final MemberDAO memberDAO;
+
     private final InventoryDAO inventoryDAO;
     private final ShiftDAO shiftDAO;
-    private final VoucherDAO voucherDAO;
     private final BrewStateService stateService;
     private final BrewWebSocketHandler webSocketHandler;
 
@@ -34,13 +32,11 @@ public class AppContext {
         this.menuDAO = new MenuDAO();
         this.tableDAO = new TableDAO();
         this.orderDAO = new OrderDAO();
-        this.staffDAO = new StaffDAO();
-        this.memberDAO = new MemberDAO();
+        this.staffDAO = new StaffDAO(); 
         this.inventoryDAO = new InventoryDAO();
         this.shiftDAO = new ShiftDAO();
-        this.voucherDAO = new VoucherDAO();
         this.webSocketHandler = new BrewWebSocketHandler();
-        this.stateService = new BrewStateService(menuDAO, tableDAO, orderDAO, staffDAO, memberDAO, inventoryDAO, shiftDAO, voucherDAO, webSocketHandler);
+        this.stateService = new BrewStateService(menuDAO, tableDAO, orderDAO, staffDAO, inventoryDAO, shiftDAO, webSocketHandler);
     }
 
     /**
@@ -63,10 +59,10 @@ public class AppContext {
     public TableDAO getTableDAO() { return tableDAO; }
     public OrderDAO getOrderDAO() { return orderDAO; }
     public StaffDAO getStaffDAO() { return staffDAO; }
-    public MemberDAO getMemberDAO() { return memberDAO; }
+
     public InventoryDAO getInventoryDAO() { return inventoryDAO; }
     public ShiftDAO getShiftDAO() { return shiftDAO; }
-    public VoucherDAO getVoucherDAO() { return voucherDAO; }
+
     public BrewStateService getStateService() { return stateService; }
     public BrewWebSocketHandler getWebSocketHandler() { return webSocketHandler; }
 }

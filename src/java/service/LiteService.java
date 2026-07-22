@@ -1121,8 +1121,8 @@ public class LiteService {
     }
 
     private List<Map<String, Object>> getTables(boolean includeInactive) throws Exception {
-        String where = includeInactive ? "WHERE floorNo IS NOT NULL AND tableNo IS NOT NULL " : "WHERE active=1 AND floorNo IS NOT NULL AND tableNo IS NOT NULL ";
-        String sql = "SELECT id, name, code, active FROM dbo.Tables " + where + "ORDER BY floorNo, tableNo";
+        String where = includeInactive ? "" : "WHERE active=1 ";
+        String sql = "SELECT id, name, code, active FROM dbo.Tables " + where + "ORDER BY name";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             return rows(rs);
         }

@@ -32,7 +32,7 @@ public class BrewStateService {
     private final TableDAO tableDAO;
     private final OrderDAO orderDAO;
     private final dao.StaffDAO staffDAO;
-    private final dao.MemberDAO memberDAO;
+
     private final dao.ShiftDAO shiftDAO;
     private final BrewWebSocketHandler webSocketHandler;
     private final AtomicInteger orderCounter = new AtomicInteger(100);
@@ -54,7 +54,7 @@ public class BrewStateService {
     }
 
     private final dao.InventoryDAO inventoryDAO;
-    private final dao.VoucherDAO voucherDAO;
+
     private final List<Ingredient> inventory = new ArrayList<>();
     private final List<Expense> expenses = new ArrayList<>();
     private final Map<String, List<RecipeRequirement>> recipes = new HashMap<>();
@@ -72,15 +72,15 @@ public class BrewStateService {
      * @param voucherDAO data access for vouchers
      * @param webSocketHandler the websocket handler
      */
-    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.MemberDAO memberDAO, dao.InventoryDAO inventoryDAO, dao.ShiftDAO shiftDAO, dao.VoucherDAO voucherDAO, BrewWebSocketHandler webSocketHandler) {
+    public BrewStateService(MenuDAO menuDAO, TableDAO tableDAO, OrderDAO orderDAO, dao.StaffDAO staffDAO, dao.InventoryDAO inventoryDAO, dao.ShiftDAO shiftDAO, BrewWebSocketHandler webSocketHandler) {
         this.menuDAO = menuDAO;
         this.tableDAO = tableDAO;
         this.orderDAO = orderDAO;
         this.staffDAO = staffDAO;
-        this.memberDAO = memberDAO;
+
         this.inventoryDAO = inventoryDAO;
         this.shiftDAO = shiftDAO;
-        this.voucherDAO = voucherDAO;
+
         this.webSocketHandler = webSocketHandler;
         
         // Initialize Inventory and Recipe models
@@ -385,46 +385,10 @@ public class BrewStateService {
         return clean;
     }
 
-    public List<Voucher> getVouchers() {
-        return voucherDAO.getAll();
-    }
-
-    public List<Voucher> getActiveVouchers() {
-        return voucherDAO.getActive();
-    }
-
-    public synchronized Voucher saveVoucher(String code, String name, int discountAmount, int pointCost, boolean active) {
-        if (code == null || code.trim().isEmpty()) {
-            throw new IllegalArgumentException("Mã voucher không được để trống.");
-        }
-        if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("Tên voucher không được để trống.");
-        }
-        if (discountAmount <= 0) {
-            throw new IllegalArgumentException("Mức giảm phải lớn hơn 0.");
-        }
-        if (pointCost <= 0) {
-            throw new IllegalArgumentException("Giá đổi voucher phải lớn hơn 0.");
-        }
-
-        String cleanCode = code.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "");
-        if (cleanCode.isEmpty()) {
-            throw new IllegalArgumentException("Mã voucher chỉ nên gồm chữ, số, dấu gạch ngang hoặc gạch dưới.");
-        }
-        Voucher voucher = new Voucher(cleanCode, name.trim(), discountAmount, pointCost, active);
-        voucherDAO.save(voucher);
-        notifyStateChange();
-        return voucher;
-    }
-
-    public synchronized void deleteVoucher(String code) {
-        if (code == null || code.trim().isEmpty()) {
-            throw new IllegalArgumentException("Thiếu mã voucher cần xoá.");
-        }
-        voucherDAO.delete(code.trim().toUpperCase(Locale.ROOT));
-        notifyStateChange();
-    }
-
+    
+    
+    
+    
     public List<Table> getTables() {
         return tableDAO.getAll();
     }
@@ -1167,148 +1131,18 @@ public class BrewStateService {
     }
 
     // ==================== MEMBER LOGIC METHODS ====================
-    public synchronized List<Member> getMembers() {
-        return memberDAO.getAll();
-    }
-
-    public synchronized Member getMemberByPhone(String phone) {
-        return memberDAO.getByPhone(phone);
-    }
-
-    public synchronized Member authenticateMember(String phone, String password) {
-        if (phone == null || password == null) {
-            return null;
-        }
-        return memberDAO.authenticate(phone.trim(), password);
-    }
-
-    public synchronized void saveMember(Member m) {
-        memberDAO.save(m);
-        notifyStateChange();
-    }
-
-    public synchronized void saveMember(Member m, String password) {
-        memberDAO.saveWithPassword(m, password);
-        notifyStateChange();
-    }
-
-    public synchronized void deleteMember(String phone) {
-        if (phone == null || phone.trim().isEmpty()) {
-            throw new IllegalArgumentException("Thiếu số điện thoại khách hàng cần xoá.");
-        }
-        Member existing = memberDAO.getByPhone(phone.trim());
-        if (existing == null) {
-            throw new IllegalArgumentException("Không tìm thấy khách hàng cần xoá.");
-        }
-        memberDAO.delete(phone.trim());
-        notifyStateChange();
-    }
-
-    public synchronized Member addMemberPoints(String phone, int points) {
-        if (phone == null || phone.trim().isEmpty()) {
-            throw new IllegalArgumentException("Thiếu số điện thoại khách hàng.");
-        }
-        if (points <= 0) {
-            throw new IllegalArgumentException("Số điểm cộng phải lớn hơn 0.");
-        }
-        Member member = memberDAO.getByPhone(phone.trim());
-        if (member == null) {
-            throw new IllegalArgumentException("Không tìm thấy khách hàng.");
-        }
-        member.setPoints(member.getPoints() + points);
-        member.setRank(rankForPoints(member.getPoints()));
-        memberDAO.save(member);
-        notifyStateChange();
-        return member;
-    }
-
-    public synchronized Member giftVoucherToMember(String phone, String code) {
-        if (phone == null || phone.trim().isEmpty()) {
-            throw new IllegalArgumentException("Thiếu số điện thoại khách hàng.");
-        }
-        if (code == null || code.trim().isEmpty()) {
-            throw new IllegalArgumentException("Thiếu mã voucher cần tặng.");
-        }
-        String cleanCode = code.trim().toUpperCase(Locale.ROOT);
-        Voucher voucher = voucherDAO.getByCode(cleanCode);
-        if (voucher == null || !voucher.isActive()) {
-            throw new IllegalArgumentException("Voucher không tồn tại hoặc đang tắt.");
-        }
-        Member member = memberDAO.getByPhone(phone.trim());
-        if (member == null) {
-            throw new IllegalArgumentException("Không tìm thấy khách hàng.");
-        }
-        if (!member.getVouchers().contains(cleanCode)) {
-            member.getVouchers().add(cleanCode);
-        }
-        memberDAO.save(member);
-        notifyStateChange();
-        return member;
-    }
-
-    public int getVoucherValue(String code) {
-        Voucher voucher = voucherDAO.getByCode(code);
-        if (voucher == null || !voucher.isActive()) {
-            return 0;
-        }
-        return voucher.getDiscountAmount();
-    }
-
-    public int getVoucherCost(String code) {
-        Voucher voucher = voucherDAO.getByCode(code);
-        if (voucher == null || !voucher.isActive()) {
-            return 0;
-        }
-        return voucher.getPointCost();
-    }
-
-    public synchronized void recordMemberOrder(String phone, String voucherCode, int paidAmount) {
-        if (phone == null || phone.trim().isEmpty()) {
-            return;
-        }
-        Member member = memberDAO.getByPhone(phone.trim());
-        if (member == null) {
-            return;
-        }
-
-        if (voucherCode != null && !voucherCode.trim().isEmpty() && member.getVouchers().contains(voucherCode)) {
-            member.getVouchers().remove(voucherCode);
-        }
-
-        if (paidAmount > 0) {
-            int earnedPoints = Math.max(1, paidAmount / 10000);
-            member.setPoints(member.getPoints() + earnedPoints);
-            member.setRank(rankForPoints(member.getPoints()));
-        }
-
-        memberDAO.save(member);
-        notifyStateChange();
-    }
-
-    public synchronized boolean redeemVoucher(String phone, String code) {
-        if (phone == null || code == null) {
-            return false;
-        }
-        int cost = getVoucherCost(code);
-        if (cost <= 0) {
-            return false;
-        }
-
-        Member member = memberDAO.getByPhone(phone.trim());
-        if (member == null || member.getPoints() < cost) {
-            return false;
-        }
-
-        member.setPoints(member.getPoints() - cost);
-        member.setRank(rankForPoints(member.getPoints()));
-        if (!member.getVouchers().contains(code)) {
-            member.getVouchers().add(code);
-        }
-        memberDAO.save(member);
-        notifyStateChange();
-        return true;
-    }
-
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     private String rankForPoints(int points) {
         if (points >= 700) return "Platinum";
         if (points >= 300) return "Gold";
