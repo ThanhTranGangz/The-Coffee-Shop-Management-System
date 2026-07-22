@@ -11,11 +11,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class LiteService {
-    private static final LiteService INSTANCE = new LiteService();
-    private static final int MAX_ITEM_QUANTITY = 20;
+        private static final int MAX_ITEM_QUANTITY = 20;
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter SQL_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private final DBContext db = new DBContext();
+    private static final LiteService INSTANCE = new LiteService();
+        private final DBContext db = new DBContext();
 
     public static LiteService getInstance() {
         return INSTANCE;
@@ -30,15 +30,15 @@ public class LiteService {
             st.execute("IF OBJECT_ID('dbo.Users','U') IS NULL CREATE TABLE dbo.Users (username VARCHAR(50) PRIMARY KEY, password VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL, fullName NVARCHAR(120) NOT NULL)");
             st.execute("IF OBJECT_ID('dbo.Tables','U') IS NULL CREATE TABLE dbo.Tables (id INT IDENTITY PRIMARY KEY, name NVARCHAR(60) NOT NULL, code VARCHAR(40) NULL, active BIT NOT NULL DEFAULT 1)");
             st.execute("IF COL_LENGTH('dbo.Tables','code') IS NULL ALTER TABLE dbo.Tables ADD code VARCHAR(40) NULL");
-            st.execute("IF COL_LENGTH('dbo.Tables','floorNo') IS NULL ALTER TABLE dbo.Tables ADD floorNo INT NULL");
-            st.execute("IF COL_LENGTH('dbo.Tables','tableNo') IS NULL ALTER TABLE dbo.Tables ADD tableNo INT NULL");
+            
+            
             st.execute("IF OBJECT_ID('dbo.MenuItems','U') IS NULL CREATE TABLE dbo.MenuItems (id INT IDENTITY PRIMARY KEY, nameVi NVARCHAR(120) NOT NULL, nameEn NVARCHAR(120) NOT NULL, category NVARCHAR(60) NOT NULL, price INT NOT NULL, active BIT NOT NULL DEFAULT 1)");
             st.execute("IF COL_LENGTH('dbo.MenuItems','imagePath') IS NULL ALTER TABLE dbo.MenuItems ADD imagePath VARCHAR(255) NULL");
             st.execute("IF OBJECT_ID('dbo.MenuItemSizes','U') IS NULL CREATE TABLE dbo.MenuItemSizes (id INT IDENTITY PRIMARY KEY, menuItemId INT NOT NULL, sizeName NVARCHAR(20) NOT NULL, extraPrice INT NOT NULL DEFAULT 0, sortOrder INT NOT NULL DEFAULT 0, FOREIGN KEY(menuItemId) REFERENCES dbo.MenuItems(id))");
             st.execute("IF OBJECT_ID('dbo.Orders','U') IS NULL CREATE TABLE dbo.Orders (id INT IDENTITY PRIMARY KEY, orderNumber INT NULL UNIQUE, tableName NVARCHAR(60) NOT NULL, customerPhone VARCHAR(20) NULL, status VARCHAR(30) NOT NULL DEFAULT 'Pending', total INT NOT NULL DEFAULT 0, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
             st.execute("IF COL_LENGTH('dbo.Orders','splitLocked') IS NULL ALTER TABLE dbo.Orders ADD splitLocked BIT NOT NULL DEFAULT 0");
             st.execute("IF COL_LENGTH('dbo.Orders','invoicePrinted') IS NULL ALTER TABLE dbo.Orders ADD invoicePrinted BIT NOT NULL DEFAULT 0");
-            st.execute("IF OBJECT_ID('dbo.OrderItems','U') IS NULL CREATE TABLE dbo.OrderItems (id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, menuItemId INT NOT NULL, itemName NVARCHAR(120) NOT NULL, itemSize VARCHAR(20) NULL, quantity INT NOT NULL, price INT NOT NULL, preparedQty INT NOT NULL DEFAULT 0, FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
+            st.execute("IF OBJECT_ID('dbo.OrderItems','U') IS NULL CREATE TABLE dbo.OrderItems (id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, menuItemId INT NOT NULL, itemName NVARCHAR(120) NOT NULL, itemSize VARCHAR(20) NULL, quantity INT NOT NULL, price INT NOT NULL, preparedQty INT NOT NULL DEFAULT 0, FOREIGN KEY(orderId) REFERENCES dbo.Orders(id), FOREIGN KEY(menuItemId) REFERENCES dbo.MenuItems(id))");
             st.execute("IF COL_LENGTH('dbo.OrderItems','itemSize') IS NULL ALTER TABLE dbo.OrderItems ADD itemSize VARCHAR(20) NULL");
             st.execute("IF COL_LENGTH('dbo.OrderItems','preparedQty') IS NULL ALTER TABLE dbo.OrderItems ADD preparedQty INT NOT NULL DEFAULT 0");
             st.execute("ALTER TABLE dbo.OrderItems ALTER COLUMN itemSize VARCHAR(20) NULL");
@@ -46,8 +46,8 @@ public class LiteService {
             st.execute("IF COL_LENGTH('dbo.CashEvents','seenByCashier') IS NULL ALTER TABLE dbo.CashEvents ADD seenByCashier BIT NOT NULL DEFAULT 1");
             st.execute("IF OBJECT_ID('dbo.StoreState','U') IS NULL CREATE TABLE dbo.StoreState (stateKey VARCHAR(50) PRIMARY KEY, intValue INT NOT NULL, updatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
             st.execute("IF OBJECT_ID('dbo.SystemLogs','U') IS NULL CREATE TABLE dbo.SystemLogs (id INT IDENTITY PRIMARY KEY, actorRole VARCHAR(20) NOT NULL, actorName NVARCHAR(120) NULL, actionType VARCHAR(40) NOT NULL, messageVi NVARCHAR(400) NOT NULL, messageEn NVARCHAR(400) NOT NULL, refId INT NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
-            st.execute("IF OBJECT_ID('dbo.Staff','U') IS NULL CREATE TABLE dbo.Staff (id INT PRIMARY KEY, name NVARCHAR(120) NOT NULL, role VARCHAR(20) NOT NULL, pin VARCHAR(20) NULL, shift NVARCHAR(100) NULL, active BIT NOT NULL DEFAULT 1, username VARCHAR(50) NULL, password VARCHAR(100) NULL, status VARCHAR(30) NOT NULL DEFAULT 'Active', overtime BIT NOT NULL DEFAULT 0)");
-            st.execute("IF OBJECT_ID('dbo.Shifts','U') IS NULL CREATE TABLE dbo.Shifts (id VARCHAR(50) PRIMARY KEY, staffId INT NOT NULL, staffName NVARCHAR(120) NOT NULL, shiftDate VARCHAR(20) NOT NULL, shiftName NVARCHAR(50) NOT NULL, hours VARCHAR(50) NOT NULL, status NVARCHAR(30) NOT NULL, notes NVARCHAR(255) NULL, assignedRole VARCHAR(30) NULL)");
+            st.execute("IF OBJECT_ID('dbo.Staff','U') IS NULL CREATE TABLE dbo.Staff (id INT PRIMARY KEY, name NVARCHAR(120) NOT NULL, active BIT NOT NULL DEFAULT 1, status VARCHAR(30) NOT NULL DEFAULT 'Active')");
+            st.execute("IF OBJECT_ID('dbo.Shifts','U') IS NULL CREATE TABLE dbo.Shifts (id VARCHAR(50) PRIMARY KEY, staffId INT NOT NULL, staffName NVARCHAR(120) NOT NULL, shiftDate VARCHAR(20) NOT NULL, shiftName NVARCHAR(50) NOT NULL, hours VARCHAR(50) NOT NULL, status NVARCHAR(30) NOT NULL, notes NVARCHAR(255) NULL, assignedRole VARCHAR(30) NULL, FOREIGN KEY(staffId) REFERENCES dbo.Staff(id))");
             st.execute("IF COL_LENGTH('dbo.Shifts','assignedRole') IS NULL ALTER TABLE dbo.Shifts ADD assignedRole VARCHAR(30) NULL");
             try {
                 st.execute("WITH d AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY staffId, shiftDate, shiftName ORDER BY id) rn FROM dbo.Shifts) DELETE FROM dbo.Shifts WHERE id IN (SELECT id FROM d WHERE rn > 1)");
@@ -55,6 +55,23 @@ public class LiteService {
             try {
                 st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Shifts_StaffDateName' AND object_id=OBJECT_ID('dbo.Shifts')) CREATE UNIQUE INDEX UX_Shifts_StaffDateName ON dbo.Shifts(staffId, shiftDate, shiftName)");
             } catch (Exception ignored) {}
+            
+            try {
+                st.execute("DELETE FROM dbo.OrderItems WHERE menuItemId NOT IN (SELECT id FROM dbo.MenuItems)");
+                st.execute("DELETE FROM dbo.Shifts WHERE staffId NOT IN (SELECT id FROM dbo.Staff)");
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_OrderItems_MenuItems') ALTER TABLE dbo.OrderItems ADD CONSTRAINT FK_OrderItems_MenuItems FOREIGN KEY (menuItemId) REFERENCES dbo.MenuItems(id)");
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Shifts_Staff') ALTER TABLE dbo.Shifts ADD CONSTRAINT FK_Shifts_Staff FOREIGN KEY (staffId) REFERENCES dbo.Staff(id)");
+                st.execute("IF COL_LENGTH('dbo.Tables','floorNo') IS NOT NULL ALTER TABLE dbo.Tables DROP COLUMN floorNo");
+                st.execute("IF COL_LENGTH('dbo.Tables','tableNo') IS NOT NULL ALTER TABLE dbo.Tables DROP COLUMN tableNo");
+                st.execute("IF COL_LENGTH('dbo.Staff','shift') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN shift");
+                st.execute("IF COL_LENGTH('dbo.Staff','username') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN username");
+                st.execute("IF COL_LENGTH('dbo.Staff','password') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN password");
+                st.execute("IF COL_LENGTH('dbo.Staff','role') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN role");
+                st.execute("IF COL_LENGTH('dbo.Staff','pin') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN pin");
+                st.execute("IF COL_LENGTH('dbo.Staff','overtime') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN overtime");
+                st.execute("IF COL_LENGTH('dbo.Staff','phone') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN phone");
+                st.execute("IF COL_LENGTH('dbo.Staff','email') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN email");
+            } catch (Exception e) {}
             seed(con);
         } catch (Exception e) {
             System.err.println("LiteService init failed: " + e.getMessage());
@@ -202,37 +219,24 @@ public class LiteService {
     }
 
     private void ensureStandardTables(Connection con) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Tables SET active=0 WHERE floorNo IS NULL OR tableNo IS NULL")) {
-            ps.executeUpdate();
-        }
         for (int floor = 1; floor <= 2; floor++) {
             for (int table = 1; table <= 6; table++) {
-                String name = "Tầng " + floor + " - Bàn " + table;
-                try (PreparedStatement ps = con.prepareStatement("IF EXISTS (SELECT 1 FROM dbo.Tables WHERE floorNo=? AND tableNo=?) UPDATE dbo.Tables SET name=? WHERE floorNo=? AND tableNo=? ELSE INSERT INTO dbo.Tables (name, active, floorNo, tableNo) VALUES (?,1,?,?)")) {
-                    ps.setInt(1, floor);
-                    ps.setInt(2, table);
-                    ps.setString(3, name);
-                    ps.setInt(4, floor);
-                    ps.setInt(5, table);
-                    ps.setString(6, name);
-                    ps.setInt(7, floor);
-                    ps.setInt(8, table);
+                String name = "Táº§ng " + floor + " - BÃ n " + table;
+                try (PreparedStatement ps = con.prepareStatement("IF NOT EXISTS (SELECT 1 FROM dbo.Tables WHERE name=?) INSERT INTO dbo.Tables (name, active) VALUES (?, 1)")) {
+                    ps.setString(1, name);
+                    ps.setString(2, name);
                     ps.executeUpdate();
                 }
             }
         }
     }
 
-    private void removeLegacyTables(Connection con) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.Tables WHERE floorNo IS NULL OR tableNo IS NULL")) {
-            ps.executeUpdate();
-        }
-    }
+    private void removeLegacyTables(Connection con) throws Exception {}
 
     private void clearOrphanActiveOrders(Connection con) throws Exception {
         String sql = "UPDATE dbo.Orders SET status='Cleared' "
                 + "WHERE status IN ('Pending','Preparing','Ready','Served','Paid') "
-                + "AND NOT EXISTS (SELECT 1 FROM dbo.Tables t WHERE t.active=1 AND t.floorNo IS NOT NULL AND t.name=dbo.Orders.tableName)";
+                + "AND NOT EXISTS (SELECT 1 FROM dbo.Tables t WHERE t.active=1 AND t.name=dbo.Orders.tableName)";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.executeUpdate();
         }
@@ -259,8 +263,15 @@ public class LiteService {
     private void ensureInventoryAndRecipes(Connection con) throws Exception {
         try (Statement st = con.createStatement()) {
             st.execute("IF OBJECT_ID('dbo.Inventory','U') IS NULL CREATE TABLE dbo.Inventory (id VARCHAR(50) PRIMARY KEY, name NVARCHAR(120) NOT NULL, unit NVARCHAR(20) NOT NULL, stock INT NOT NULL DEFAULT 0, minStock INT NOT NULL DEFAULT 0, importCost INT NOT NULL DEFAULT 0)");
-            st.execute("IF OBJECT_ID('dbo.RecipeItems','U') IS NULL CREATE TABLE dbo.RecipeItems (id VARCHAR(50) PRIMARY KEY, menuItemId VARCHAR(50) NOT NULL, ingredientId VARCHAR(50) NOT NULL, quantity INT NOT NULL)");
-            st.execute("DELETE FROM dbo.RecipeItems WHERE menuItemId LIKE 'm%'");
+            st.execute("IF OBJECT_ID('dbo.RecipeItems','U') IS NULL CREATE TABLE dbo.RecipeItems (id VARCHAR(50) PRIMARY KEY, menuItemId INT NOT NULL, ingredientId VARCHAR(50) NOT NULL, quantity INT NOT NULL, FOREIGN KEY(menuItemId) REFERENCES dbo.MenuItems(id), FOREIGN KEY(ingredientId) REFERENCES dbo.Inventory(id))");
+            st.execute("DELETE FROM dbo.RecipeItems WHERE CAST(menuItemId AS VARCHAR) LIKE 'm%'");
+            try {
+                st.execute("IF COL_LENGTH('dbo.RecipeItems','menuItemId') IS NOT NULL AND (SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'RecipeItems' AND COLUMN_NAME = 'menuItemId') = 'varchar' BEGIN DELETE FROM dbo.RecipeItems WHERE menuItemId LIKE 'm%'; ALTER TABLE dbo.RecipeItems ALTER COLUMN menuItemId INT NOT NULL; END");
+                st.execute("DELETE FROM dbo.RecipeItems WHERE menuItemId NOT IN (SELECT id FROM dbo.MenuItems)");
+                st.execute("DELETE FROM dbo.RecipeItems WHERE ingredientId NOT IN (SELECT id FROM dbo.Inventory)");
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_RecipeItems_MenuItems') ALTER TABLE dbo.RecipeItems ADD CONSTRAINT FK_RecipeItems_MenuItems FOREIGN KEY (menuItemId) REFERENCES dbo.MenuItems(id)");
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_RecipeItems_Inventory') ALTER TABLE dbo.RecipeItems ADD CONSTRAINT FK_RecipeItems_Inventory FOREIGN KEY (ingredientId) REFERENCES dbo.Inventory(id)");
+            } catch (Exception e) {}
         }
         insertIngredientIfMissing(con, "i1", "Hạt cà phê nguyên chất", "g", 1500, 300, 50);
         insertIngredientIfMissing(con, "i2", "Sữa đặc", "g", 1000, 200, 40);
@@ -397,7 +408,7 @@ public class LiteService {
         for (Map<String, Object> item : menu) {
             item.put("sizes", getMenuSizes(con, readInt(item.get("id"), 0)));
         }
-        List<Map<String, Object>> tables = queryRows(con, "SELECT name FROM dbo.Tables WHERE active=1 AND floorNo IS NOT NULL ORDER BY floorNo, tableNo");
+        List<Map<String, Object>> tables = queryRows(con, "SELECT name FROM dbo.Tables WHERE active=1 ORDER BY name");
         if (menu.isEmpty() || tables.isEmpty()) return;
 
         Random random = new Random(205063);
@@ -428,7 +439,7 @@ public class LiteService {
             }
         }
 
-        if (count(con, "SELECT COUNT(*) FROM dbo.Orders o JOIN dbo.Tables t ON t.name=o.tableName WHERE o.status IN ('Pending','Preparing','Ready','Served','Paid') AND t.active=1 AND t.floorNo IS NOT NULL") == 0) {
+        if (count(con, "SELECT COUNT(*) FROM dbo.Orders o JOIN dbo.Tables t ON t.name=o.tableName WHERE o.status IN ('Pending','Preparing','Ready','Served','Paid') AND t.active=1") == 0) {
             insertLiveOrder(con, "Tầng 1 - Bàn 1", menu, "Pending", random);
             insertLiveOrder(con, "Tầng 1 - Bàn 2", menu, "Ready", random);
             insertLiveOrder(con, "Tầng 2 - Bàn 1", menu, "Served", random);
@@ -910,11 +921,11 @@ public class LiteService {
     }
 
     public List<Map<String, Object>> getTableMap() throws Exception {
-        String sql = "SELECT t.id, t.name, t.code, t.active, t.floorNo, t.tableNo, activeOrder.id orderId, activeOrder.orderNumber, activeOrder.status "
+        String sql = "SELECT t.id, t.name, t.code, t.active, activeOrder.id orderId, activeOrder.orderNumber, activeOrder.status "
                 + "FROM dbo.Tables t "
                 + "OUTER APPLY (SELECT TOP 1 id, orderNumber, status FROM dbo.Orders WHERE tableName=t.name AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC) activeOrder "
-                + "WHERE t.active=1 AND t.floorNo IS NOT NULL "
-                + "ORDER BY t.floorNo, t.tableNo";
+                + "WHERE t.active=1 "
+                + "ORDER BY t.name";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             List<Map<String, Object>> tables = rows(rs);
             for (Map<String, Object> table : tables) {
@@ -926,13 +937,11 @@ public class LiteService {
 
     public List<Map<String, Object>> getRunnerTableMap() throws Exception {
         List<Map<String, Object>> full = getTableMap();
-        List<Map<String, Object>> sanitized = new ArrayList<>();
+        List<Map<String, Object>> sanitized = new java.util.ArrayList<>();
         for (Map<String, Object> table : full) {
-            Map<String, Object> row = new LinkedHashMap<>();
+            Map<String, Object> row = new java.util.LinkedHashMap<>();
             row.put("id", table.get("id"));
             row.put("name", table.get("name"));
-            row.put("floorNo", table.get("floorNo"));
-            row.put("tableNo", table.get("tableNo"));
             row.put("status", table.get("status"));
             row.put("busy", table.get("busy"));
             sanitized.add(row);
@@ -1034,7 +1043,7 @@ public class LiteService {
     }
 
     private Map<String, Object> tableRowForUpdate(Connection con, int tableId) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("SELECT id, name, active, floorNo, tableNo FROM dbo.Tables WITH (UPDLOCK, ROWLOCK) WHERE id=? AND floorNo IS NOT NULL")) {
+        try (PreparedStatement ps = con.prepareStatement("SELECT id, name, active FROM dbo.Tables WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
             ps.setInt(1, tableId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1113,14 +1122,14 @@ public class LiteService {
 
     private List<Map<String, Object>> getTables(boolean includeInactive) throws Exception {
         String where = includeInactive ? "WHERE floorNo IS NOT NULL AND tableNo IS NOT NULL " : "WHERE active=1 AND floorNo IS NOT NULL AND tableNo IS NOT NULL ";
-        String sql = "SELECT id, name, code, active, floorNo, tableNo FROM dbo.Tables " + where + "ORDER BY floorNo, tableNo";
+        String sql = "SELECT id, name, code, active FROM dbo.Tables " + where + "ORDER BY floorNo, tableNo";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             return rows(rs);
         }
     }
 
     public Map<String, Object> getTableByCode(String code) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active, floorNo, tableNo FROM dbo.Tables WHERE code=? AND active=1")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active FROM dbo.Tables WHERE code=? AND active=1")) {
             ps.setString(1, readString(code, ""));
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1129,7 +1138,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getTableByName(String name) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active, floorNo, tableNo FROM dbo.Tables WHERE name=? AND active=1")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active FROM dbo.Tables WHERE name=? AND active=1")) {
             ps.setString(1, readString(name, ""));
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1138,7 +1147,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getTableById(int id) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active, floorNo, tableNo FROM dbo.Tables WHERE id=?")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active FROM dbo.Tables WHERE id=?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1149,37 +1158,22 @@ public class LiteService {
     public Map<String, Object> saveTable(Map<String, Object> data) throws Exception {
         int id = readInt(data.get("id"), 0);
         String name = readString(data.get("name"), "");
-        int floorNo = readInt(data.get("floorNo"), 0);
-        int tableNo = readInt(data.get("tableNo"), 0);
-        int[] parsed = parseTableLocation(name);
-        if (floorNo <= 0 && parsed[0] > 0) floorNo = parsed[0];
-        if (tableNo <= 0 && parsed[1] > 0) tableNo = parsed[1];
-        if (floorNo <= 0) floorNo = 1;
-        if (tableNo <= 0) throw new IllegalArgumentException("Số bàn không hợp lệ.");
-        if (name.isEmpty()) name = "Tầng " + floorNo + " - Bàn " + tableNo;
+        if (name.isEmpty()) throw new IllegalArgumentException("TÃªn bÃ n khÃ´ng há»£p lá»‡.");
         boolean active = readBoolean(data.get("active"), true);
-        validateTable(id, name, floorNo, tableNo);
-
+        if (name.length() < 2 || name.length() > 60) throw new IllegalArgumentException("TÃªn bÃ n pháº£i tá»« 2 Ä‘áº¿n 60 kÃ½ tá»±.");
         try (Connection con = db.getConnection()) {
-            if (tableLocationExists(con, id, floorNo, tableNo)) {
-                throw new IllegalArgumentException("Vị trí bàn này đã tồn tại.");
-            }
             if (id > 0) {
-                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Tables SET name=?, active=?, floorNo=?, tableNo=? WHERE id=?")) {
+                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Tables SET name=?, active=? WHERE id=?")) {
                     ps.setString(1, name);
                     ps.setBoolean(2, active);
-                    ps.setInt(3, floorNo);
-                    ps.setInt(4, tableNo);
-                    ps.setInt(5, id);
+                    ps.setInt(3, id);
                     ps.executeUpdate();
                 }
             } else {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Tables (name, code, active, floorNo, tableNo) VALUES (?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Tables (name, code, active) VALUES (?,?,?)", java.sql.Statement.RETURN_GENERATED_KEYS)) {
                     ps.setString(1, name);
                     ps.setString(2, uniqueTableCode(con));
                     ps.setBoolean(3, active);
-                    ps.setInt(4, floorNo);
-                    ps.setInt(5, tableNo);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         if (keys.next()) id = keys.getInt(1);
@@ -1187,26 +1181,16 @@ public class LiteService {
                 }
             }
         }
-        return getTableById(id);
+        Map<String, Object> result = new java.util.LinkedHashMap<>(data);
+        result.put("id", id);
+        result.put("name", name);
+        result.put("active", active);
+        return result;
     }
 
-    private void validateTable(int id, String name, int floorNo, int tableNo) {
-        if (name.length() < 2 || name.length() > 60) throw new IllegalArgumentException("Tên bàn phải từ 2 đến 60 ký tự.");
-        if (floorNo < 1 || floorNo > 10) throw new IllegalArgumentException("Tầng phải từ 1 đến 10.");
-        if (tableNo < 1 || tableNo > 99) throw new IllegalArgumentException("Số bàn phải từ 1 đến 99.");
-    }
+    
 
-    private boolean tableLocationExists(Connection con, int id, int floorNo, int tableNo) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.Tables WHERE id<>? AND floorNo=? AND tableNo=?")) {
-            ps.setInt(1, id);
-            ps.setInt(2, floorNo);
-            ps.setInt(3, tableNo);
-            try (ResultSet rs = ps.executeQuery()) {
-                rs.next();
-                return rs.getInt(1) > 0;
-            }
-        }
-    }
+    
 
     private int[] parseTableLocation(String name) {
         String text = readString(name, "");

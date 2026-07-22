@@ -416,8 +416,7 @@ public class BrewApiServlet extends HttpServlet {
                 String pin = (String) sMap.get("pin");
                 String shift = (String) sMap.get("shift");
                 boolean active = sMap.get("active") != null ? (Boolean) sMap.get("active") : true;
-                String username = (String) sMap.get("username");
-                String password = (String) sMap.get("password");
+                                String password = (String) sMap.get("password");
                 String status = sMap.containsKey("status") && sMap.get("status") != null ? (String) sMap.get("status") : "Active";
                 boolean overtime = sMap.containsKey("overtime") && sMap.get("overtime") != null ? (Boolean) sMap.get("overtime") : false;
 
@@ -425,7 +424,7 @@ public class BrewApiServlet extends HttpServlet {
                 List<Staff> roster = stateService.getStaff();
                 boolean isExistingManager = false;
                 for (Staff existing : roster) {
-                    if (existing.getId() == id && "manager".equalsIgnoreCase(existing.getRole())) {
+                    if (existing.getId() == id && true) {
                         isExistingManager = true;
                         break;
                     }
@@ -439,7 +438,7 @@ public class BrewApiServlet extends HttpServlet {
                     role = "waiter"; // Prevent duplicate manager creation
                 }
 
-                Staff staff = new Staff(id, name, role, pin, shift, active, username, password, status, overtime);
+                Staff staff = new Staff(id, name, active, status);
                 stateService.saveStaff(staff);
                 resp.getWriter().write(JsonUtils.toJson(staff));
             } else if (pathInfo.equals("/staff/delete")) {
@@ -450,7 +449,7 @@ public class BrewApiServlet extends HttpServlet {
                 List<Staff> roster = stateService.getStaff();
                 boolean isManager = false;
                 for (Staff existing : roster) {
-                    if (existing.getId() == id && "manager".equalsIgnoreCase(existing.getRole())) {
+                    if (existing.getId() == id && true) {
                         isManager = true;
                         break;
                     }

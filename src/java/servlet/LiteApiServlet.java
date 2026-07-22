@@ -159,15 +159,14 @@ public class LiteApiServlet extends HttpServlet {
                         java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
                         map.put("id", s.getId());
                         map.put("name", s.getName());
-                        map.put("role", s.getRole());
+
                         if (isAdminStaffReq) {
-                            map.put("shift", s.getShift());
+                            map.put("shift", "");
                             map.put("active", s.isActive());
-                            map.put("username", s.getUsername());
-                            map.put("password", s.getPassword());
+                            
+                            
                             map.put("status", s.getStatus());
-                            map.put("overtime", s.isOvertime());
-                            map.put("pin", s.getPin());
+
                         }
                         return map;
                     }).collect(java.util.stream.Collectors.toList());
@@ -454,14 +453,8 @@ public class LiteApiServlet extends HttpServlet {
                     model.Staff staff = new model.Staff(
                         readInt(body.get("id"), 0),
                         str(body.get("name")),
-                        str(body.get("role")),
-                        str(body.get("pin")),
-                        str(body.get("shift")),
                         body.get("active") != null ? (Boolean) body.get("active") : true,
-                        str(body.get("username")),
-                        str(body.get("password")),
-                        str(body.get("status")),
-                        body.get("overtime") != null ? (Boolean) body.get("overtime") : false
+                        str(body.get("status"))
                     );
                     new dao.StaffDAO().save(staff);
                     resp.getWriter().write(JsonUtils.toJson(staff));
