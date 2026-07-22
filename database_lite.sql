@@ -17,6 +17,8 @@ CREATE TABLE dbo.Tables (
     id INT IDENTITY PRIMARY KEY,
     name NVARCHAR(60) NOT NULL,
     code VARCHAR(40) NULL,
+    floorNo INT NULL,
+    tableNo INT NULL,
     active BIT NOT NULL DEFAULT 1
 );
 

@@ -61,8 +61,8 @@ public class LiteService {
                 st.execute("DELETE FROM dbo.Shifts WHERE staffId NOT IN (SELECT id FROM dbo.Staff)");
                 st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_OrderItems_MenuItems') ALTER TABLE dbo.OrderItems ADD CONSTRAINT FK_OrderItems_MenuItems FOREIGN KEY (menuItemId) REFERENCES dbo.MenuItems(id)");
                 st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Shifts_Staff') ALTER TABLE dbo.Shifts ADD CONSTRAINT FK_Shifts_Staff FOREIGN KEY (staffId) REFERENCES dbo.Staff(id)");
-                st.execute("IF COL_LENGTH('dbo.Tables','floorNo') IS NOT NULL ALTER TABLE dbo.Tables DROP COLUMN floorNo");
-                st.execute("IF COL_LENGTH('dbo.Tables','tableNo') IS NOT NULL ALTER TABLE dbo.Tables DROP COLUMN tableNo");
+                st.execute("IF COL_LENGTH('dbo.Tables','floorNo') IS NULL ALTER TABLE dbo.Tables ADD floorNo INT NULL");
+                st.execute("IF COL_LENGTH('dbo.Tables','tableNo') IS NULL ALTER TABLE dbo.Tables ADD tableNo INT NULL");
                 st.execute("IF COL_LENGTH('dbo.Staff','shift') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN shift");
                 st.execute("IF COL_LENGTH('dbo.Staff','username') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN username");
                 st.execute("IF COL_LENGTH('dbo.Staff','password') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN password");
@@ -219,12 +219,16 @@ public class LiteService {
     }
 
     private void ensureStandardTables(Connection con) throws Exception {
+        try (java.sql.Statement st = con.createStatement(); java.sql.ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM dbo.Tables")) {
+            if (rs.next() && rs.getInt(1) > 0) return; // Only seed if empty
+        }
         for (int floor = 1; floor <= 2; floor++) {
             for (int table = 1; table <= 6; table++) {
-                String name = "Táº§ng " + floor + " - BÃ n " + table;
-                try (PreparedStatement ps = con.prepareStatement("IF NOT EXISTS (SELECT 1 FROM dbo.Tables WHERE name=?) INSERT INTO dbo.Tables (name, active) VALUES (?, 1)")) {
+                String name = "T\u1ea7ng " + floor + " - B\u00e0n " + table;
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Tables (name, floorNo, tableNo, active) VALUES (?, ?, ?, 1)")) {
                     ps.setString(1, name);
-                    ps.setString(2, name);
+                    ps.setInt(2, floor);
+                    ps.setInt(3, table);
                     ps.executeUpdate();
                 }
             }
@@ -921,11 +925,11 @@ public class LiteService {
     }
 
     public List<Map<String, Object>> getTableMap() throws Exception {
-        String sql = "SELECT t.id, t.name, t.code, t.active, activeOrder.id orderId, activeOrder.orderNumber, activeOrder.status "
+        String sql = "SELECT t.id, t.name, t.code, t.active, t.floorNo, t.tableNo, activeOrder.id orderId, activeOrder.orderNumber, activeOrder.status "
                 + "FROM dbo.Tables t "
                 + "OUTER APPLY (SELECT TOP 1 id, orderNumber, status FROM dbo.Orders WHERE tableName=t.name AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC) activeOrder "
                 + "WHERE t.active=1 "
-                + "ORDER BY t.name";
+                + "ORDER BY ISNULL(t.floorNo, 1), ISNULL(t.tableNo, 999), t.name";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             List<Map<String, Object>> tables = rows(rs);
             for (Map<String, Object> table : tables) {
@@ -1122,14 +1126,14 @@ public class LiteService {
 
     private List<Map<String, Object>> getTables(boolean includeInactive) throws Exception {
         String where = includeInactive ? "" : "WHERE active=1 ";
-        String sql = "SELECT id, name, code, active FROM dbo.Tables " + where + "ORDER BY name";
+        String sql = "SELECT id, name, code, floorNo, tableNo, active FROM dbo.Tables " + where + "ORDER BY name";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             return rows(rs);
         }
     }
 
     public Map<String, Object> getTableByCode(String code) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active FROM dbo.Tables WHERE code=? AND active=1")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, floorNo, tableNo, active FROM dbo.Tables WHERE code=? AND active=1")) {
             ps.setString(1, readString(code, ""));
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1138,7 +1142,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getTableByName(String name) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active FROM dbo.Tables WHERE name=? AND active=1")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, floorNo, tableNo, active FROM dbo.Tables WHERE name=? AND active=1")) {
             ps.setString(1, readString(name, ""));
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1147,7 +1151,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getTableById(int id) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, active FROM dbo.Tables WHERE id=?")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, name, code, floorNo, tableNo, active FROM dbo.Tables WHERE id=?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? row(rs) : null;
@@ -1161,19 +1165,25 @@ public class LiteService {
         if (name.isEmpty()) throw new IllegalArgumentException("TÃªn bÃ n khÃ´ng há»£p lá»‡.");
         boolean active = readBoolean(data.get("active"), true);
         if (name.length() < 2 || name.length() > 60) throw new IllegalArgumentException("TÃªn bÃ n pháº£i tá»« 2 Ä‘áº¿n 60 kÃ½ tá»±.");
+        int floorNo = readInt(data.get("floorNo"), 1);
+        int tableNo = readInt(data.get("tableNo"), 1);
         try (Connection con = db.getConnection()) {
             if (id > 0) {
-                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Tables SET name=?, active=? WHERE id=?")) {
+                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Tables SET name=?, floorNo=?, tableNo=?, active=? WHERE id=?")) {
                     ps.setString(1, name);
-                    ps.setBoolean(2, active);
-                    ps.setInt(3, id);
+                    ps.setInt(2, floorNo);
+                    ps.setInt(3, tableNo);
+                    ps.setBoolean(4, active);
+                    ps.setInt(5, id);
                     ps.executeUpdate();
                 }
             } else {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Tables (name, code, active) VALUES (?,?,?)", java.sql.Statement.RETURN_GENERATED_KEYS)) {
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Tables (name, code, floorNo, tableNo, active) VALUES (?,?,?,?,?)", java.sql.Statement.RETURN_GENERATED_KEYS)) {
                     ps.setString(1, name);
                     ps.setString(2, uniqueTableCode(con));
-                    ps.setBoolean(3, active);
+                    ps.setInt(3, floorNo);
+                    ps.setInt(4, tableNo);
+                    ps.setBoolean(5, active);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         if (keys.next()) id = keys.getInt(1);
@@ -1194,9 +1204,9 @@ public class LiteService {
 
     private int[] parseTableLocation(String name) {
         String text = readString(name, "");
-        java.util.regex.Matcher match = java.util.regex.Pattern.compile("Tầng\\s*(\\d+)\\s*-\\s*Bàn\\s*(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE).matcher(text);
+        java.util.regex.Matcher match = java.util.regex.Pattern.compile("T.*ng\\s*(\\d+)\\s*-\\s*B.*n\\s*(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE).matcher(text);
         if (match.find()) return new int[] { readInt(match.group(1), 0), readInt(match.group(2), 0) };
-        match = java.util.regex.Pattern.compile("Bàn\\s*(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE).matcher(text);
+        match = java.util.regex.Pattern.compile("B.*n\\s*(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE).matcher(text);
         if (match.find()) return new int[] { 1, readInt(match.group(1), 0) };
         return new int[] { 0, 0 };
     }
