@@ -7,7 +7,7 @@
     <title>coffeshop - Kho nguyên liệu</title>
         <meta name="page-title-key" content="inventoryPageTitle">
     <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
+    <script defer src="assets/js/i18n.js?v=i18n-inventory-1"></script>
     <style>
         .stock-low { color: var(--danger); font-weight: 600; }
         .stock-ok { color: var(--success); }
@@ -56,8 +56,8 @@
                 </div>
                 <form class="grid" onsubmit="saveItem(event)">
                     <input id="originalId" type="hidden">
-                    <div><label data-i18n="materialIdFull">Mã nguyên liệu (ID)</label><input id="id" minlength="2" maxlength="50" required placeholder="VD: CF_01" data-i18n-placeholder="materialIdPlaceholder"></div>
-                    <div><label data-i18n="materialName">Tên nguyên liệu</label><input id="name" minlength="2" maxlength="100" required></div>
+                    <div><label data-i18n="materialIdFull">Mã nguyên liệu (ID)</label><input id="id" minlength="2" maxlength="50" pattern="[A-Za-z0-9_-]+" title="Chỉ chữ, số, _ hoặc -" required placeholder="VD: CF_01" data-i18n-placeholder="materialIdPlaceholder"></div>
+                    <div><label data-i18n="materialName">Tên nguyên liệu</label><input id="name" minlength="2" maxlength="120" required></div>
                     <div class="form-row">
                         <div>
                             <label data-i18n="unitHelp">Đơn vị (g, ml...)</label>
@@ -80,7 +80,7 @@
         <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
     </button>
 
-    <script src="assets/js/page-admin-inventory.js?v=3"></script>
+    <script src="assets/js/page-admin-inventory.js?v=4"></script>
     <script>
         window.addEventListener('scroll', function() {
             const btn = document.getElementById('scrollToTopBtn');

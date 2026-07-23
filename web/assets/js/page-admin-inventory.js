@@ -110,18 +110,82 @@ function edit(id) {
     openEditSheet();
 }
 
+function parseNonNegativeField(id, labelKey) {
+    const raw = document.getElementById(id).value.trim();
+    if (raw === '') {
+        return { error: t('inventoryFieldRequired').replace('{field}', t(labelKey)) };
+    }
+    if (!/^\d+$/.test(raw)) {
+        return { error: t('inventoryFieldNonNegative').replace('{field}', t(labelKey)) };
+    }
+    return { value: parseInt(raw, 10) };
+}
+
+function showFormError(message) {
+    const msg = document.getElementById('message');
+    msg.textContent = message;
+    msg.className = 'notice error';
+}
+
+async function readApiError(res, fallback) {
+    try {
+        const err = await res.json();
+        if (err && err.error) return err.error;
+        if (err && err.message) return err.message;
+    } catch (_) { /* ignore non-JSON bodies */ }
+    return fallback || t('systemError');
+}
+
 async function saveItem(event) {
     event.preventDefault();
+    const originalId = document.getElementById('originalId').value.trim();
+    const isCreate = !originalId;
     const payload = {
+        originalId: originalId,
         id: document.getElementById('id').value.trim(),
         name: document.getElementById('name').value.trim(),
-        unit: document.getElementById('unit').value.trim(),
-        stock: parseInt(document.getElementById('stock').value) || 0,
-        minStock: parseInt(document.getElementById('minStock').value) || 0,
-        importCost: parseInt(document.getElementById('importCost').value) || 0
+        unit: document.getElementById('unit').value.trim()
     };
 
-    if (!payload.id || !payload.name) return;
+    if (!payload.id || !payload.name || !payload.unit) {
+        showFormError(t('inventoryMissingRequired'));
+        return;
+    }
+    if (payload.id.length < 2 || payload.id.length > 50) {
+        showFormError(t('inventoryIdLength'));
+        return;
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(payload.id)) {
+        showFormError(t('inventoryIdFormat'));
+        return;
+    }
+    if (payload.name.length < 2 || payload.name.length > 120) {
+        showFormError(t('inventoryNameLength'));
+        return;
+    }
+    if (payload.unit.length > 20) {
+        showFormError(t('inventoryUnitLength'));
+        return;
+    }
+
+    if (isCreate) {
+        const duplicated = items.some(i => String(i.id).toLowerCase() === payload.id.toLowerCase());
+        if (duplicated) {
+            showFormError(t('inventoryDuplicateId'));
+            return;
+        }
+    }
+
+    const stock = parseNonNegativeField('stock', 'currentStock');
+    if (stock.error) { showFormError(stock.error); return; }
+    const minStock = parseNonNegativeField('minStock', 'minStockLevel');
+    if (minStock.error) { showFormError(minStock.error); return; }
+    const importCost = parseNonNegativeField('importCost', 'importPriceVND');
+    if (importCost.error) { showFormError(importCost.error); return; }
+
+    payload.stock = stock.value;
+    payload.minStock = minStock.value;
+    payload.importCost = importCost.value;
 
     const msg = document.getElementById('message');
     msg.className = 'notice hidden';
@@ -135,7 +199,8 @@ async function saveItem(event) {
 
         if (res.ok) {
             const saved = await res.json();
-            const idx = items.findIndex(i => i.id === payload.id);
+            const matchId = originalId || payload.id;
+            const idx = items.findIndex(i => String(i.id).toLowerCase() === String(matchId).toLowerCase());
             if (idx >= 0) items[idx] = saved;
             else items.push(saved);
             render();
@@ -146,13 +211,10 @@ async function saveItem(event) {
                 notifyWork(t('lowStockWarning') + ': ' + (saved.name || saved.id));
             }
         } else {
-            const err = await res.json().catch(()=>({}));
-            msg.textContent = err.error || t('systemError');
-            msg.className = 'notice error';
+            showFormError(await readApiError(res, t('systemError')));
         }
     } catch (err) {
-        msg.textContent = t('networkError');
-        msg.className = 'notice error';
+        showFormError(t('networkError'));
     }
 }
 
@@ -168,7 +230,7 @@ async function deleteItem(id) {
             items = items.filter(i => i.id !== id);
             render();
         } else {
-            alert(t('errorPrefix') + ' ' + (await res.text()));
+            alert(t('errorPrefix') + ' ' + (await readApiError(res, t('systemError'))));
         }
     } catch (err) {
         alert(t('networkError'));

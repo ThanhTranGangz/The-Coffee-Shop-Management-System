@@ -28,7 +28,7 @@
                 </div>
                 <form class="grid" onsubmit="saveItem(event)">
                     <input id="id" type="hidden">
-                    <div><label data-i18n="nameVi">Tên tiếng Việt</label><input id="nameVi" minlength="2" maxlength="80" required></div>
+                    <div><label data-i18n="nameVi">Tên tiếng Việt</label><input id="nameVi" minlength="2" maxlength="80" required oninput="syncDefaultImage()"></div>
                     <div><label data-i18n="nameEn">Tên tiếng Anh</label><input id="nameEn" minlength="2" maxlength="80" required></div>
                     <div class="form-row">
                         <div>
@@ -68,7 +68,7 @@
         <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
     </button>
 
-    <script src="assets/js/page-admin-menu.js?v=edit-sheet-1"></script>
+    <script src="assets/js/page-admin-menu.js?v=menu-images-1"></script>
     <script>
         window.addEventListener('scroll', function() {
             const btn = document.getElementById('scrollToTopBtn');

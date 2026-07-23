@@ -478,40 +478,114 @@ public class LiteApiServlet extends HttpServlet {
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được sửa kho nguyên liệu.");
                         return;
                     }
-                    model.Ingredient ing = new model.Ingredient();
-                    ing.setId(str(body.get("id")));
-                    ing.setName(str(body.get("name")));
-                    ing.setUnit(str(body.get("unit")));
-                    ing.setStock(readInt(body.get("stock"), 0));
-                    ing.setMinStock(readInt(body.get("minStock"), 0));
-                    ing.setImportCost(readInt(body.get("importCost"), 0));
-                    new dao.InventoryDAO().save(ing);
-                    int disabledMenus = service.refreshMenuAvailability();
-                    service.addSystemLog(role(req), user(req), "INVENTORY_SAVE",
-                            "Admin lưu nguyên liệu " + ing.getId() + " - " + ing.getName()
-                                    + (disabledMenus > 0 ? (" (tắt " + disabledMenus + " món hết hàng)") : ""),
-                            "Admin saved ingredient " + ing.getId() + " - " + ing.getName()
-                                    + (disabledMenus > 0 ? (" (disabled " + disabledMenus + " out-of-stock items)") : ""),
-                            null);
-                    java.util.Map<String, Object> savedIng = new java.util.LinkedHashMap<>(ing.toMap());
-                    savedIng.put("disabledMenuCount", disabledMenus);
-                    resp.getWriter().write(JsonUtils.toJson(savedIng));
+                    try {
+                        String originalId = str(body.get("originalId"));
+                        boolean isCreate = originalId.isEmpty();
+                        String id = str(body.get("id"));
+                        String name = str(body.get("name"));
+                        String unit = str(body.get("unit"));
+                        Integer stock = parseNonNegativeInt(body.get("stock"), "Tồn kho");
+                        Integer minStock = parseNonNegativeInt(body.get("minStock"), "Mức tối thiểu");
+                        Integer importCost = parseNonNegativeInt(body.get("importCost"), "Giá nhập");
+                        if (stock == null || minStock == null || importCost == null) {
+                            error(resp, HttpServletResponse.SC_BAD_REQUEST, "Giá trị số không hợp lệ.");
+                            return;
+                        }
+
+                        String validationError = validateIngredientFields(isCreate ? id : originalId, name, unit);
+                        if (validationError != null) {
+                            error(resp, HttpServletResponse.SC_BAD_REQUEST, validationError);
+                            return;
+                        }
+
+                        model.Ingredient ing = new model.Ingredient();
+                        ing.setId(isCreate ? id : originalId);
+                        ing.setName(name);
+                        ing.setUnit(unit);
+                        ing.setStock(stock);
+                        ing.setMinStock(minStock);
+                        ing.setImportCost(importCost);
+
+                        dao.InventoryDAO inventoryDAO = new dao.InventoryDAO();
+                        if (isCreate) {
+                            try {
+                                inventoryDAO.insert(ing);
+                            } catch (IllegalStateException duplicate) {
+                                if ("DUPLICATE_ID".equals(duplicate.getMessage())) {
+                                    error(resp, HttpServletResponse.SC_CONFLICT, "Mã nguyên liệu đã tồn tại.");
+                                    return;
+                                }
+                                throw duplicate;
+                            }
+                        } else {
+                            if (!inventoryDAO.update(originalId, ing)) {
+                                error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy nguyên liệu để cập nhật.");
+                                return;
+                            }
+                            ing.setId(originalId);
+                        }
+
+                        int disabledMenus = service.refreshMenuAvailability();
+                        service.addSystemLog(role(req), user(req), "INVENTORY_SAVE",
+                                "Admin lưu nguyên liệu " + ing.getId() + " - " + ing.getName()
+                                        + (disabledMenus > 0 ? (" (tắt " + disabledMenus + " món hết hàng)") : ""),
+                                "Admin saved ingredient " + ing.getId() + " - " + ing.getName()
+                                        + (disabledMenus > 0 ? (" (disabled " + disabledMenus + " out-of-stock items)") : ""),
+                                null);
+                        java.util.Map<String, Object> savedIng = new java.util.LinkedHashMap<>(ing.toMap());
+                        savedIng.put("disabledMenuCount", disabledMenus);
+                        resp.getWriter().write(JsonUtils.toJson(savedIng));
+                    } catch (IllegalArgumentException badRequest) {
+                        error(resp, HttpServletResponse.SC_BAD_REQUEST, badRequest.getMessage());
+                    } catch (Exception dbError) {
+                        error(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                                dbError.getMessage() == null || dbError.getMessage().trim().isEmpty()
+                                        ? "Không lưu được nguyên liệu do lỗi hệ thống."
+                                        : dbError.getMessage());
+                    }
                     break;
                 case "/inventory/delete":
                     if (!"admin".equals(role(req))) {
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được xoá nguyên liệu.");
                         return;
                     }
-                    String ingId = str(body.get("id"));
-                    new dao.InventoryDAO().delete(ingId);
-                    int disabledAfterDelete = service.refreshMenuAvailability();
-                    service.addSystemLog(role(req), user(req), "INVENTORY_DELETE",
-                            "Admin xoá nguyên liệu " + ingId
-                                    + (disabledAfterDelete > 0 ? (" (tắt " + disabledAfterDelete + " món hết hàng)") : ""),
-                            "Admin deleted ingredient " + ingId
-                                    + (disabledAfterDelete > 0 ? (" (disabled " + disabledAfterDelete + " out-of-stock items)") : ""),
-                            null);
-                    resp.getWriter().write("{\"message\":\"Ingredient deleted\",\"disabledMenuCount\":" + disabledAfterDelete + "}");
+                    try {
+                        String ingId = str(body.get("id"));
+                        if (ingId.isEmpty()) {
+                            error(resp, HttpServletResponse.SC_BAD_REQUEST, "Thiếu mã nguyên liệu cần xoá.");
+                            return;
+                        }
+                        dao.InventoryDAO inventoryDAO = new dao.InventoryDAO();
+                        if (!inventoryDAO.exists(ingId)) {
+                            error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy nguyên liệu để xoá.");
+                            return;
+                        }
+                        int recipeUsage = inventoryDAO.countRecipeUsage(ingId);
+                        if (recipeUsage > 0) {
+                            error(resp, HttpServletResponse.SC_CONFLICT,
+                                    "Không thể xoá nguyên liệu đang được dùng trong " + recipeUsage + " công thức món.");
+                            return;
+                        }
+                        if (!inventoryDAO.delete(ingId)) {
+                            error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy nguyên liệu để xoá.");
+                            return;
+                        }
+                        int disabledAfterDelete = service.refreshMenuAvailability();
+                        service.addSystemLog(role(req), user(req), "INVENTORY_DELETE",
+                                "Admin xoá nguyên liệu " + ingId
+                                        + (disabledAfterDelete > 0 ? (" (tắt " + disabledAfterDelete + " món hết hàng)") : ""),
+                                "Admin deleted ingredient " + ingId
+                                        + (disabledAfterDelete > 0 ? (" (disabled " + disabledAfterDelete + " out-of-stock items)") : ""),
+                                null);
+                        resp.getWriter().write("{\"message\":\"Ingredient deleted\",\"disabledMenuCount\":" + disabledAfterDelete + "}");
+                    } catch (IllegalArgumentException badRequest) {
+                        error(resp, HttpServletResponse.SC_BAD_REQUEST, badRequest.getMessage());
+                    } catch (Exception dbError) {
+                        error(resp, HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                                dbError.getMessage() == null || dbError.getMessage().trim().isEmpty()
+                                        ? "Không xoá được nguyên liệu do lỗi hệ thống."
+                                        : dbError.getMessage());
+                    }
                     break;
                 case "/tables":
                     Map<String, Object> savedTable = service.saveTable(body);
@@ -1006,6 +1080,62 @@ public class LiteApiServlet extends HttpServlet {
         } catch (Exception e) {
             return fallback;
         }
+    }
+
+    private Integer parseNonNegativeInt(Object value, String fieldLabel) {
+        if (value == null) {
+            throw new IllegalArgumentException(fieldLabel + " không được để trống.");
+        }
+        int parsed;
+        if (value instanceof Number) {
+            parsed = ((Number) value).intValue();
+            if (value instanceof Double || value instanceof Float) {
+                double raw = ((Number) value).doubleValue();
+                if (raw != Math.rint(raw)) {
+                    throw new IllegalArgumentException(fieldLabel + " phải là số nguyên không âm.");
+                }
+            }
+        } else {
+            String text = String.valueOf(value).trim();
+            if (text.isEmpty()) {
+                throw new IllegalArgumentException(fieldLabel + " không được để trống.");
+            }
+            try {
+                parsed = Integer.parseInt(text);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(fieldLabel + " phải là số nguyên không âm.");
+            }
+        }
+        if (parsed < 0) {
+            throw new IllegalArgumentException(fieldLabel + " không được âm.");
+        }
+        return parsed;
+    }
+
+    private String validateIngredientFields(String id, String name, String unit) {
+        if (id == null || id.trim().isEmpty()) {
+            return "Mã nguyên liệu không được để trống.";
+        }
+        String cleanId = id.trim();
+        if (cleanId.length() < 2 || cleanId.length() > 50) {
+            return "Mã nguyên liệu phải từ 2 đến 50 ký tự.";
+        }
+        if (!cleanId.matches("[A-Za-z0-9_-]+")) {
+            return "Mã nguyên liệu chỉ gồm chữ, số, gạch dưới hoặc gạch ngang.";
+        }
+        if (name == null || name.trim().isEmpty()) {
+            return "Tên nguyên liệu không được để trống.";
+        }
+        if (name.trim().length() < 2 || name.trim().length() > 120) {
+            return "Tên nguyên liệu phải từ 2 đến 120 ký tự.";
+        }
+        if (unit == null || unit.trim().isEmpty()) {
+            return "Đơn vị không được để trống.";
+        }
+        if (unit.trim().length() > 20) {
+            return "Đơn vị tối đa 20 ký tự.";
+        }
+        return null;
     }
 
     private List<Map<String, Object>> splitSelections(Object raw) {

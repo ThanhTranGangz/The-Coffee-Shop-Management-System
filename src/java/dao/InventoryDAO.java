@@ -26,7 +26,6 @@ public class InventoryDAO {
      */
     private void ensureInventoryTable() {
         DBContext db = new DBContext();
-        // Câu lệnh SQL kiểm tra sự tồn tại của bảng và khởi tạo bảng mới nếu chưa có
         String sql = "IF OBJECT_ID('dbo.Inventory','U') IS NULL " +
                      "CREATE TABLE dbo.Inventory (" +
                      "id VARCHAR(50) PRIMARY KEY, " +
@@ -42,7 +41,6 @@ public class InventoryDAO {
         } catch (Exception e) {
             System.err.println("InventoryDAO.ensureInventoryTable skipped: " + e.getMessage());
         }
-        // Gọi hàm đổ dữ liệu mặc định ngay sau khi đảm bảo bảng đã được tạo
         seedDefaultInventoryIfEmpty();
     }
 
@@ -56,13 +54,11 @@ public class InventoryDAO {
         try (Connection con = db.getConnection();
              java.sql.Statement st = con.createStatement();
              ResultSet rs = st.executeQuery(checkSql)) {
-            
-            // Nếu có kết quả trả về và số lượng = 0 (bảng trống)
+
             if (rs.next() && rs.getInt("total") == 0) {
                 List<Ingredient> defaults = createDefaultInventory();
                 String insertSql = "INSERT INTO dbo.Inventory (id, name, unit, stock, minStock, importCost) VALUES (?, ?, ?, ?, ?, ?)";
-                
-                // Mở transaction (setAutoCommit(false)) để đảm bảo nếu insert bị lỗi giữa chừng thì sẽ rollback lại toàn bộ
+
                 con.setAutoCommit(false);
                 try (PreparedStatement pst = con.prepareStatement(insertSql)) {
                     for (Ingredient item : defaults) {
@@ -72,14 +68,13 @@ public class InventoryDAO {
                         pst.setInt(4, item.getStock());
                         pst.setInt(5, item.getMinStock());
                         pst.setInt(6, item.getImportCost());
-                        // Thêm vào batch để gửi nhiều câu lệnh insert lên SQL Server cùng lúc giúp tăng hiệu năng
                         pst.addBatch();
                     }
-                    pst.executeBatch(); // Thực thi lô các câu lệnh insert
-                    con.commit(); // Lưu thay đổi
+                    pst.executeBatch();
+                    con.commit();
                     System.out.println("InventoryDAO: Seeded default ingredients into database.");
                 } catch (Exception e) {
-                    con.rollback(); // Hoàn tác nếu có lỗi
+                    con.rollback();
                     throw e;
                 }
             }
@@ -90,7 +85,7 @@ public class InventoryDAO {
 
     /**
      * Retrieves all ingredients from the database or fallback list.
-     * 
+     *
      * @return a list of all ingredients
      */
     public List<Ingredient> getAll() {
@@ -100,7 +95,7 @@ public class InventoryDAO {
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql);
              ResultSet rs = st.executeQuery()) {
-            
+
             while (rs.next()) {
                 String id = rs.getString("id");
                 String name = rs.getString("name");
@@ -108,16 +103,15 @@ public class InventoryDAO {
                 int stock = rs.getInt("stock");
                 int minStock = rs.getInt("minStock");
                 int importCost = rs.getInt("importCost");
-                
+
                 list.add(new Ingredient(id, name, unit, stock, minStock, importCost));
             }
-            // Sync fallback to the database contents
             fallbackInventory = new ArrayList<>(list);
         } catch (Exception e) {
             System.err.println("Database fetch failed in InventoryDAO.getAll(), falling back to synced list: " + e.getMessage());
             return getFallbackInventory();
         }
-        
+
         if (list.isEmpty()) {
             return getFallbackInventory();
         }
@@ -126,94 +120,199 @@ public class InventoryDAO {
 
     /**
      * Retrieves a specific ingredient by its ID.
-     * 
+     *
      * @param id the unique identifier of the ingredient
      * @return the ingredient if found, null otherwise
      */
     public Ingredient getById(String id) {
+        if (id == null || id.trim().isEmpty()) return null;
         String sql = "SELECT id, name, unit, stock, minStock, importCost FROM dbo.Inventory WHERE id = ?";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
-            
+
             st.setString(1, id);
             try (ResultSet rs = st.executeQuery()) {
                 if (rs.next()) {
-                    String name = rs.getString("name");
-                    String unit = rs.getString("unit");
-                    int stock = rs.getInt("stock");
-                    int minStock = rs.getInt("minStock");
-                    int importCost = rs.getInt("importCost");
-                    
-                    return new Ingredient(id, name, unit, stock, minStock, importCost);
+                    return new Ingredient(
+                            rs.getString("id"),
+                            rs.getString("name"),
+                            rs.getString("unit"),
+                            rs.getInt("stock"),
+                            rs.getInt("minStock"),
+                            rs.getInt("importCost"));
                 }
             }
         } catch (Exception e) {
             System.err.println("Database fetch failed in InventoryDAO.getById(), searching cached fallback context...");
         }
-        
+
         return getFallbackInventory().stream()
-                .filter(i -> i.getId().equals(id))
+                .filter(i -> i.getId().equalsIgnoreCase(id))
                 .findFirst()
                 .orElse(null);
     }
 
     /**
-     * Saves a new ingredient or updates an existing one in the database.
-     * 
-     * @param ing the ingredient to save or update
+     * Checks whether an ingredient ID already exists (SQL Server CI collation treats case variants as equal).
      */
-    public void save(Ingredient ing) {
+    public boolean exists(String id) throws Exception {
+        if (id == null || id.trim().isEmpty()) return false;
+        String sql = "SELECT COUNT(*) FROM dbo.Inventory WHERE id = ?";
         DBContext db = new DBContext();
-        boolean exists = false;
-        String checkSql = "SELECT COUNT(*) FROM dbo.Inventory WHERE id = ?";
         try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(checkSql)) {
-            st.setString(1, ing.getId());
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, id.trim());
             try (ResultSet rs = st.executeQuery()) {
-                if (rs.next() && rs.getInt(1) > 0) {
-                    exists = true;
-                }
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    /**
+     * Counts recipe rows that reference the given ingredient.
+     */
+    public int countRecipeUsage(String id) throws Exception {
+        if (id == null || id.trim().isEmpty()) return 0;
+        String sql = "SELECT COUNT(*) FROM dbo.RecipeItems WHERE ingredientId = ?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, id.trim());
+            try (ResultSet rs = st.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
             }
         } catch (Exception e) {
-            System.err.println("Database save check failed in InventoryDAO: " + e.getMessage());
+            // Table may not exist yet in brand-new environments.
+            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("invalid object name")) {
+                return 0;
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Inserts a new ingredient. Fails if the ID already exists.
+     */
+    public void insert(Ingredient ing) throws Exception {
+        if (ing == null || ing.getId() == null || ing.getId().trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã nguyên liệu không hợp lệ.");
+        }
+        if (exists(ing.getId())) {
+            throw new IllegalStateException("DUPLICATE_ID");
         }
 
-        if (exists) {
-            String updateSql = "UPDATE dbo.Inventory SET name = ?, unit = ?, stock = ?, minStock = ?, importCost = ? WHERE id = ?";
-            try (Connection con = db.getConnection();
-                 PreparedStatement st = con.prepareStatement(updateSql)) {
-                st.setString(1, ing.getName());
-                st.setString(2, ing.getUnit());
-                st.setInt(3, ing.getStock());
-                st.setInt(4, ing.getMinStock());
-                st.setInt(5, ing.getImportCost());
-                st.setString(6, ing.getId());
-                st.executeUpdate();
-            } catch (Exception e) {
-                System.err.println("Database update in InventoryDAO.save() failed: " + e.getMessage());
+        String insertSql = "INSERT INTO dbo.Inventory (id, name, unit, stock, minStock, importCost) VALUES (?, ?, ?, ?, ?, ?)";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(insertSql)) {
+            st.setString(1, ing.getId().trim());
+            st.setString(2, ing.getName());
+            st.setString(3, ing.getUnit());
+            st.setInt(4, ing.getStock());
+            st.setInt(5, ing.getMinStock());
+            st.setInt(6, ing.getImportCost());
+            st.executeUpdate();
+        } catch (Exception e) {
+            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+            if (msg.contains("duplicate") || msg.contains("unique") || msg.contains("primary key")) {
+                throw new IllegalStateException("DUPLICATE_ID");
+            }
+            throw e;
+        }
+
+        syncFallbackAfterWrite(ing, false);
+    }
+
+    /**
+     * Updates an existing ingredient identified by {@code originalId}.
+     *
+     * @return false if the ingredient does not exist
+     */
+    public boolean update(String originalId, Ingredient ing) throws Exception {
+        if (originalId == null || originalId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã nguyên liệu gốc không hợp lệ.");
+        }
+        if (!exists(originalId)) {
+            return false;
+        }
+
+        // ID is immutable on update; keep the stored id from originalId.
+        String updateSql = "UPDATE dbo.Inventory SET name = ?, unit = ?, stock = ?, minStock = ?, importCost = ? WHERE id = ?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(updateSql)) {
+            st.setString(1, ing.getName());
+            st.setString(2, ing.getUnit());
+            st.setInt(3, ing.getStock());
+            st.setInt(4, ing.getMinStock());
+            st.setInt(5, ing.getImportCost());
+            st.setString(6, originalId.trim());
+            int affected = st.executeUpdate();
+            if (affected <= 0) {
+                return false;
+            }
+        }
+
+        Ingredient stored = new Ingredient(
+                originalId.trim(),
+                ing.getName(),
+                ing.getUnit(),
+                ing.getStock(),
+                ing.getMinStock(),
+                ing.getImportCost());
+        syncFallbackAfterWrite(stored, false);
+        return true;
+    }
+
+    /**
+     * Legacy upsert kept for any residual callers; prefer {@link #insert} / {@link #update}.
+     */
+    public void save(Ingredient ing) throws Exception {
+        if (ing == null || ing.getId() == null) {
+            throw new IllegalArgumentException("Mã nguyên liệu không hợp lệ.");
+        }
+        if (exists(ing.getId())) {
+            if (!update(ing.getId(), ing)) {
+                throw new IllegalStateException("NOT_FOUND");
             }
         } else {
-            String insertSql = "INSERT INTO dbo.Inventory (id, name, unit, stock, minStock, importCost) VALUES (?, ?, ?, ?, ?, ?)";
-            try (Connection con = db.getConnection();
-                 PreparedStatement st = con.prepareStatement(insertSql)) {
-                st.setString(1, ing.getId());
-                st.setString(2, ing.getName());
-                st.setString(3, ing.getUnit());
-                st.setInt(4, ing.getStock());
-                st.setInt(5, ing.getMinStock());
-                st.setInt(6, ing.getImportCost());
-                st.executeUpdate();
-            } catch (Exception e) {
-                System.err.println("Database insert in InventoryDAO.save() failed: " + e.getMessage());
+            insert(ing);
+        }
+    }
+
+    /**
+     * Deletes an ingredient by ID.
+     *
+     * @return false if the ingredient does not exist
+     */
+    public boolean delete(String id) throws Exception {
+        if (id == null || id.trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã nguyên liệu không hợp lệ.");
+        }
+        String sql = "DELETE FROM dbo.Inventory WHERE id = ?";
+        DBContext db = new DBContext();
+        try (Connection con = db.getConnection();
+             PreparedStatement st = con.prepareStatement(sql)) {
+            st.setString(1, id.trim());
+            int affected = st.executeUpdate();
+            if (affected <= 0) {
+                return false;
             }
         }
+        syncFallbackAfterWrite(new Ingredient(id.trim(), "", "", 0, 0, 0), true);
+        return true;
+    }
 
-        // Maintain fallback list in memory
+    private void syncFallbackAfterWrite(Ingredient ing, boolean deleted) {
         List<Ingredient> current = getFallbackInventory();
+        if (deleted) {
+            current.removeIf(i -> i.getId().equalsIgnoreCase(ing.getId()));
+            return;
+        }
         int idx = -1;
         for (int i = 0; i < current.size(); i++) {
-            if (current.get(i).getId().equals(ing.getId())) {
+            if (current.get(i).getId().equalsIgnoreCase(ing.getId())) {
                 idx = i;
                 break;
             }
@@ -226,26 +325,8 @@ public class InventoryDAO {
     }
 
     /**
-     * Deletes an ingredient from the database by its ID.
-     * 
-     * @param id the unique identifier of the ingredient to delete
-     */
-    public void delete(String id) {
-        String sql = "DELETE FROM dbo.Inventory WHERE id = ?";
-        DBContext db = new DBContext();
-        try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(sql)) {
-            st.setString(1, id);
-            st.executeUpdate();
-        } catch (Exception e) {
-            System.err.println("Database delete failed in InventoryDAO.delete(): " + e.getMessage());
-        }
-        getFallbackInventory().removeIf(i -> i.getId().equals(id));
-    }
-
-    /**
      * Retrieves the fallback memory cache of the inventory.
-     * 
+     *
      * @return the fallback list of ingredients
      */
     public List<Ingredient> getFallbackInventory() {

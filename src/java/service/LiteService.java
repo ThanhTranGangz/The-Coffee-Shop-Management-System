@@ -247,21 +247,21 @@ public class LiteService {
     }
 
     private void seedMenu(Connection con) throws Exception {
-        upsertMenuItem(con, "Cà phê sữa", "Milk Coffee", "Cà phê", 30000, "assets/img/menu/coffee.jpg");
-        upsertMenuItem(con, "Cà phê đen", "Black Coffee", "Cà phê", 28000, "assets/img/menu/coffee.jpg");
-        upsertMenuItem(con, "Bạc xỉu", "White Coffee", "Cà phê", 32000, "assets/img/menu/latte.jpg");
-        upsertMenuItem(con, "Espresso", "Espresso", "Cà phê", 30000, "assets/img/menu/coffee.jpg");
-        upsertMenuItem(con, "Cappuccino", "Cappuccino", "Cà phê", 38000, "assets/img/menu/latte.jpg");
+        upsertMenuItem(con, "Cà phê sữa", "Milk Coffee", "Cà phê", 30000, "assets/img/menu/ca-phe-sua.jpg");
+        upsertMenuItem(con, "Cà phê đen", "Black Coffee", "Cà phê", 28000, "assets/img/menu/ca-phe-den.jpg");
+        upsertMenuItem(con, "Bạc xỉu", "White Coffee", "Cà phê", 32000, "assets/img/menu/bac-xiu.jpg");
+        upsertMenuItem(con, "Espresso", "Espresso", "Cà phê", 30000, "assets/img/menu/espresso.jpg");
+        upsertMenuItem(con, "Cappuccino", "Cappuccino", "Cà phê", 38000, "assets/img/menu/cappuccino.jpg");
         upsertMenuItem(con, "Latte", "Latte", "Cà phê", 40000, "assets/img/menu/latte.jpg");
-        upsertMenuItem(con, "Trà đào", "Peach Tea", "Trà", 35000, "assets/img/menu/tea.jpg");
-        upsertMenuItem(con, "Trà vải", "Lychee Tea", "Trà", 36000, "assets/img/menu/tea.jpg");
-        upsertMenuItem(con, "Trà sen vàng", "Lotus Tea", "Trà", 39000, "assets/img/menu/tea.jpg");
-        upsertMenuItem(con, "Matcha latte", "Matcha Latte", "Đặc biệt", 42000, "assets/img/menu/matcha.jpg");
-        upsertMenuItem(con, "Socola đá", "Iced Chocolate", "Đặc biệt", 40000, "assets/img/menu/matcha.jpg");
-        upsertMenuItem(con, "Sinh tố xoài", "Mango Smoothie", "Đặc biệt", 45000, "assets/img/menu/smoothie.jpg");
-        upsertMenuItem(con, "Bánh croissant", "Croissant", "Bánh ngọt", 28000, "assets/img/menu/pastry.jpg");
-        upsertMenuItem(con, "Tiramisu", "Tiramisu", "Bánh ngọt", 42000, "assets/img/menu/pastry.jpg");
-        upsertMenuItem(con, "Cheesecake", "Cheesecake", "Bánh ngọt", 45000, "assets/img/menu/pastry.jpg");
+        upsertMenuItem(con, "Trà đào", "Peach Tea", "Trà", 35000, "assets/img/menu/tra-dao.jpg");
+        upsertMenuItem(con, "Trà vải", "Lychee Tea", "Trà", 36000, "assets/img/menu/tra-vai.jpg");
+        upsertMenuItem(con, "Trà sen vàng", "Lotus Tea", "Trà", 39000, "assets/img/menu/tra-sen-vang.jpg");
+        upsertMenuItem(con, "Matcha latte", "Matcha Latte", "Đặc biệt", 42000, "assets/img/menu/matcha-latte.jpg");
+        upsertMenuItem(con, "Socola đá", "Iced Chocolate", "Đặc biệt", 40000, "assets/img/menu/socola-da.jpg");
+        upsertMenuItem(con, "Sinh tố xoài", "Mango Smoothie", "Đặc biệt", 45000, "assets/img/menu/sinh-to-xoai.jpg");
+        upsertMenuItem(con, "Bánh croissant", "Croissant", "Bánh ngọt", 28000, "assets/img/menu/banh-croissant.jpg");
+        upsertMenuItem(con, "Tiramisu", "Tiramisu", "Bánh ngọt", 42000, "assets/img/menu/tiramisu.jpg");
+        upsertMenuItem(con, "Cheesecake", "Cheesecake", "Bánh ngọt", 45000, "assets/img/menu/cheesecake.jpg");
     }
 
     private void ensureInventoryAndRecipes(Connection con) throws Exception {
@@ -643,63 +643,102 @@ public class LiteService {
         String category = normalizeCategory(readString(data.get("category"), "Cà phê"));
         int price = readInt(data.get("price"), 0);
         boolean active = readBoolean(data.get("active"), true);
-        String imagePath = readString(data.get("imagePath"), defaultImagePath(category));
+        String imagePath = readString(data.get("imagePath"), "");
+        if (imagePath.isEmpty()) {
+            imagePath = imagePathForMenuItem(nameVi, category);
+        }
         boolean hasSizes = readBoolean(data.get("hasSizes"), false);
         List<Map<String, Object>> sizes = normalizeSizeRows(data.get("sizes"), hasSizes);
         validateMenuItem(id, nameVi, nameEn, category, price, imagePath);
 
         try (Connection con = db.getConnection()) {
             con.setAutoCommit(false);
-            if (menuNameExists(con, id, nameVi, nameEn)) {
-                throw new IllegalArgumentException("Tên món đã tồn tại.");
-            }
-            if (id > 0) {
-                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.MenuItems SET nameVi=?, nameEn=?, category=?, price=?, active=?, imagePath=? WHERE id=?")) {
-                    ps.setString(1, nameVi);
-                    ps.setString(2, nameEn);
-                    ps.setString(3, category);
-                    ps.setInt(4, price);
-                    ps.setBoolean(5, active);
-                    ps.setString(6, imagePath);
-                    ps.setInt(7, id);
-                    ps.executeUpdate();
+            try {
+                if (menuNameExists(con, id, nameVi, nameEn)) {
+                    throw new IllegalArgumentException("Tên món đã tồn tại.");
                 }
-            } else {
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.MenuItems (nameVi,nameEn,category,price,active,imagePath) VALUES (?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
-                    ps.setString(1, nameVi);
-                    ps.setString(2, nameEn);
-                    ps.setString(3, category);
-                    ps.setInt(4, price);
-                    ps.setBoolean(5, active);
-                    ps.setString(6, imagePath);
-                    ps.executeUpdate();
-                    try (ResultSet keys = ps.getGeneratedKeys()) {
-                        if (keys.next()) id = keys.getInt(1);
+                if (id > 0) {
+                    try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.MenuItems SET nameVi=?, nameEn=?, category=?, price=?, active=?, imagePath=? WHERE id=?")) {
+                        ps.setString(1, nameVi);
+                        ps.setString(2, nameEn);
+                        ps.setString(3, category);
+                        ps.setInt(4, price);
+                        ps.setBoolean(5, active);
+                        ps.setString(6, imagePath);
+                        ps.setInt(7, id);
+                        ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.MenuItems (nameVi,nameEn,category,price,active,imagePath) VALUES (?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                        ps.setString(1, nameVi);
+                        ps.setString(2, nameEn);
+                        ps.setString(3, category);
+                        ps.setInt(4, price);
+                        ps.setBoolean(5, active);
+                        ps.setString(6, imagePath);
+                        ps.executeUpdate();
+                        try (ResultSet keys = ps.getGeneratedKeys()) {
+                            if (keys.next()) id = keys.getInt(1);
+                        }
                     }
                 }
+                saveMenuSizes(con, id, sizes);
+                saveMenuRecipes(con, id, data.get("recipes"));
+                con.commit();
+            } catch (Exception e) {
+                con.rollback();
+                throw e;
             }
-            saveMenuSizes(con, id, sizes);
-            saveMenuRecipes(id, data.get("recipes"));
-            con.commit();
         }
         return getMenuItem(id);
     }
 
-    private void saveMenuRecipes(int menuItemId, Object recipesObj) {
-        if (recipesObj instanceof List) {
-            List<Map<String, Object>> list = (List<Map<String, Object>>) recipesObj;
-            List<model.RecipeItem> recipeItems = new java.util.ArrayList<>();
-            for (Map<String, Object> row : list) {
-                String ingredientId = readString(row.get("ingredientId"), "");
-                int quantity = readInt(row.get("quantity"), 0);
-                if (!ingredientId.isEmpty() && quantity > 0) {
-                    model.RecipeItem item = new model.RecipeItem();
-                    item.setIngredientId(ingredientId);
-                    item.setQuantity(quantity);
-                    recipeItems.add(item);
-                }
+    private void saveMenuRecipes(Connection con, int menuItemId, Object recipesObj) throws Exception {
+        List<model.RecipeItem> recipeItems = normalizeAndValidateRecipes(con, recipesObj);
+        new dao.RecipeDAO().saveForMenuItem(con, String.valueOf(menuItemId), recipeItems);
+    }
+
+    private List<model.RecipeItem> normalizeAndValidateRecipes(Connection con, Object recipesObj) throws Exception {
+        List<model.RecipeItem> recipeItems = new java.util.ArrayList<>();
+        if (!(recipesObj instanceof List)) {
+            return recipeItems;
+        }
+
+        List<?> list = (List<?>) recipesObj;
+        java.util.Set<String> seenIngredientIds = new java.util.HashSet<>();
+        for (Object raw : list) {
+            if (!(raw instanceof Map)) continue;
+            Map<String, Object> row = (Map<String, Object>) raw;
+            String ingredientId = readString(row.get("ingredientId"), "").trim();
+            int quantity = readInt(row.get("quantity"), 0);
+            if (ingredientId.isEmpty() && quantity <= 0) continue;
+            if (ingredientId.isEmpty()) {
+                throw new IllegalArgumentException("Công thức thiếu mã nguyên liệu.");
             }
-            new dao.RecipeDAO().saveForMenuItem(String.valueOf(menuItemId), recipeItems);
+            if (quantity <= 0) {
+                throw new IllegalArgumentException("Số lượng nguyên liệu trong công thức phải lớn hơn 0.");
+            }
+            String key = ingredientId.toLowerCase(java.util.Locale.ROOT);
+            if (!seenIngredientIds.add(key)) {
+                throw new IllegalArgumentException("Công thức bị trùng nguyên liệu: " + ingredientId);
+            }
+            if (!ingredientExists(con, ingredientId)) {
+                throw new IllegalArgumentException("Nguyên liệu không tồn tại: " + ingredientId);
+            }
+            model.RecipeItem item = new model.RecipeItem();
+            item.setIngredientId(ingredientId);
+            item.setQuantity(quantity);
+            recipeItems.add(item);
+        }
+        return recipeItems;
+    }
+
+    private boolean ingredientExists(Connection con, String ingredientId) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement("SELECT 1 FROM dbo.Inventory WHERE id = ?")) {
+            ps.setString(1, ingredientId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
         }
     }
 
@@ -901,6 +940,26 @@ public class LiteService {
         if (folded.contains("special") || folded.contains("dac biet")) return "Đặc biệt";
         if (folded.contains("food") || folded.contains("pastry") || folded.contains("banh")) return "Bánh ngọt";
         return category;
+    }
+
+    private String imagePathForMenuItem(String nameVi, String category) {
+        String foldedName = fold(nameVi);
+        if (foldedName.contains("ca phe sua")) return "assets/img/menu/ca-phe-sua.jpg";
+        if (foldedName.contains("ca phe den")) return "assets/img/menu/ca-phe-den.jpg";
+        if (foldedName.contains("bac xiu")) return "assets/img/menu/bac-xiu.jpg";
+        if (foldedName.contains("espresso")) return "assets/img/menu/espresso.jpg";
+        if (foldedName.contains("cappuccino")) return "assets/img/menu/cappuccino.jpg";
+        if (foldedName.contains("matcha")) return "assets/img/menu/matcha-latte.jpg";
+        if (foldedName.equals("latte") || foldedName.startsWith("latte ")) return "assets/img/menu/latte.jpg";
+        if (foldedName.contains("tra dao")) return "assets/img/menu/tra-dao.jpg";
+        if (foldedName.contains("tra vai")) return "assets/img/menu/tra-vai.jpg";
+        if (foldedName.contains("tra sen")) return "assets/img/menu/tra-sen-vang.jpg";
+        if (foldedName.contains("socola") || foldedName.contains("chocolate")) return "assets/img/menu/socola-da.jpg";
+        if (foldedName.contains("sinh to xoai") || foldedName.contains("mango")) return "assets/img/menu/sinh-to-xoai.jpg";
+        if (foldedName.contains("croissant")) return "assets/img/menu/banh-croissant.jpg";
+        if (foldedName.contains("tiramisu")) return "assets/img/menu/tiramisu.jpg";
+        if (foldedName.contains("cheesecake")) return "assets/img/menu/cheesecake.jpg";
+        return defaultImagePath(category);
     }
 
     private String defaultImagePath(String category) {

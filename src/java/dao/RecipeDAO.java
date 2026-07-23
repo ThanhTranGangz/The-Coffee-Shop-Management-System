@@ -94,49 +94,63 @@ public class RecipeDAO {
     /**
      * Saves (inserts or updates) a list of recipe items for a specific menu item.
      * This will clear existing recipes for the menu item and insert the new ones.
-     * 
+     *
      * @param menuItemId the unique identifier of the menu item
      * @param items the new list of recipe items
      */
-    public void saveForMenuItem(String menuItemId, List<RecipeItem> items) {
+    public void saveForMenuItem(String menuItemId, List<RecipeItem> items) throws Exception {
         DBContext db = new DBContext();
         try (Connection con = db.getConnection()) {
             con.setAutoCommit(false);
             try {
-                // Delete existing
-                String deleteSql = "DELETE FROM dbo.RecipeItems WHERE menuItemId = ?";
-                try (PreparedStatement st = con.prepareStatement(deleteSql)) {
-                    st.setString(1, menuItemId);
-                    st.executeUpdate();
-                }
-
-                // Insert new
-                if (items != null && !items.isEmpty()) {
-                    String insertSql = "INSERT INTO dbo.RecipeItems (id, menuItemId, ingredientId, quantity) VALUES (?, ?, ?, ?)";
-                    for (RecipeItem item : items) {
-                        try (PreparedStatement st = con.prepareStatement(insertSql)) {
-                            String newId = item.getId() != null && !item.getId().isEmpty() ? item.getId() : java.util.UUID.randomUUID().toString();
-                            item.setId(newId);
-                            item.setMenuItemId(menuItemId); // Ensure consistency
-                            
-                            st.setString(1, newId);
-                            st.setString(2, menuItemId);
-                            st.setString(3, item.getIngredientId());
-                            st.setInt(4, item.getQuantity());
-                            st.executeUpdate();
-                        }
-                    }
-                }
+                saveForMenuItem(con, menuItemId, items);
                 con.commit();
             } catch (Exception ex) {
                 con.rollback();
                 throw ex;
             }
-        } catch (Exception e) {
-            System.err.println("Database save failed in RecipeDAO.saveForMenuItem(), updating fallback list: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Saves recipe items using an existing connection/transaction owned by the caller.
+     */
+    public void saveForMenuItem(Connection con, String menuItemId, List<RecipeItem> items) throws Exception {
+        if (con == null) {
+            throw new IllegalArgumentException("Kết nối CSDL không hợp lệ.");
+        }
+        if (menuItemId == null || menuItemId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Mã món không hợp lệ khi lưu công thức.");
         }
 
-        // Update fallback
+        String deleteSql = "DELETE FROM dbo.RecipeItems WHERE menuItemId = ?";
+        try (PreparedStatement st = con.prepareStatement(deleteSql)) {
+            st.setString(1, menuItemId);
+            st.executeUpdate();
+        }
+
+        if (items != null && !items.isEmpty()) {
+            String insertSql = "INSERT INTO dbo.RecipeItems (id, menuItemId, ingredientId, quantity) VALUES (?, ?, ?, ?)";
+            for (RecipeItem item : items) {
+                try (PreparedStatement st = con.prepareStatement(insertSql)) {
+                    String newId = item.getId() != null && !item.getId().isEmpty()
+                            ? item.getId()
+                            : java.util.UUID.randomUUID().toString();
+                    item.setId(newId);
+                    item.setMenuItemId(menuItemId);
+
+                    st.setString(1, newId);
+                    st.setString(2, menuItemId);
+                    st.setString(3, item.getIngredientId());
+                    st.setInt(4, item.getQuantity());
+                    st.executeUpdate();
+                }
+            }
+        }
+        updateFallbackRecipes(menuItemId, items);
+    }
+
+    private void updateFallbackRecipes(String menuItemId, List<RecipeItem> items) {
         List<RecipeItem> fallback = getFallbackRecipes();
         fallback.removeIf(item -> item.getMenuItemId().equals(menuItemId));
         if (items != null) {

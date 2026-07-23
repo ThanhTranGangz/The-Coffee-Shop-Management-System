@@ -6,6 +6,23 @@
             'Đặc biệt': 'assets/img/menu/matcha.jpg',
             'Bánh ngọt': 'assets/img/menu/pastry.jpg'
         };
+        const imageByName = {
+            'cà phê sữa': 'assets/img/menu/ca-phe-sua.jpg',
+            'cà phê đen': 'assets/img/menu/ca-phe-den.jpg',
+            'bạc xỉu': 'assets/img/menu/bac-xiu.jpg',
+            'espresso': 'assets/img/menu/espresso.jpg',
+            'cappuccino': 'assets/img/menu/cappuccino.jpg',
+            'latte': 'assets/img/menu/latte.jpg',
+            'trà đào': 'assets/img/menu/tra-dao.jpg',
+            'trà vải': 'assets/img/menu/tra-vai.jpg',
+            'trà sen vàng': 'assets/img/menu/tra-sen-vang.jpg',
+            'matcha latte': 'assets/img/menu/matcha-latte.jpg',
+            'socola đá': 'assets/img/menu/socola-da.jpg',
+            'sinh tố xoài': 'assets/img/menu/sinh-to-xoai.jpg',
+            'bánh croissant': 'assets/img/menu/banh-croissant.jpg',
+            'tiramisu': 'assets/img/menu/tiramisu.jpg',
+            'cheesecake': 'assets/img/menu/cheesecake.jpg'
+        };
 
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-overlay').addEventListener('click', closeEditSheet);
@@ -159,8 +176,11 @@
 
         function syncDefaultImage() {
             const image = document.getElementById('imagePath');
-            if (!image.value || Object.values(imageByCategory).includes(image.value)) {
-                image.value = imageByCategory[document.getElementById('category').value] || imageByCategory['Cà phê'];
+            const nameVi = (document.getElementById('nameVi').value || '').trim().toLowerCase();
+            const category = document.getElementById('category').value;
+            const knownPaths = Object.values(imageByCategory).concat(Object.values(imageByName));
+            if (!image.value || knownPaths.includes(image.value)) {
+                image.value = imageByName[nameVi] || imageByCategory[category] || imageByCategory['Cà phê'];
             }
         }
 
