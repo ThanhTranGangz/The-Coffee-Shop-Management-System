@@ -25,9 +25,19 @@
             setInterval(loadCupStatus, 6000);
         });
 
+        function isCookByItemActive() {
+            // Item-level prep is only available while the order is already Preparing.
+            return activeStatus === 'Preparing' && viewMode === 'item';
+        }
+
         function renderViewToggle() {
             const container = document.getElementById('view-toggle-group');
             if (!container) return;
+            // Toggle appears only on the Preparing tab: Pending is "start cooking" only.
+            if (activeStatus !== 'Preparing') {
+                container.innerHTML = '';
+                return;
+            }
             container.innerHTML = `
                 <button class="view-toggle-btn ${viewMode === 'order' ? 'active' : ''}" id="btn-view-order" onclick="switchViewMode('order')">${t('cookByOrder')}</button>
                 <button class="view-toggle-btn ${viewMode === 'item' ? 'active' : ''}" id="btn-view-item" onclick="switchViewMode('item')">${t('cookByItem')}</button>
@@ -35,6 +45,7 @@
         }
 
         function switchViewMode(mode) {
+            if (activeStatus !== 'Preparing') return;
             if (viewMode === mode) return;
             viewMode = mode;
             localStorage.setItem('barista_view_mode', mode);
@@ -119,22 +130,12 @@
         function renderBoard(orders) {
             const activeOrders = orders.filter(order => order.status === activeStatus);
             const activeLabel = t(statusKeys[activeStatus]);
-            
-            let countLabel = activeOrders.length;
-            let bodyHtml = '';
-            
-            if (viewMode === 'item') {
-                // Cook by item mode: still display order cards, but items are individually press-and-holdable
-                bodyHtml = activeOrders.length 
-                    ? activeOrders.map(order => orderHtml(order, true)).join('') 
-                    : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
-            } else {
-                // Cook by order mode: display order cards, hold the entire card to move status
-                bodyHtml = activeOrders.length 
-                    ? activeOrders.map(order => orderHtml(order, false)).join('') 
-                    : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
-            }
-            
+            const itemInteractive = isCookByItemActive();
+            const countLabel = activeOrders.length;
+            const bodyHtml = activeOrders.length
+                ? activeOrders.map(order => orderHtml(order, itemInteractive)).join('')
+                : `<div class="empty-state compact"><div class="big">0</div><h3>${t('noOrder')}</h3></div>`;
+
             document.getElementById('orders-board').innerHTML = `
                 <section class="status-col active single-status" id="col-${activeStatus}">
                     <div class="status-col-head">
@@ -150,6 +151,7 @@
 
         function setActiveStatus(status) {
             activeStatus = status;
+            renderViewToggle();
             loadOrders({ silent: true });
         }
 
@@ -276,6 +278,7 @@
         }
 
         function startHoldItem(event, orderId, menuItemId, itemSize) {
+            if (!isCookByItemActive()) return;
             beginHold(event, async () => {
                 const res = await api('/orders/item-prepare', {
                     method: 'POST',

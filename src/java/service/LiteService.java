@@ -2187,8 +2187,9 @@ public class LiteService {
                         tableName = rs.getString("tableName");
                     }
                 }
-                if (!"Pending".equals(currentStatus) && !"Preparing".equals(currentStatus)) {
-                    throw new IllegalStateException("Chỉ pha được món khi đơn đang chờ hoặc đang pha.");
+                // Item-level prep starts only after the order has been accepted into Preparing.
+                if (!"Preparing".equals(currentStatus)) {
+                    throw new IllegalStateException("Chỉ pha được món khi đơn đang pha. Hãy nhận đơn từ Chờ xử lý trước.");
                 }
 
                 int itemId = 0;
@@ -2222,9 +2223,6 @@ public class LiteService {
                 }
 
                 String nextStatus = currentStatus;
-                if ("Pending".equals(currentStatus)) {
-                    nextStatus = "Preparing";
-                }
                 if (isOrderFullyPrepared(con, orderId)) {
                     int requiredCups = cupCountForOrder(con, orderId);
                     int cups = stateValueForUpdate(con, "cupsAvailable", 0);

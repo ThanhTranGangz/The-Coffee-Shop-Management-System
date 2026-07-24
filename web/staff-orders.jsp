@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
         <meta name="page-title-key" content="baristaTitle">
-    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
+    <link rel="stylesheet" href="assets/css/app.css?v=barista-prep-flow-1">
     <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
 </head>
 <body>
@@ -26,6 +26,6 @@
         <section class="work-tabs" id="barista-tabs"></section>
         <section class="status-board" id="orders-board"></section>
     </main>
-    <script src="assets/js/page-staff-orders.js?v=single-order-status-1"></script>
+    <script src="assets/js/page-staff-orders.js?v=barista-prep-flow-1"></script>
 </body>
 </html>

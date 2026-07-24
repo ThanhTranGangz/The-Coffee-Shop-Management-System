@@ -3695,6 +3695,10 @@ body.invoice-open {
     box-shadow: var(--shadow-soft);
 }
 
+.view-toggle-group:empty {
+    display: none;
+}
+
 .view-toggle-btn {
     border: none;
     background: transparent;
