@@ -179,12 +179,30 @@
                 </article>`;
         }
 
+        function floorOfTable(table) {
+            const direct = Number(table && table.floorNo);
+            if (Number.isFinite(direct) && direct > 0) return direct;
+            const match = String((table && table.name) || '').match(/(?:Tầng|Floor)\s*(\d+)/i);
+            return match ? Number(match[1]) : 1;
+        }
+
+        function tableNoOfTable(table) {
+            const direct = Number(table && table.tableNo);
+            if (Number.isFinite(direct) && direct > 0) return direct;
+            const match = String((table && table.name) || '').match(/(?:Bàn|Table)\s*(\d+)/i);
+            return match ? Number(match[1]) : 999;
+        }
+
         function renderTableMap(tables) {
-            const groups = {};
+            const groups = new Map();
             (tables || []).forEach(table => {
-                const floor = table.floorNo || 1;
-                if (!groups[floor]) groups[floor] = [];
-                groups[floor].push(table);
+                const floor = floorOfTable(table);
+                if (!groups.has(floor)) groups.set(floor, []);
+                groups.get(floor).push(table);
+            });
+            const floors = [...groups.keys()].sort((a, b) => a - b);
+            floors.forEach(floor => {
+                groups.get(floor).sort((a, b) => tableNoOfTable(a) - tableNoOfTable(b));
             });
             document.getElementById('runner-table-map').innerHTML = `
                 <div class="toolbar compact-toolbar">
@@ -195,11 +213,11 @@
                     <span>${(tables || []).length}</span>
                 </div>
                 <div class="table-map-grid">
-                    ${Object.keys(groups).sort().map(floor => `
+                    ${floors.map(floor => `
                         <section class="floor-map">
                             <div class="floor-title">${t('floor')} ${floor}</div>
                             <div class="table-grid-map">
-                                ${groups[floor].map(tableTile).join('')}
+                                ${groups.get(floor).map(tableTile).join('')}
                             </div>
                         </section>
                     `).join('')}

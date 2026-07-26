@@ -25,6 +25,6 @@
         <section class="card transfer-panel" id="transfer-root"></section>
         <section class="card table-map-card" id="transfer-map"></section>
     </main>
-    <script src="assets/js/page-table-transfer.js?v=order-confirm-1"></script>
+    <script src="assets/js/page-table-transfer.js?v=runner-floor-fix-1"></script>
 </body>
 </html>

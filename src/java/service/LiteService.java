@@ -1005,6 +1005,8 @@ public class LiteService {
             Map<String, Object> row = new java.util.LinkedHashMap<>();
             row.put("id", table.get("id"));
             row.put("name", table.get("name"));
+            row.put("floorNo", table.get("floorNo"));
+            row.put("tableNo", table.get("tableNo"));
             row.put("status", table.get("status"));
             row.put("busy", table.get("busy"));
             sanitized.add(row);
