@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>coffeshop</title>
         <meta name="page-title-key" content="menuPageTitle">
-    <link rel="stylesheet" href="assets/css/app.css?v=menu-mobile-1">
-    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
+    <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
 </head>
 <body>
     <nav class="nav">
@@ -20,8 +20,10 @@
 
     <main class="shell">
         <section class="table-welcome hidden" id="table-welcome">
-            <p class="eyebrow" data-i18n="qrWelcomeTitle">Đã nhận bàn</p>
+            <p class="eyebrow" id="table-welcome-eyebrow" data-i18n="qrWelcomeTitle">Đã nhận bàn</p>
             <h2 id="table-welcome-text"></h2>
+            <a class="btn primary qr-required-action hidden" id="qr-scan-link" href="index.html"
+               data-i18n="scanTableQrButton">Quét QR tại bàn</a>
         </section>
 
         <section class="mobile-quick-panel table-picker-panel">
@@ -56,6 +58,7 @@
                     <span data-i18n="total">Tổng tiền</span>
                     <b class="price" id="cart-total">0 ₫</b>
                 </div>
+                <div id="loyalty-box" class="loyalty-box hidden"></div>
                 <div style="margin-top:12px">
                     <label data-i18n="cartNote">Ghi chú cho quán</label>
                     <textarea id="note" rows="3" data-i18n-placeholder="notePlaceholder" placeholder="Ít đá, ít đường, giao trước món nóng..."></textarea>
@@ -104,6 +107,6 @@
             </button>
         </div>
     </div>
-    <script src="assets/js/page-menu.js?v=stock-limit-1"></script>
+    <script src="assets/js/page-menu.js?v=loyalty-2"></script>
 </body>
 </html>

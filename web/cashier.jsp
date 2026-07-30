@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
         <meta name="page-title-key" content="cashierTitle">
-    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
+    <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
 </head>
 <body>
     <nav class="nav">
@@ -43,6 +43,6 @@
         </div>
     </aside>
 
-    <script src="assets/js/page-cashier.js?v=split-bill-1"></script>
+    <script src="assets/js/page-cashier.js?v=loyalty-2"></script>
 </body>
 </html>

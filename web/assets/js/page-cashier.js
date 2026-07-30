@@ -91,12 +91,12 @@
             return `
                 <article class="card order-card hold-card ${payable ? '' : 'not-ready'}"
                     data-cashier-card="1"
-                    onpointerdown="startHold(event, ${order.id}, ${payable})"
+                    onpointerdown="startHold(event, ${order.id}, ${payable}, ${order.total || 0})"
                     onpointerup="cancelHold()"
                     onpointercancel="cancelHold()"
-                    ontouchstart="startHold(event, ${order.id}, ${payable})"
+                    ontouchstart="startHold(event, ${order.id}, ${payable}, ${order.total || 0})"
                     ontouchend="cancelHold()"
-                    onmousedown="startHold(event, ${order.id}, ${payable})"
+                    onmousedown="startHold(event, ${order.id}, ${payable}, ${order.total || 0})"
                     onmouseup="cancelHold()"
                     oncontextmenu="return false">
                     <div class="toolbar" style="margin-bottom:10px">
@@ -141,23 +141,105 @@
             return statusText(status);
         }
 
-        async function completeOrder(id) {
+        async function completeOrder(id, amount) {
+            // Hỏi hình thức thanh toán TRƯỚC khi ghi nhận. Trước đây chỉ đổi
+            // status thành 'Paid' — không lưu trả bằng gì, khách đưa bao nhiêu,
+            // ai thu, nên không đối soát ca được.
+            const detail = await paymentModal(Number(amount) || 0);
+            if (!detail) return;
+
             const res = await api('/orders/status', {
                 method:'POST',
                 headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ id, status: 'Paid' })
+                body: JSON.stringify({
+                    id,
+                    status: 'Paid',
+                    paymentMethod: detail.method,
+                    receivedAmount: detail.received
+                })
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
                 notifyWork(err.error || t('statusMoveFailed'));
                 return;
             }
+            if (detail.change > 0) notifyWork(t('changeAmount') + ': ' + money(detail.change));
             loadOrders({ silent: true });
         }
 
-        function startHold(event, id, payable) {
+        /**
+         * Hộp thoại thu tiền. Trả về {method, received, change} hoặc null nếu huỷ.
+         * Số tiền thối tính ở đây chỉ để thu ngân đọc; server vẫn tự tính lại
+         * và tự kẹp received >= amount trước khi ghi vào bảng Payments.
+         */
+        function paymentModal(amount) {
+            return new Promise(resolve => {
+                let method = 'CASH';
+                const overlay = document.createElement('div');
+                overlay.className = 'app-modal-backdrop';
+                overlay.innerHTML = `
+                    <section class="app-modal-card pay-modal">
+                        <div>
+                            <p class="eyebrow">${t('confirmPayment')}</p>
+                            <h2 class="price">${money(amount)}</h2>
+                        </div>
+                        <div>
+                            <label>${t('paymentMethod')}</label>
+                            <div class="role-picker pay-methods">
+                                <button class="role-option active" type="button" data-method="CASH">${t('payCash')}</button>
+                                <button class="role-option" type="button" data-method="TRANSFER">${t('payTransfer')}</button>
+                            </div>
+                        </div>
+                        <div data-cash-only>
+                            <label for="pay-received">${t('receivedAmount')}</label>
+                            <input id="pay-received" class="app-modal-input" inputmode="numeric" value="${amount}">
+                            <p class="cust-hint" data-change>${t('changeAmount')}: ${money(0)}</p>
+                        </div>
+                        <div class="app-modal-actions">
+                            <button class="btn" type="button" data-cancel>${t('cancel')}</button>
+                            <button class="btn primary" type="button" data-ok>${t('confirmPayment')}</button>
+                        </div>
+                    </section>`;
+                document.body.appendChild(overlay);
+
+                const input = overlay.querySelector('#pay-received');
+                const changeLine = overlay.querySelector('[data-change]');
+                const cashBlock = overlay.querySelector('[data-cash-only]');
+
+                function received() {
+                    return Math.max(0, Math.floor(Number(String(input.value).replace(/[^0-9]/g, '')) || 0));
+                }
+                function refresh() {
+                    const change = Math.max(0, received() - amount);
+                    changeLine.textContent = t('changeAmount') + ': ' + money(change);
+                    changeLine.classList.toggle('pay-short', received() < amount);
+                }
+                input.addEventListener('input', refresh);
+
+                overlay.querySelectorAll('[data-method]').forEach(button => {
+                    button.addEventListener('click', () => {
+                        method = button.dataset.method;
+                        overlay.querySelectorAll('[data-method]').forEach(b => b.classList.toggle('active', b === button));
+                        // Chuyển khoản thì không có chuyện đưa tiền và thối lại.
+                        cashBlock.classList.toggle('hidden', method !== 'CASH');
+                    });
+                });
+
+                function close(value) { overlay.remove(); resolve(value); }
+                overlay.querySelector('[data-cancel]').addEventListener('click', () => close(null));
+                overlay.querySelector('[data-ok]').addEventListener('click', () => {
+                    if (method === 'TRANSFER') return close({ method, received: amount, change: 0 });
+                    if (received() < amount) { refresh(); input.focus(); return; }
+                    close({ method, received: received(), change: received() - amount });
+                });
+                overlay.addEventListener('keydown', e => { if (e.key === 'Escape') close(null); });
+                setTimeout(() => { input.focus(); input.select(); refresh(); }, 30);
+            });
+        }
+
+        function startHold(event, id, payable, amount) {
             if (!payable) return;
-            beginHold(event, () => completeOrder(id));
+            beginHold(event, () => completeOrder(id, amount));
         }
 
         function beginHold(event, action) {

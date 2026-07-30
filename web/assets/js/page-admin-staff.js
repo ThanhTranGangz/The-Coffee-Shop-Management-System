@@ -72,9 +72,9 @@ function availableStaffForShift(shiftName, dateStr, excludeStaffId) {
 
 function scheduleRoles() {
     return [
-        { id: 'Barista', label: t('roleBarista'), css: 'role-barista' },
-        { id: 'Cashier', label: t('roleCashier'), css: 'role-cashier' },
-        { id: 'Waiter', label: t('roleRunner'), css: 'role-waiter' }
+        { id: 'barista', label: t('roleBarista'), css: 'role-barista' },
+        { id: 'cashier', label: t('roleCashier'), css: 'role-cashier' },
+        { id: 'runner',  label: t('roleRunner'),  css: 'role-waiter' }
     ];
 }
 
@@ -180,7 +180,7 @@ function renderCalendar() {
                 const roleShifts = dedupeShifts(shiftList.filter(s =>
                     s.shiftName === shiftData.name
                     && s.date === dateStr
-                    && String(s.assignedRole || 'Barista') === role.id
+                    && normalizeRole(s.assignedRole) === role.id
                 ));
 
                 if (roleShifts.length) {
@@ -281,7 +281,7 @@ function prepareAddShift(shiftName, dateStr, roleId) {
     document.getElementById('staffId').value = '';
     document.getElementById('shiftDate').value = dateStr;
     document.getElementById('shiftName').value = shiftName;
-    document.getElementById('assignedRole').value = roleId || 'Barista';
+    document.getElementById('assignedRole').value = normalizeRole(roleId);
     document.getElementById('notes').value = '';
     document.getElementById('status').value = 'Đã xếp lịch';
 
@@ -296,13 +296,32 @@ function editShift(shift) {
     document.getElementById('staffId').value = shift.staffId;
     document.getElementById('shiftDate').value = shift.date;
     document.getElementById('shiftName').value = shift.shiftName;
-    document.getElementById('assignedRole').value = shift.assignedRole || 'Barista';
+    document.getElementById('assignedRole').value = normalizeRole(shift.assignedRole);
     document.getElementById('notes').value = shift.notes || '';
     document.getElementById('status').value = shift.status;
 
     document.getElementById('form-title').textContent = t('editShiftTitle');
     document.getElementById('form-title').setAttribute('data-i18n', 'editShiftTitle');
     document.getElementById('form-title').scrollIntoView({ behavior: 'smooth' });
+}
+
+/**
+ * Đưa mọi cách viết vai trò về đúng mã trong dbo.Roles.
+ *
+ * Bắt buộc phải có: CSDL đã chuẩn hoá sang mã thường (barista/cashier/runner)
+ * nhưng dữ liệu cũ và các bản build trước vẫn còn ghi 'Barista'/'Waiter'.
+ * Trước khi có hàm này, phép so sánh chuỗi thẳng khiến MỌI ô lịch đều hiện
+ * "Thiếu người" dù ca vẫn nằm nguyên trong CSDL.
+ *
+ * Bản sao của LiteService.normalizeRoleCode() phía Java. Server vẫn chuẩn hoá
+ * lại lần nữa khi lưu — ở đây chỉ để hiển thị cho đúng.
+ */
+function normalizeRole(raw) {
+    const value = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (value === 'waiter' || value === 'runner') return 'runner';
+    if (value === 'barista') return 'barista';
+    if (value === 'cashier') return 'cashier';
+    return 'barista';
 }
 
 let savingShift = false;
@@ -338,7 +357,7 @@ async function saveShift(e) {
     const shiftName = document.getElementById('shiftName').value;
     const shiftDate = document.getElementById('shiftDate').value;
     const status = document.getElementById('status').value;
-    const assignedRole = document.getElementById('assignedRole').value || 'Barista';
+    const assignedRole = normalizeRole(document.getElementById('assignedRole').value);
 
     if (!shiftDate || !shiftName) {
         showNotice(t('shiftMissingInfo'), false);
@@ -499,7 +518,7 @@ function applyPayrollFilter() {
     let filteredData = currentPayrollData;
 
     if (roleFilter !== 'All') {
-        filteredData = currentPayrollData.filter(item => item.role === roleFilter);
+        filteredData = currentPayrollData.filter(item => normalizeRole(item.role) === normalizeRole(roleFilter));
     }
     renderPayroll(filteredData);
 }
@@ -617,7 +636,10 @@ async function saveStaff(e) {
             renderStaffList();
             populateStaffDropdown();
             closeStaffModal();
-            alert(t('staffSaved'));
+            // Server trả issuedPin khi vừa tạo tài khoản đăng nhập cho người mới.
+            // Đây là lần DUY NHẤT PIN hiện ra dạng đọc được — sau đó chỉ còn bản băm.
+            if (saved.issuedPin) alert(tf('pinIssued', { pin: saved.issuedPin }));
+            else alert(t('staffSaved'));
         } else {
             alert(t('staffSaveFailed') + ' ' + await resp.text());
         }

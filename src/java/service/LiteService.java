@@ -25,6 +25,20 @@ public class LiteService {
         init();
     }
 
+    /**
+     * Chạy một lệnh DDL, ghi log nếu hỏng nhưng không chặn các lệnh sau.
+     * Từng ràng buộc phải độc lập: một cái tạo không được (do dữ liệu cũ)
+     * không được phép kéo theo cả loạt còn lại biến mất trong im lặng.
+     */
+    private void tryExec(Statement st, String sql) {
+        try {
+            st.execute(sql);
+        } catch (Exception e) {
+            System.err.println("[LiteService] Bỏ qua DDL: " + e.getMessage()
+                    + " | " + (sql.length() > 90 ? sql.substring(0, 90) + "..." : sql));
+        }
+    }
+
     private void init() {
         try (Connection con = db.getConnection(); Statement st = con.createStatement()) {
             st.execute("IF OBJECT_ID('dbo.Users','U') IS NULL CREATE TABLE dbo.Users (username VARCHAR(50) PRIMARY KEY, password VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL, fullName NVARCHAR(120) NOT NULL)");
@@ -49,6 +63,88 @@ public class LiteService {
             st.execute("IF OBJECT_ID('dbo.Staff','U') IS NULL CREATE TABLE dbo.Staff (id INT PRIMARY KEY, name NVARCHAR(120) NOT NULL, active BIT NOT NULL DEFAULT 1, status VARCHAR(30) NOT NULL DEFAULT 'Active')");
             st.execute("IF OBJECT_ID('dbo.Shifts','U') IS NULL CREATE TABLE dbo.Shifts (id VARCHAR(50) PRIMARY KEY, staffId INT NOT NULL, staffName NVARCHAR(120) NOT NULL, shiftDate VARCHAR(20) NOT NULL, shiftName NVARCHAR(50) NOT NULL, hours VARCHAR(50) NOT NULL, status NVARCHAR(30) NOT NULL, notes NVARCHAR(255) NULL, assignedRole VARCHAR(30) NULL, FOREIGN KEY(staffId) REFERENCES dbo.Staff(id))");
             st.execute("IF COL_LENGTH('dbo.Shifts','assignedRole') IS NULL ALTER TABLE dbo.Shifts ADD assignedRole VARCHAR(30) NULL");
+
+            // ── Tài khoản khách hàng & tích điểm ────────────────────────────
+            // Giữ cùng phong cách "tự dựng bảng khi thiếu" như các bảng trên,
+            // để ứng dụng chạy được ngay cả khi chưa chạy customer_loyalty.sql.
+            st.execute("IF OBJECT_ID('dbo.Customers','U') IS NULL CREATE TABLE dbo.Customers (id INT IDENTITY PRIMARY KEY, phone VARCHAR(20) NOT NULL, passwordHash VARCHAR(64) NOT NULL, passwordSalt VARCHAR(32) NOT NULL, fullName NVARCHAR(120) NOT NULL, points INT NOT NULL DEFAULT 0, totalSpent INT NOT NULL DEFAULT 0, orderCount INT NOT NULL DEFAULT 0, tier VARCHAR(10) NOT NULL DEFAULT 'Bronze', active BIT NOT NULL DEFAULT 1, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), updatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
+            st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_Customers_Phone' AND object_id=OBJECT_ID('dbo.Customers')) CREATE UNIQUE INDEX UQ_Customers_Phone ON dbo.Customers(phone)");
+            st.execute("IF OBJECT_ID('dbo.PointTransactions','U') IS NULL CREATE TABLE dbo.PointTransactions (id INT IDENTITY PRIMARY KEY, customerId INT NOT NULL, orderId INT NULL, type VARCHAR(10) NOT NULL, points INT NOT NULL, balanceAfter INT NOT NULL, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), FOREIGN KEY(customerId) REFERENCES dbo.Customers(id), FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
+            st.execute("IF COL_LENGTH('dbo.Orders','customerId') IS NULL ALTER TABLE dbo.Orders ADD customerId INT NULL");
+            st.execute("IF COL_LENGTH('dbo.Orders','subtotal') IS NULL ALTER TABLE dbo.Orders ADD subtotal INT NOT NULL DEFAULT 0");
+            st.execute("IF COL_LENGTH('dbo.Orders','discountAmount') IS NULL ALTER TABLE dbo.Orders ADD discountAmount INT NOT NULL DEFAULT 0");
+            st.execute("IF COL_LENGTH('dbo.Orders','pointsEarned') IS NULL ALTER TABLE dbo.Orders ADD pointsEarned INT NOT NULL DEFAULT 0");
+            st.execute("IF COL_LENGTH('dbo.Orders','pointsRedeemed') IS NULL ALTER TABLE dbo.Orders ADD pointsRedeemed INT NOT NULL DEFAULT 0");
+            st.execute("UPDATE dbo.Orders SET subtotal = total WHERE subtotal = 0 AND total > 0");
+            // ── Sửa 4 lỗi thiết kế mức nghiêm trọng (xem schema_fix_p0.sql) ──
+            // #1 Orders → Tables: tableName giữ lại làm BẢN CHỤP, quan hệ thật là tableId.
+            st.execute("IF COL_LENGTH('dbo.Orders','tableId') IS NULL ALTER TABLE dbo.Orders ADD tableId INT NULL");
+            st.execute("UPDATE o SET o.tableId = t.id FROM dbo.Orders o JOIN dbo.Tables t ON t.name = o.tableName WHERE o.tableId IS NULL");
+
+            // #2 Tầng thanh toán.
+            st.execute("IF OBJECT_ID('dbo.Payments','U') IS NULL CREATE TABLE dbo.Payments (id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, method VARCHAR(20) NOT NULL, amount INT NOT NULL, receivedAmount INT NOT NULL, changeAmount INT NOT NULL, cashierUsername VARCHAR(50) NULL, cashierName NVARCHAR(120) NULL, staffId INT NULL, note NVARCHAR(255) NULL, paidAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
+            st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_Payments_Order' AND object_id=OBJECT_ID('dbo.Payments')) CREATE UNIQUE INDEX UQ_Payments_Order ON dbo.Payments(orderId)");
+            st.execute("IF COL_LENGTH('dbo.CashEvents','orderId') IS NULL ALTER TABLE dbo.CashEvents ADD orderId INT NULL");
+            st.execute("IF COL_LENGTH('dbo.CashEvents','paymentId') IS NULL ALTER TABLE dbo.CashEvents ADD paymentId INT NULL");
+
+            // #3 Sổ cái kho.
+            st.execute("IF OBJECT_ID('dbo.StockTransactions','U') IS NULL CREATE TABLE dbo.StockTransactions (id INT IDENTITY PRIMARY KEY, ingredientId VARCHAR(50) NOT NULL, type VARCHAR(10) NOT NULL, quantity INT NOT NULL, stockAfter INT NOT NULL, unitCost INT NOT NULL DEFAULT 0, orderId INT NULL, actorRole VARCHAR(20) NULL, actorName NVARCHAR(120) NULL, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
+            st.execute("INSERT INTO dbo.StockTransactions (ingredientId,type,quantity,stockAfter,unitCost,actorRole,actorName,note) SELECT i.id,'ADJUST',i.stock,i.stock,i.importCost,'system',N'Khởi tạo sổ',N'Số dư đầu kỳ khi bắt đầu ghi sổ cái' FROM dbo.Inventory i WHERE NOT EXISTS (SELECT 1 FROM dbo.StockTransactions s WHERE s.ingredientId = i.id)");
+
+            // #4 Vai trò + liên kết nhân sự ↔ tài khoản.
+            st.execute("IF OBJECT_ID('dbo.Roles','U') IS NULL CREATE TABLE dbo.Roles (code VARCHAR(20) PRIMARY KEY, nameVi NVARCHAR(50) NOT NULL, nameEn VARCHAR(50) NOT NULL, sortOrder INT NOT NULL DEFAULT 0)");
+            st.execute("MERGE dbo.Roles AS t USING (VALUES ('admin',N'Quản trị','Admin',1),('barista',N'Pha chế','Barista',2),('cashier',N'Thu ngân','Cashier',3),('runner',N'Bồi bàn','Waiter',4)) AS s(code,nameVi,nameEn,sortOrder) ON t.code=s.code WHEN MATCHED THEN UPDATE SET nameVi=s.nameVi,nameEn=s.nameEn,sortOrder=s.sortOrder WHEN NOT MATCHED THEN INSERT(code,nameVi,nameEn,sortOrder) VALUES(s.code,s.nameVi,s.nameEn,s.sortOrder);");
+            st.execute("UPDATE dbo.Shifts SET assignedRole='barista' WHERE assignedRole IN ('Barista','BARISTA')");
+            st.execute("UPDATE dbo.Shifts SET assignedRole='cashier' WHERE assignedRole IN ('Cashier','CASHIER')");
+            st.execute("UPDATE dbo.Shifts SET assignedRole='runner'  WHERE assignedRole IN ('Waiter','WAITER','Runner','RUNNER')");
+            st.execute("IF COL_LENGTH('dbo.Users','staffId') IS NULL ALTER TABLE dbo.Users ADD staffId INT NULL");
+            st.execute("IF COL_LENGTH('dbo.SystemLogs','staffId') IS NULL ALTER TABLE dbo.SystemLogs ADD staffId INT NULL");
+            st.execute("IF COL_LENGTH('dbo.CashEvents','staffId') IS NULL ALTER TABLE dbo.CashEvents ADD staffId INT NULL");
+
+            // Dọn dữ liệu không hợp lệ TRƯỚC khi thêm khoá ngoại, nếu không
+            // một dòng rác sẽ làm cả ràng buộc không tạo được.
+            tryExec(st, "UPDATE dbo.Users SET role = 'barista' WHERE role NOT IN (SELECT code FROM dbo.Roles)");
+            tryExec(st, "UPDATE dbo.Shifts SET assignedRole = NULL WHERE assignedRole IS NOT NULL AND assignedRole NOT IN (SELECT code FROM dbo.Roles)");
+            tryExec(st, "UPDATE dbo.Orders SET tableId = NULL WHERE tableId IS NOT NULL AND tableId NOT IN (SELECT id FROM dbo.Tables)");
+
+            // MỖI ràng buộc một try riêng. Gộp chung một try là sai: cái đầu
+            // hỏng thì toàn bộ phần còn lại bị bỏ qua trong im lặng, và ta sẽ
+            // tưởng CSDL có đủ khoá ngoại trong khi thực tế thiếu gần hết.
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Orders_Tables') ALTER TABLE dbo.Orders ADD CONSTRAINT FK_Orders_Tables FOREIGN KEY (tableId) REFERENCES dbo.Tables(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Orders_TableId' AND object_id=OBJECT_ID('dbo.Orders')) CREATE NONCLUSTERED INDEX IX_Orders_TableId ON dbo.Orders(tableId, status)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Payments_Orders') ALTER TABLE dbo.Payments ADD CONSTRAINT FK_Payments_Orders FOREIGN KEY (orderId) REFERENCES dbo.Orders(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_CashEvents_Orders') ALTER TABLE dbo.CashEvents ADD CONSTRAINT FK_CashEvents_Orders FOREIGN KEY (orderId) REFERENCES dbo.Orders(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_StockTx_Inventory') ALTER TABLE dbo.StockTransactions ADD CONSTRAINT FK_StockTx_Inventory FOREIGN KEY (ingredientId) REFERENCES dbo.Inventory(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_StockTx_Orders') ALTER TABLE dbo.StockTransactions ADD CONSTRAINT FK_StockTx_Orders FOREIGN KEY (orderId) REFERENCES dbo.Orders(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_StockTx_Ingredient' AND object_id=OBJECT_ID('dbo.StockTransactions')) CREATE NONCLUSTERED INDEX IX_StockTx_Ingredient ON dbo.StockTransactions(ingredientId, id DESC)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Users_Roles') ALTER TABLE dbo.Users ADD CONSTRAINT FK_Users_Roles FOREIGN KEY (role) REFERENCES dbo.Roles(code)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Users_Staff') ALTER TABLE dbo.Users ADD CONSTRAINT FK_Users_Staff FOREIGN KEY (staffId) REFERENCES dbo.Staff(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Shifts_Roles') ALTER TABLE dbo.Shifts ADD CONSTRAINT FK_Shifts_Roles FOREIGN KEY (assignedRole) REFERENCES dbo.Roles(code)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_SystemLogs_Staff') ALTER TABLE dbo.SystemLogs ADD CONSTRAINT FK_SystemLogs_Staff FOREIGN KEY (staffId) REFERENCES dbo.Staff(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_CashEvents_Staff') ALTER TABLE dbo.CashEvents ADD CONSTRAINT FK_CashEvents_Staff FOREIGN KEY (staffId) REFERENCES dbo.Staff(id)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Payments_Staff') ALTER TABLE dbo.Payments ADD CONSTRAINT FK_Payments_Staff FOREIGN KEY (staffId) REFERENCES dbo.Staff(id)");
+
+            // ── Tài khoản riêng cho từng nhân viên (xem staff_accounts.sql) ──
+            // Users.role đổi nghĩa: không còn là vai trò làm việc mà là LOẠI
+            // TÀI KHOẢN (admin = quyền cố định, staff = quyền theo ca hôm nay).
+            // isShiftRole tách hai khái niệm để một cột không gánh hai ý nghĩa.
+            tryExec(st, "IF COL_LENGTH('dbo.Roles','isShiftRole') IS NULL ALTER TABLE dbo.Roles ADD isShiftRole BIT NOT NULL DEFAULT 1");
+            tryExec(st, "MERGE dbo.Roles AS t USING (VALUES ('admin',N'Quản trị','Admin',1,0),('staff',N'Nhân viên','Staff',2,0),('barista',N'Pha chế','Barista',3,1),('cashier',N'Thu ngân','Cashier',4,1),('runner',N'Bồi bàn','Waiter',5,1)) AS s(code,nameVi,nameEn,sortOrder,isShiftRole) ON t.code=s.code WHEN MATCHED THEN UPDATE SET nameVi=s.nameVi,nameEn=s.nameEn,sortOrder=s.sortOrder,isShiftRole=s.isShiftRole WHEN NOT MATCHED THEN INSERT(code,nameVi,nameEn,sortOrder,isShiftRole) VALUES(s.code,s.nameVi,s.nameEn,s.sortOrder,s.isShiftRole);");
+            tryExec(st, "IF COL_LENGTH('dbo.Users','pinHash') IS NULL ALTER TABLE dbo.Users ADD pinHash VARCHAR(64) NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Users','pinSalt') IS NULL ALTER TABLE dbo.Users ADD pinSalt VARCHAR(32) NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Users','active') IS NULL ALTER TABLE dbo.Users ADD active BIT NOT NULL DEFAULT 1");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_Users_StaffId' AND object_id=OBJECT_ID('dbo.Users')) CREATE UNIQUE INDEX UQ_Users_StaffId ON dbo.Users(staffId) WHERE staffId IS NOT NULL");
+            tryExec(st, "UPDATE dbo.Users SET active = 0 WHERE username IN ('barista','cashier','runner')");
+            // Shifts.staffName là dữ liệu thừa: ShiftDAO.getAll() đã JOIN sang
+            // dbo.Staff để lấy tên. Để NOT NULL chỉ tổ làm hỏng luồng thêm ca.
+            tryExec(st, "UPDATE dbo.Shifts SET staffName = N'' WHERE staffName IS NULL");
+            tryExec(st, "ALTER TABLE dbo.Shifts ALTER COLUMN staffName NVARCHAR(120) NULL");
+
+            try {
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Orders_Customers') ALTER TABLE dbo.Orders ADD CONSTRAINT FK_Orders_Customers FOREIGN KEY (customerId) REFERENCES dbo.Customers(id)");
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Orders_Customer' AND object_id=OBJECT_ID('dbo.Orders')) CREATE NONCLUSTERED INDEX IX_Orders_Customer ON dbo.Orders(customerId, id DESC)");
+                st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_PointTx_Customer' AND object_id=OBJECT_ID('dbo.PointTransactions')) CREATE NONCLUSTERED INDEX IX_PointTx_Customer ON dbo.PointTransactions(customerId, id DESC)");
+            } catch (Exception ignored) {}
             try {
                 st.execute("WITH d AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY staffId, shiftDate, shiftName ORDER BY id) rn FROM dbo.Shifts) DELETE FROM dbo.Shifts WHERE id IN (SELECT id FROM d WHERE rn > 1)");
             } catch (Exception ignored) {}
@@ -76,6 +172,10 @@ public class LiteService {
         } catch (Exception e) {
             System.err.println("LiteService init failed: " + e.getMessage());
         }
+        // Tạo tài khoản khách demo sau khi bảng chắc chắn đã tồn tại.
+        new dao.CustomerDAO().seedDemoAccounts();
+        // Mỗi nhân viên một tài khoản riêng — nếu thiếu thì tạo bù.
+        ensureStaffAccounts();
     }
 
     private void seed(Connection con) throws Exception {
@@ -178,7 +278,9 @@ public class LiteService {
         }
 
         // Build shift plan using actual staff IDs
-        String[][] roles = {{"Barista"}, {"Cashier"}, {"Waiter"}};
+        // Phải là MÃ trong dbo.Roles: Shifts.assignedRole nay có khoá ngoại
+        // trỏ sang đó, ghi 'Barista' như trước sẽ bị CSDL từ chối.
+        String[][] roles = {{"barista"}, {"cashier"}, {"runner"}};
         String[][] shifts = {
             {"Ca Sáng",  "06:00 - 12:00"},
             {"Ca Chiều", "12:00 - 18:00"},
@@ -1022,7 +1124,7 @@ public class LiteService {
             resolvedTable = readString(table.get("name"), "");
         }
         if (resolvedTable.isEmpty()) throw new IllegalArgumentException("Không tìm thấy bàn.");
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders "
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders "
                 + "WHERE tableName=? AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, resolvedTable);
@@ -1039,7 +1141,7 @@ public class LiteService {
     public List<Map<String, Object>> getOpenOrdersByIds(List<Integer> orderIds) throws Exception {
         List<Integer> ids = cleanIds(orderIds);
         if (ids.isEmpty()) return new ArrayList<>();
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders "
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders "
                 + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             bindIds(ps, ids);
@@ -1086,9 +1188,21 @@ public class LiteService {
             if (sourceOrders == 0) throw new IllegalArgumentException("Bàn hiện tại không có đơn cần chuyển.");
             int targetOrders = countOpenOrders(con, toName, "('Pending','Preparing','Ready','Served','Paid')");
             if (targetOrders > 0) throw new IllegalArgumentException("Bàn mới đang có khách.");
-            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET tableName=? WHERE tableName=? AND status IN ('Pending','Preparing','Ready','Served')")) {
-                ps.setString(1, toName);
-                ps.setString(2, fromName);
+            // Chuyển bàn giờ đổi KHOÁ NGOẠI, không phải sửa chuỗi tên.
+            // tableName vẫn cập nhật theo để bản chụp khớp bàn hiện tại.
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Orders SET tableId=?, tableName=? WHERE tableId=? AND status IN ('Pending','Preparing','Ready','Served')")) {
+                ps.setInt(1, toTableId);
+                ps.setString(2, toName);
+                ps.setInt(3, fromTableId);
+                ps.executeUpdate();
+            }
+            // Đơn cũ chưa có tableId (dữ liệu trước khi thêm khoá) thì vẫn ghép theo tên.
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Orders SET tableId=?, tableName=? WHERE tableId IS NULL AND tableName=? AND status IN ('Pending','Preparing','Ready','Served')")) {
+                ps.setInt(1, toTableId);
+                ps.setString(2, toName);
+                ps.setString(3, fromName);
                 ps.executeUpdate();
             }
             insertSystemLog(con, actorRole, actorName, "TABLE_TRANSFER",
@@ -1302,9 +1416,19 @@ public class LiteService {
     @SuppressWarnings("unchecked")
     public Map<String, Object> createOrder(Map<String, Object> data, String actorRole, String actorName) throws Exception {
         String tableName = readString(data.get("tableName"), "Bàn 1");
-        if (getTableByName(tableName) == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
+        // Lấy luôn bản ghi bàn để có KHOÁ, không chỉ để kiểm tra tồn tại.
+        // tableName vẫn được lưu, nhưng từ nay chỉ là BẢN CHỤP tên tại thời
+        // điểm đặt đơn — đổi tên bàn về sau không làm sai lịch sử nữa.
+        Map<String, Object> orderTable = getTableByName(tableName);
+        if (orderTable == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
+        int orderTableId = readInt(orderTable.get("id"), 0);
         String phone = readString(data.get("customerPhone"), "");
         String note = limitNote(readString(data.get("note"), ""));
+        // Khách đã đăng nhập: servlet gắn sẵn customerId vào body, trình duyệt
+        // không tự khai được. requestedRedeem là số điểm khách muốn dùng.
+        int customerId = readInt(data.get("customerId"), 0);
+        int requestedRedeem = Math.max(0, readInt(data.get("redeemPoints"), 0));
+        if (customerId <= 0) requestedRedeem = 0;
         List<?> items = data.get("items") instanceof List<?> ? (List<?>) data.get("items") : Collections.emptyList();
         if (items.isEmpty()) throw new IllegalArgumentException("Đơn hàng chưa có món.");
 
@@ -1312,11 +1436,13 @@ public class LiteService {
             con.setAutoCommit(false);
             try {
                 int orderId;
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total,createdAt) VALUES (?,?,?,0,?)", Statement.RETURN_GENERATED_KEYS)) {
+                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,tableId,customerPhone,note,total,createdAt,customerId) VALUES (?,?,?,?,0,?,?)", Statement.RETURN_GENERATED_KEYS)) {
                     ps.setString(1, tableName);
-                    ps.setString(2, phone.isEmpty() ? null : phone);
-                    ps.setString(3, note);
-                    ps.setString(4, nowSqlTimestamp());
+                    if (orderTableId > 0) ps.setInt(2, orderTableId); else ps.setNull(2, java.sql.Types.INTEGER);
+                    ps.setString(3, phone.isEmpty() ? null : phone);
+                    ps.setString(4, note);
+                    ps.setString(5, nowSqlTimestamp());
+                    if (customerId > 0) ps.setInt(6, customerId); else ps.setNull(6, java.sql.Types.INTEGER);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -1412,10 +1538,41 @@ public class LiteService {
                 }
                 if (totalQuantity == 0) throw new IllegalArgumentException("Đơn hàng chưa có món hợp lệ.");
                 int orderNumber = 1000 + orderId;
-                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET orderNumber=?, total=? WHERE id=?")) {
+
+                // ── Đổi điểm lấy giảm giá ───────────────────────────────────
+                // subtotal = tiền hàng, total = số tiền khách thực trả.
+                // Giữ total là số phải trả nên thu ngân, doanh thu và sổ quỹ
+                // hiện có không phải sửa một dòng nào.
+                int subtotal = total;
+                int redeemPoints = 0;
+                int discount = 0;
+                if (customerId > 0 && requestedRedeem > 0) {
+                    dao.CustomerDAO customerDao = new dao.CustomerDAO();
+                    int balance = customerDao.currentPoints(con, customerId);
+                    int maxAllowed = model.Customer.maxRedeemablePoints(balance, subtotal);
+                    if (requestedRedeem > maxAllowed) {
+                        if (maxAllowed <= 0) {
+                            throw new IllegalArgumentException("Đơn này chưa đủ điều kiện dùng điểm (tối thiểu "
+                                    + model.Customer.MIN_REDEEM_POINTS + " điểm và không quá "
+                                    + model.Customer.MAX_REDEEM_PERCENT + "% giá trị đơn).");
+                        }
+                        throw new IllegalArgumentException("Đơn này chỉ dùng được tối đa " + maxAllowed + " điểm.");
+                    }
+                    redeemPoints = requestedRedeem;
+                    discount = redeemPoints * model.Customer.VALUE_PER_POINT;
+                    total = Math.max(0, subtotal - discount);
+                    customerDao.applyPointChange(con, customerId, -redeemPoints, "REDEEM", orderId,
+                            "Đổi điểm giảm giá đơn #" + orderNumber, 0);
+                }
+
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE dbo.Orders SET orderNumber=?, subtotal=?, discountAmount=?, pointsRedeemed=?, total=? WHERE id=?")) {
                     ps.setInt(1, orderNumber);
-                    ps.setInt(2, total);
-                    ps.setInt(3, orderId);
+                    ps.setInt(2, subtotal);
+                    ps.setInt(3, discount);
+                    ps.setInt(4, redeemPoints);
+                    ps.setInt(5, total);
+                    ps.setInt(6, orderId);
                     ps.executeUpdate();
                 }
                 String actor = normalizeActor(actorRole);
@@ -1445,7 +1602,7 @@ public class LiteService {
     }
 
     public List<Map<String, Object>> getOrders(String role, List<Integer> cashierSessionPaidIds) throws Exception {
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders ";
+        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders ";
         if ("barista".equals(role)) {
             sql += "WHERE status IN ('Pending','Preparing','Ready') ";
         } else if ("cashier".equals(role)) {
@@ -1483,6 +1640,11 @@ public class LiteService {
         for (Map<String, Object> order : orders) {
             order.remove("total");
             order.remove("customerPhone");
+            // Bồi bàn không nhìn thấy tiền: bỏ luôn các cột tiền mới thêm,
+            // nếu không thì tiền hàng vẫn lộ qua subtotal.
+            order.remove("subtotal");
+            order.remove("discountAmount");
+            order.remove("customerId");
             List<Map<String, Object>> items = (List<Map<String, Object>>) order.get("items");
             if (items == null) continue;
             for (Map<String, Object> item : items) {
@@ -1505,6 +1667,16 @@ public class LiteService {
     }
 
     public Map<String, Object> updateOrderStatus(int id, String status, String actorRole, String actorName) throws Exception {
+        return updateOrderStatus(id, status, actorRole, actorName, null);
+    }
+
+    /**
+     * @param payment thông tin thanh toán, chỉ dùng khi status = "Paid".
+     *                Khoá: method (CASH|TRANSFER), receivedAmount, cashierUsername, staffId, note.
+     *                null = mặc định tiền mặt, khách đưa đúng số tiền.
+     */
+    public Map<String, Object> updateOrderStatus(int id, String status, String actorRole, String actorName,
+                                                 Map<String, Object> payment) throws Exception {
         if (!Arrays.asList("Pending", "Preparing", "Ready", "Served", "Paid", "Cleared").contains(status)) {
             throw new IllegalArgumentException("Trạng thái đơn không hợp lệ.");
         }
@@ -1514,7 +1686,9 @@ public class LiteService {
             int total = 0;
             int orderNumber = 0;
             String tableName = "";
-            try (PreparedStatement ps = con.prepareStatement("SELECT status,total,orderNumber,tableName FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
+            int customerId = 0;
+            int alreadyEarned = 0;
+            try (PreparedStatement ps = con.prepareStatement("SELECT status,total,orderNumber,tableName,customerId,pointsEarned FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
                 ps.setInt(1, id);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
@@ -1522,6 +1696,8 @@ public class LiteService {
                     total = rs.getInt("total");
                     orderNumber = rs.getInt("orderNumber");
                     tableName = rs.getString("tableName");
+                    customerId = rs.getInt("customerId");
+                    alreadyEarned = rs.getInt("pointsEarned");
                 }
             }
             if ("Preparing".equals(currentStatus) && "Ready".equals(status)) {
@@ -1533,7 +1709,7 @@ public class LiteService {
                 if (requiredCups > 0) {
                     setStateValue(con, "cupsAvailable", cups - requiredCups);
                 }
-                deductInventoryForOrder(con, id);
+                deductInventoryForOrder(con, id, actorRole, actorName);
                 deactivateUnavailableMenuItems(con, null);
                 markOrderItemsFullyPrepared(con, id);
             }
@@ -1542,6 +1718,32 @@ public class LiteService {
                 ps.setInt(2, id);
                 ps.executeUpdate();
             }
+
+            // ── Ghi nhận thanh toán ─────────────────────────────────────────
+            // Trước đây "Paid" chỉ là một chuỗi trong cột status: không biết trả
+            // bằng gì, khách đưa bao nhiêu, ai thu. Giờ mỗi lần trả tiền sinh ra
+            // một dòng Payments thật, và nếu là tiền mặt thì đẩy luôn vào sổ quỹ.
+            if ("Paid".equals(status) && !"Paid".equals(currentStatus)) {
+                recordPayment(con, id, orderNumber, total, payment, actorRole, actorName);
+            }
+
+            // ── Tích điểm khi khách thực sự trả tiền ────────────────────────
+            // Chỉ cộng đúng một lần: điều kiện alreadyEarned == 0 chặn trường hợp
+            // đơn bị chuyển Paid lần hai (thao tác lặp, bấm nhầm, retry mạng).
+            if ("Paid".equals(status) && !"Paid".equals(currentStatus) && customerId > 0 && alreadyEarned == 0) {
+                int earned = model.Customer.pointsForSpend(total);
+                dao.CustomerDAO customerDao = new dao.CustomerDAO();
+                // totalSpent luôn cộng theo số tiền thật đã trả, kể cả khi earned = 0
+                // (đơn nhỏ hơn 10.000đ) — nếu không, hạng thành viên sẽ sai.
+                customerDao.applyPointChange(con, customerId, earned, "EARN", id,
+                        "Tích điểm từ đơn #" + orderNumber, total);
+                try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET pointsEarned=? WHERE id=?")) {
+                    ps.setInt(1, earned);
+                    ps.setInt(2, id);
+                    ps.executeUpdate();
+                }
+            }
+
             insertSystemLog(con, actorRole, actorName, "ORDER_STATUS",
                     statusLogVi(actorRole, currentStatus, status, orderNumber, tableName),
                     statusLogEn(actorRole, currentStatus, status, orderNumber, tableName),
@@ -1551,7 +1753,148 @@ public class LiteService {
         }
     }
 
+    /**
+     * Tạo bản ghi thanh toán cho một đơn, trong cùng transaction với việc
+     * đổi trạng thái. Nếu trả bằng tiền mặt thì đồng thời đẩy một sự kiện
+     * PAYMENT vào sổ quỹ — trước đây quỹ chỉ đổi khi thu ngân kiểm đếm tay,
+     * nên tiền bán hàng không bao giờ tự vào sổ và không thể đối soát ca.
+     *
+     * UNIQUE(orderId) ở tầng CSDL là thứ thật sự chặn thu tiền hai lần;
+     * kiểm tra dưới đây chỉ để trả về thông báo dễ hiểu.
+     */
+    private void recordPayment(Connection con, int orderId, int orderNumber, int amount,
+                               Map<String, Object> payment, String actorRole, String actorName) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.Payments WHERE orderId=?")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) return;   // đã thu rồi, không thu lại
+            }
+        }
+
+        Map<String, Object> info = payment == null ? new LinkedHashMap<String, Object>() : payment;
+        String method = readString(info.get("method"), "CASH").toUpperCase();
+        if (!"CASH".equals(method) && !"TRANSFER".equals(method)) method = "CASH";
+
+        int received = readInt(info.get("receivedAmount"), 0);
+        if (received < amount) received = amount;          // chuyển khoản hoặc đưa vừa đủ
+        int change = Math.max(0, received - amount);
+        int staffId = readInt(info.get("staffId"), 0);
+        if (staffId <= 0) staffId = actorStaffId();
+        String cashierUser = readString(info.get("cashierUsername"), "");
+        String cashierName = readString(info.get("cashierName"), readString(actorName, ""));
+
+        int paymentId;
+        try (PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO dbo.Payments (orderId,method,amount,receivedAmount,changeAmount,cashierUsername,cashierName,staffId,note) "
+                        + "VALUES (?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, orderId);
+            ps.setString(2, method);
+            ps.setInt(3, amount);
+            ps.setInt(4, received);
+            ps.setInt(5, change);
+            if (cashierUser.isEmpty()) ps.setNull(6, java.sql.Types.VARCHAR); else ps.setString(6, cashierUser);
+            ps.setString(7, cashierName);
+            if (staffId > 0) ps.setInt(8, staffId); else ps.setNull(8, java.sql.Types.INTEGER);
+            ps.setString(9, limitNote(readString(info.get("note"), "")));
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                paymentId = keys.next() ? keys.getInt(1) : 0;
+            }
+        }
+
+        // Chuyển khoản không làm tăng tiền mặt trong ngăn kéo.
+        if ("CASH".equals(method) && amount > 0) {
+            int balance = currentCashBalance(con) + amount;
+            insertCashEvent(con, "PAYMENT", amount, balance,
+                    "Thu tiền đơn #" + orderNumber, actorRole, cashierName, true,
+                    orderId, paymentId, staffId);
+        }
+
+        insertSystemLog(con, actorRole, cashierName, "ORDER_PAYMENT",
+                "Thu " + amount + "đ đơn #" + orderNumber + " bằng "
+                        + ("CASH".equals(method) ? "tiền mặt" : "chuyển khoản") + " lúc " + nowLabelVi(),
+                "Collected " + amount + " VND for order #" + orderNumber + " by "
+                        + ("CASH".equals(method) ? "cash" : "bank transfer") + " at " + nowLabelEn(),
+                orderId);
+    }
+
+    /** Hoá đơn thanh toán của một đơn, null nếu chưa thu tiền. */
+    public Map<String, Object> getPaymentByOrder(int orderId) throws Exception {
+        String sql = "SELECT id, orderId, method, amount, receivedAmount, changeAmount, "
+                + "cashierUsername, cashierName, staffId, note, paidAt FROM dbo.Payments WHERE orderId=?";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? row(rs) : null;
+            }
+        }
+    }
+
+    /**
+     * Đối soát ca: tiền đã thu, tách theo hình thức thanh toán.
+     * Câu này trước đây không viết được vì không có bảng nào ghi lại việc thu tiền.
+     */
+    public Map<String, Object> getPaymentSummary(String fromDate, String toDate) throws Exception {
+        String from = readString(fromDate, appToday().toString());
+        String to = readString(toDate, appToday().toString());
+        String sql = "SELECT p.method, COUNT(*) AS soDon, SUM(p.amount) AS tongTien "
+                + "FROM dbo.Payments p "
+                + "WHERE CAST(p.paidAt AS DATE) BETWEEN ? AND ? GROUP BY p.method";
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Map<String, Object>> lines = new ArrayList<>();
+        int total = 0;
+        int cash = 0;
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, from);
+            ps.setString(2, to);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> line = new LinkedHashMap<>();
+                    String method = rs.getString("method");
+                    int sum = rs.getInt("tongTien");
+                    line.put("method", method);
+                    line.put("orderCount", rs.getInt("soDon"));
+                    line.put("amount", sum);
+                    lines.add(line);
+                    total += sum;
+                    if ("CASH".equals(method)) cash = sum;
+                }
+            }
+        }
+        result.put("fromDate", from);
+        result.put("toDate", to);
+        result.put("lines", lines);
+        result.put("totalAmount", total);
+        result.put("cashAmount", cash);
+        result.put("transferAmount", total - cash);
+        return result;
+    }
+
+    /**
+     * Doanh thu theo TẦNG. Đây là câu truy vấn mà thiết kế cũ không thể viết:
+     * Orders chỉ có tên bàn dạng chuỗi nên không JOIN được sang Tables.floorNo.
+     */
+    public List<Map<String, Object>> getRevenueByFloor(String fromDate, String toDate) throws Exception {
+        String from = readString(fromDate, appToday().toString());
+        String to = readString(toDate, appToday().toString());
+        String sql = "SELECT t.floorNo, COUNT(DISTINCT o.id) AS soDon, ISNULL(SUM(o.total),0) AS doanhThu "
+                + "FROM dbo.Orders o JOIN dbo.Tables t ON t.id = o.tableId "
+                + "WHERE o.status = 'Paid' AND CAST(o.createdAt AS DATE) BETWEEN ? AND ? "
+                + "GROUP BY t.floorNo ORDER BY t.floorNo";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, from);
+            ps.setString(2, to);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rows(rs);
+            }
+        }
+    }
+
     private void deductInventoryForOrder(Connection con, int orderId) throws Exception {
+        deductInventoryForOrder(con, orderId, "system", "system");
+    }
+
+    private void deductInventoryForOrder(Connection con, int orderId, String actorRole, String actorName) throws Exception {
         Map<String, Integer> deductions = new LinkedHashMap<>();
         String sql = "SELECT ri.ingredientId, SUM(ri.quantity * oi.quantity) usedQuantity "
                 + "FROM dbo.OrderItems oi "
@@ -1575,7 +1918,117 @@ public class LiteService {
                 ps.setString(3, entry.getKey());
                 ps.executeUpdate();
             }
+            // Ghi sổ NGAY trong cùng transaction. Trừ kho mà không ghi sổ thì
+            // sau này kho lệch sẽ không có cách nào truy ra nguyên nhân.
+            logStockChange(con, entry.getKey(), "OUT", -amount, orderId, actorRole, actorName,
+                    "Xuất kho cho đơn #" + orderId);
         }
+    }
+
+    /**
+     * Ghi một dòng vào sổ cái kho. stockAfter đọc lại từ Inventory SAU khi đã
+     * cập nhật, nên sổ luôn phản ánh đúng tồn thực tế chứ không phải số tính tay.
+     *
+     * Bất biến cần giữ: SUM(StockTransactions.quantity) của một nguyên liệu
+     * luôn bằng Inventory.stock. Lệch = có người sửa thẳng CSDL.
+     */
+    void logStockChange(Connection con, String ingredientId, String type, int quantity,
+                        int orderId, String actorRole, String actorName, String note) throws Exception {
+        if (readString(ingredientId, "").isEmpty()) return;
+        int stockAfter = 0;
+        int unitCost = 0;
+        try (PreparedStatement ps = con.prepareStatement("SELECT stock, importCost FROM dbo.Inventory WHERE id=?")) {
+            ps.setString(1, ingredientId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return;              // nguyên liệu đã bị xoá, không ghi sổ mồ côi
+                stockAfter = rs.getInt("stock");
+                unitCost = rs.getInt("importCost");
+            }
+        }
+        try (PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO dbo.StockTransactions (ingredientId,type,quantity,stockAfter,unitCost,orderId,actorRole,actorName,note) "
+                        + "VALUES (?,?,?,?,?,?,?,?,?)")) {
+            ps.setString(1, ingredientId);
+            ps.setString(2, type);
+            ps.setInt(3, quantity);
+            ps.setInt(4, stockAfter);
+            ps.setInt(5, unitCost);
+            if (orderId > 0) ps.setInt(6, orderId); else ps.setNull(6, java.sql.Types.INTEGER);
+            ps.setString(7, readString(actorRole, "system"));
+            ps.setString(8, readString(actorName, "system"));
+            ps.setString(9, limitNote(note));
+            ps.executeUpdate();
+        }
+    }
+
+    /** Ghi sổ kho từ ngoài transaction (dùng cho luồng nhập/sửa kho của admin). */
+    public void logStockChange(String ingredientId, String type, int quantity,
+                               String actorRole, String actorName, String note) throws Exception {
+        try (Connection con = db.getConnection()) {
+            logStockChange(con, ingredientId, type, quantity, 0, actorRole, actorName, note);
+        }
+    }
+
+    /** Sổ cái kho của một nguyên liệu, mới nhất trước. */
+    public List<Map<String, Object>> getStockLedger(String ingredientId, int limit) throws Exception {
+        int take = limit <= 0 || limit > 500 ? 100 : limit;
+        String where = readString(ingredientId, "").isEmpty() ? "" : "WHERE s.ingredientId = ? ";
+        String sql = "SELECT TOP " + take + " s.id, s.ingredientId, i.name AS ingredientName, i.unit, "
+                + "s.type, s.quantity, s.stockAfter, s.unitCost, s.orderId, s.actorRole, s.actorName, s.note, s.createdAt "
+                + "FROM dbo.StockTransactions s JOIN dbo.Inventory i ON i.id = s.ingredientId "
+                + where + "ORDER BY s.id DESC";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            if (!where.isEmpty()) ps.setString(1, ingredientId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rows(rs);
+            }
+        }
+    }
+
+    /**
+     * Đối soát kho: trả về những nguyên liệu có tồn KHÔNG khớp sổ cái.
+     * Danh sách rỗng là kết quả mong muốn.
+     */
+    public List<Map<String, Object>> getStockAudit() throws Exception {
+        String sql = "SELECT i.id, i.name, i.unit, i.stock AS currentStock, "
+                + "ISNULL(SUM(s.quantity),0) AS ledgerTotal, "
+                + "i.stock - ISNULL(SUM(s.quantity),0) AS difference "
+                + "FROM dbo.Inventory i LEFT JOIN dbo.StockTransactions s ON s.ingredientId = i.id "
+                + "GROUP BY i.id, i.name, i.unit, i.stock "
+                + "HAVING i.stock <> ISNULL(SUM(s.quantity),0) ORDER BY i.name";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rows(rs);
+        }
+    }
+
+    /**
+     * Giá vốn hàng bán trong khoảng ngày, tính từ sổ cái kho.
+     * Không có sổ cái thì con số này không tồn tại — dashboard chỉ có doanh thu gộp.
+     */
+    public Map<String, Object> getCostOfGoodsSold(String fromDate, String toDate) throws Exception {
+        String from = readString(fromDate, appToday().toString());
+        String to = readString(toDate, appToday().toString());
+        String sql = "SELECT ISNULL(SUM(ABS(s.quantity) * s.unitCost),0) AS cogs "
+                + "FROM dbo.StockTransactions s "
+                + "WHERE s.type='OUT' AND CAST(s.createdAt AS DATE) BETWEEN ? AND ?";
+        int cogs = 0;
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, from);
+            ps.setString(2, to);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) cogs = rs.getInt("cogs");
+            }
+        }
+        Map<String, Object> revenueRow = getPaymentSummary(from, to);
+        int revenue = readInt(revenueRow.get("totalAmount"), 0);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fromDate", from);
+        result.put("toDate", to);
+        result.put("revenue", revenue);
+        result.put("cogs", cogs);
+        result.put("grossProfit", revenue - cogs);
+        return result;
     }
 
     public List<Map<String, Object>> getLowStockIngredients() throws Exception {
@@ -1706,12 +2159,22 @@ public class LiteService {
 
             int sourceNumber;
             String tableName;
-            try (PreparedStatement ps = con.prepareStatement("SELECT orderNumber, tableName FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=? AND status='Served'")) {
+            int sourceCustomerId;
+            int sourceTableId;
+            try (PreparedStatement ps = con.prepareStatement("SELECT orderNumber, tableName, pointsRedeemed, customerId, tableId FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=? AND status='Served'")) {
                 ps.setInt(1, sourceOrderId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) throw new IllegalArgumentException("Chỉ tách được hóa đơn đang chờ thanh toán.");
+                    // Đơn đã dùng điểm giảm giá thì không tách. Tách ra sẽ phải
+                    // chia phần giảm giá giữa hai đơn — chưa có quy tắc nghiệp vụ
+                    // cho việc đó, nên chặn thẳng còn hơn chia sai rồi lệch tiền.
+                    if (rs.getInt("pointsRedeemed") > 0) {
+                        throw new IllegalArgumentException("Đơn đã dùng điểm giảm giá nên không thể tách. Vui lòng thanh toán nguyên đơn.");
+                    }
                     sourceNumber = rs.getInt("orderNumber");
                     tableName = rs.getString("tableName");
+                    sourceCustomerId = rs.getInt("customerId");
+                    sourceTableId = rs.getInt("tableId");
                 }
             }
 
@@ -1748,9 +2211,13 @@ public class LiteService {
 
             // Tạo hóa đơn mới từ phần tách.
             int newId;
-            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,customerPhone,note,total,status,splitLocked) VALUES (?,NULL,?,0,'Served',1)", Statement.RETURN_GENERATED_KEYS)) {
+            // Hóa đơn tách kế thừa chủ tài khoản: nếu không, phần tách ra sẽ
+            // không được tích điểm và khách mất điểm một cách vô lý.
+            try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,tableId,customerPhone,note,total,status,splitLocked,customerId) VALUES (?,?,NULL,?,0,'Served',1,?)", Statement.RETURN_GENERATED_KEYS)) {
                 ps.setString(1, tableName);
-                ps.setString(2, limitNote("Tách từ #" + sourceNumber));
+                if (sourceTableId > 0) ps.setInt(2, sourceTableId); else ps.setNull(2, java.sql.Types.INTEGER);
+                ps.setString(3, limitNote("Tách từ #" + sourceNumber));
+                if (sourceCustomerId > 0) ps.setInt(4, sourceCustomerId); else ps.setNull(4, java.sql.Types.INTEGER);
                 ps.executeUpdate();
                 try (ResultSet keys = ps.getGeneratedKeys()) {
                     keys.next();
@@ -1832,9 +2299,12 @@ public class LiteService {
                 if (rs.next()) total = rs.getInt("total");
             }
         }
-        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET total=? WHERE id=?")) {
+        // subtotal đi kèm total. Hàm này chỉ được gọi từ splitOrder, mà splitOrder
+        // đã chặn đơn có giảm giá, nên ở đây discount luôn = 0 và subtotal = total.
+        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET total=?, subtotal=? WHERE id=?")) {
             ps.setInt(1, total);
-            ps.setInt(2, orderId);
+            ps.setInt(2, total);
+            ps.setInt(3, orderId);
             ps.executeUpdate();
         }
     }
@@ -1919,14 +2389,22 @@ public class LiteService {
     }
 
     private int currentCashBalance(Connection con) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("SELECT TOP 1 balanceAfter FROM dbo.CashEvents WHERE eventType IN ('CASHIER_COUNT','ADMIN_WITHDRAW') ORDER BY id DESC");
+        // PAYMENT phải nằm trong danh sách này. Thiếu nó thì tiền bán hàng
+        // không bao giờ vào sổ quỹ và mọi lần chốt ca đều lệch.
+        try (PreparedStatement ps = con.prepareStatement("SELECT TOP 1 balanceAfter FROM dbo.CashEvents WHERE eventType IN ('CASHIER_COUNT','ADMIN_WITHDRAW','PAYMENT') ORDER BY id DESC");
              ResultSet rs = ps.executeQuery()) {
             return rs.next() ? rs.getInt("balanceAfter") : 0;
         }
     }
 
     private void insertCashEvent(Connection con, String type, int amount, int balanceAfter, String note, String actorRole, String actorName, boolean seenByCashier) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.CashEvents (eventType,amount,balanceAfter,note,actorRole,actorName,seenByCashier) VALUES (?,?,?,?,?,?,?)")) {
+        insertCashEvent(con, type, amount, balanceAfter, note, actorRole, actorName, seenByCashier, 0, 0, actorStaffId());
+    }
+
+    private void insertCashEvent(Connection con, String type, int amount, int balanceAfter, String note,
+                                 String actorRole, String actorName, boolean seenByCashier,
+                                 int orderId, int paymentId, int staffId) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.CashEvents (eventType,amount,balanceAfter,note,actorRole,actorName,seenByCashier,orderId,paymentId,staffId) VALUES (?,?,?,?,?,?,?,?,?,?)")) {
             ps.setString(1, type);
             ps.setInt(2, amount);
             ps.setInt(3, balanceAfter);
@@ -1934,6 +2412,9 @@ public class LiteService {
             ps.setString(5, actorRole);
             ps.setString(6, actorName);
             ps.setBoolean(7, seenByCashier);
+            if (orderId > 0) ps.setInt(8, orderId); else ps.setNull(8, java.sql.Types.INTEGER);
+            if (paymentId > 0) ps.setInt(9, paymentId); else ps.setNull(9, java.sql.Types.INTEGER);
+            if (staffId > 0) ps.setInt(10, staffId); else ps.setNull(10, java.sql.Types.INTEGER);
             ps.executeUpdate();
         }
     }
@@ -1942,7 +2423,7 @@ public class LiteService {
         String where = "";
         if (!readString(type, "").isEmpty()) where = "WHERE eventType=? ";
         if (unseenOnly) where += where.isEmpty() ? "WHERE seenByCashier=0 " : "AND seenByCashier=0 ";
-        String sql = "SELECT TOP " + Math.max(1, limit) + " id,eventType,amount,balanceAfter,note,actorRole,actorName,seenByCashier,createdAt FROM dbo.CashEvents " + where + "ORDER BY id DESC";
+        String sql = "SELECT TOP " + Math.max(1, limit) + " id,eventType,amount,balanceAfter,note,actorRole,actorName,seenByCashier,orderId,paymentId,staffId,createdAt FROM dbo.CashEvents " + where + "ORDER BY id DESC";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             if (!readString(type, "").isEmpty()) ps.setString(1, type);
             try (ResultSet rs = ps.executeQuery()) {
@@ -2023,10 +2504,34 @@ public class LiteService {
         }
     }
 
+    // ── Ai đang thao tác ────────────────────────────────────────────────
+    // Bốn tài khoản admin/barista/cashier/runner là tài khoản VỊ TRÍ, dùng
+    // chung cho nhiều người. Nên actorName trước đây chỉ ghi "Thu ngân
+    // coffeshop" — không quy được trách nhiệm cho ai.
+    //
+    // Servlet đặt staffId của người thật vào đây ở đầu mỗi request, nhờ vậy
+    // hơn 50 chỗ gọi insertSystemLog không phải sửa chữ ký. Bắt buộc phải
+    // clear ở cuối request vì Tomcat tái sử dụng thread cho request khác.
+    private static final ThreadLocal<Integer> ACTOR_STAFF_ID = new ThreadLocal<>();
+
+    public static void setActorStaffId(int staffId) {
+        if (staffId > 0) ACTOR_STAFF_ID.set(staffId); else ACTOR_STAFF_ID.remove();
+    }
+
+    public static void clearActorStaffId() {
+        ACTOR_STAFF_ID.remove();
+    }
+
+    private static int actorStaffId() {
+        Integer value = ACTOR_STAFF_ID.get();
+        return value == null ? 0 : value;
+    }
+
     private void insertSystemLog(Connection con, String actorRole, String actorName, String actionType, String messageVi, String messageEn, Integer refId) throws Exception {
         String role = normalizeActor(actorRole);
         if (role.isEmpty()) role = "system";
-        try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.SystemLogs (actorRole,actorName,actionType,messageVi,messageEn,refId) VALUES (?,?,?,?,?,?)")) {
+        int staffId = actorStaffId();
+        try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.SystemLogs (actorRole,actorName,actionType,messageVi,messageEn,refId,staffId) VALUES (?,?,?,?,?,?,?)")) {
             ps.setString(1, role);
             ps.setString(2, limitLog(actorName));
             ps.setString(3, limitLog(readString(actionType, "ACTION")));
@@ -2034,7 +2539,331 @@ public class LiteService {
             ps.setString(5, limitLog(messageEn));
             if (refId == null || refId <= 0) ps.setNull(6, Types.INTEGER);
             else ps.setInt(6, refId);
+            if (staffId > 0) ps.setInt(7, staffId); else ps.setNull(7, Types.INTEGER);
             ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Đưa mọi cách viết vai trò về đúng mã trong dbo.Roles.
+     * Cần thiết vì Shifts.assignedRole nay có khoá ngoại: chuỗi lạ sẽ bị CSDL
+     * từ chối, và dữ liệu cũ vẫn còn ghi 'Barista'/'Waiter' kiểu chữ hoa.
+     * Trả về chuỗi rỗng nếu không nhận ra — gọi bên ngoài tự quyết định.
+     */
+    public static String normalizeRoleCode(String raw) {
+        String value = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if (value.isEmpty()) return "";
+        if (value.equals("waiter") || value.equals("runner")) return "runner";
+        if (value.equals("barista")) return "barista";
+        if (value.equals("cashier")) return "cashier";
+        if (value.equals("admin")) return "admin";
+        return "";
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  TÀI KHOẢN CÁ NHÂN CỦA NHÂN VIÊN
+    //
+    //  Trước đây 10 nhân viên dùng chung 3 tài khoản vị trí. Hệ quả: không
+    //  quy được trách nhiệm cho ai, và không thực thi được luật "chỉ người
+    //  đang trong ca mới thao tác được" vì hệ thống không biết ai đang đăng nhập.
+    //
+    //  Giờ mỗi nhân viên có một dòng Users riêng, PIN được băm, và VAI TRÒ
+    //  của phiên làm việc suy ra từ ca được xếp HÔM NAY.
+    // ══════════════════════════════════════════════════════════════
+
+    /** PIN mặc định khi tạo tài khoản lần đầu. Admin nên đổi ngay sau demo. */
+    public static String defaultPinFor(int staffId) {
+        return String.valueOf(1000 + Math.max(0, staffId));
+    }
+
+    /**
+     * Đảm bảo mỗi nhân viên đang làm việc đều có một tài khoản.
+     * Chạy mỗi lần khởi động để tạo bù cho dữ liệu cũ.
+     */
+    public void ensureStaffAccounts() {
+        try (Connection con = db.getConnection()) {
+            List<Map<String, Object>> staff;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT s.id, s.name FROM dbo.Staff s WHERE s.active = 1 "
+                            + "AND NOT EXISTS (SELECT 1 FROM dbo.Users u WHERE u.staffId = s.id) ORDER BY s.id");
+                 ResultSet rs = ps.executeQuery()) {
+                staff = rows(rs);
+            }
+            int created = 0;
+            for (Map<String, Object> row : staff) {
+                if (createAccountFor(con, readInt(row.get("id"), 0), readString(row.get("name"), ""))) created++;
+            }
+            if (created > 0) {
+                System.out.println("[LiteService] Đã tạo " + created
+                        + " tài khoản nhân viên (PIN mặc định = 1000 + id).");
+            }
+            // Tài khoản đã có nhưng chưa có PIN băm (dữ liệu từ bản cũ).
+            backfillMissingPins(con);
+        } catch (Exception e) {
+            System.err.println("[LiteService] ensureStaffAccounts bỏ qua: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Tạo tài khoản NGAY khi admin thêm nhân viên mới.
+     *
+     * Trước đây việc này chỉ chạy lúc Tomcat khởi động, nên nhân viên vừa thêm
+     * xong không có tài khoản và đăng nhập luôn báo "Sai mã PIN" — thông báo
+     * sai hoàn toàn với nguyên nhân thật.
+     *
+     * @return PIN mặc định nếu vừa tạo, chuỗi rỗng nếu đã có tài khoản.
+     */
+    public String ensureAccountForStaff(int staffId, String staffName) {
+        if (staffId <= 0) return "";
+        try (Connection con = db.getConnection()) {
+            return createAccountFor(con, staffId, staffName) ? defaultPinFor(staffId) : "";
+        } catch (Exception e) {
+            System.err.println("[LiteService] ensureAccountForStaff bỏ qua: " + e.getMessage());
+            return "";
+        }
+    }
+
+    /** @return true nếu vừa tạo mới; false nếu đã tồn tại hoặc lỗi. */
+    private boolean createAccountFor(Connection con, int staffId, String name) {
+        if (staffId <= 0) return false;
+        try (PreparedStatement check = con.prepareStatement("SELECT COUNT(*) FROM dbo.Users WHERE staffId = ?")) {
+            check.setInt(1, staffId);
+            try (ResultSet rs = check.executeQuery()) {
+                if (rs.next() && rs.getInt(1) > 0) return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        String username = "nv" + String.format(Locale.ROOT, "%03d", staffId);
+        String salt = utils.PasswordUtils.newSalt();
+        try (PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO dbo.Users (username, password, role, fullName, staffId, pinHash, pinSalt, active) "
+                        + "VALUES (?,?, 'staff', ?, ?, ?, ?, 1)")) {
+            ps.setString(1, username);
+            // Cột password cũ vẫn NOT NULL. Không lưu PIN thật vào đây —
+            // chỗ dùng để xác thực là pinHash/pinSalt.
+            ps.setString(2, "-");
+            ps.setString(3, readString(name, username));
+            ps.setInt(4, staffId);
+            ps.setString(5, utils.PasswordUtils.hash(defaultPinFor(staffId), salt));
+            ps.setString(6, salt);
+            ps.executeUpdate();
+            return true;
+        } catch (Exception e) {
+            System.err.println("[LiteService] Không tạo được tài khoản cho nhân viên "
+                    + staffId + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void backfillMissingPins(Connection con) throws Exception {
+        List<Map<String, Object>> rows;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT username, staffId FROM dbo.Users WHERE staffId IS NOT NULL AND (pinHash IS NULL OR pinSalt IS NULL)");
+             ResultSet rs = ps.executeQuery()) {
+            rows = rows(rs);
+        }
+        for (Map<String, Object> row : rows) {
+            String salt = utils.PasswordUtils.newSalt();
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Users SET pinHash=?, pinSalt=? WHERE username=?")) {
+                ps.setString(1, utils.PasswordUtils.hash(defaultPinFor(readInt(row.get("staffId"), 0)), salt));
+                ps.setString(2, salt);
+                ps.setString(3, readString(row.get("username"), ""));
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    /**
+     * Vai trò của nhân viên TRONG NGÀY HÔM NAY, lấy từ bảng phân ca.
+     * Chuỗi rỗng = hôm nay không được xếp ca.
+     *
+     * Đây là chỗ luật "chỉ người trong ca mới thao tác được" thực sự được
+     * thực thi: không có ca thì không có vai trò, không có vai trò thì
+     * SecurityFilter chặn hết mọi trang nghiệp vụ.
+     */
+    public String resolveShiftRole(int staffId) throws Exception {
+        if (staffId <= 0) return "";
+        String sql = "SELECT TOP 1 sh.assignedRole FROM dbo.Shifts sh "
+                + "WHERE sh.staffId = ? AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL "
+                + "ORDER BY sh.hours";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, staffId);
+            ps.setString(2, appToday().toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? readString(rs.getString("assignedRole"), "") : "";
+            }
+        }
+    }
+
+    /**
+     * Danh sách hiện trên màn đăng nhập: nhân viên đang làm việc, kèm vai trò
+     * hôm nay nếu có. KHÔNG trả về pinHash — dữ liệu này công khai trước khi
+     * đăng nhập nên chỉ được chứa thứ đủ để bấm chọn.
+     */
+    public List<Map<String, Object>> getLoginRoster() throws Exception {
+        String sql = "SELECT s.id, s.name, "
+                + "(SELECT TOP 1 sh.assignedRole FROM dbo.Shifts sh "
+                + " WHERE sh.staffId = s.id AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL ORDER BY sh.hours) AS todayRole, "
+                + "(SELECT TOP 1 sh.shiftName FROM dbo.Shifts sh "
+                + " WHERE sh.staffId = s.id AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL ORDER BY sh.hours) AS todayShift, "
+                + "(SELECT TOP 1 sh.hours FROM dbo.Shifts sh "
+                + " WHERE sh.staffId = s.id AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL ORDER BY sh.hours) AS todayHours, "
+                + "(SELECT TOP 1 sh.shiftDate FROM dbo.Shifts sh "
+                + " WHERE sh.staffId = s.id AND sh.shiftDate > ? AND sh.assignedRole IS NOT NULL ORDER BY sh.shiftDate) AS nextShiftDate, "
+                + "(SELECT COUNT(*) FROM dbo.Users u WHERE u.staffId = s.id AND u.active = 1) AS accountCount "
+                + "FROM dbo.Staff s WHERE s.active = 1 AND s.status = 'Active' ORDER BY s.name";
+        String today = appToday().toString();
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, today);
+            ps.setString(2, today);
+            ps.setString(3, today);
+            ps.setString(4, today);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> list = rows(rs);
+                for (Map<String, Object> row : list) {
+                    row.put("onDuty", !readString(row.get("todayRole"), "").isEmpty());
+                    row.put("hasAccount", readInt(row.get("accountCount"), 0) > 0);
+                    row.remove("accountCount");
+                }
+                return list;
+            }
+        }
+    }
+
+    /**
+     * Đăng nhập bằng tài khoản cá nhân.
+     *
+     * @param adminOverride true khi admin đã nhập PIN quản trị để mở khoá cho
+     *                      người làm thay ngoài ca. Vẫn ghi rõ vào nhật ký.
+     * @return thông tin phiên, hoặc null nếu sai PIN.
+     * @throws IllegalStateException nếu PIN đúng nhưng hôm nay không có ca.
+     */
+    public Map<String, Object> loginStaff(int staffId, String pin, boolean adminOverride) throws Exception {
+        if (staffId <= 0) return null;
+        String hash;
+        String salt;
+        String fullName;
+        String username;
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(
+                "SELECT u.username, u.fullName, u.pinHash, u.pinSalt, u.active, s.name AS staffName, s.active AS staffActive "
+                        + "FROM dbo.Users u JOIN dbo.Staff s ON s.id = u.staffId WHERE u.staffId = ?")) {
+            ps.setInt(1, staffId);
+            try (ResultSet rs = ps.executeQuery()) {
+                // Chưa có tài khoản KHÁC HẲN sai PIN. Gộp hai thứ này lại chỉ
+                // che mất lỗi cài đặt và làm người dùng gõ lại PIN vô ích.
+                // Ở đây không có gì để lộ: danh sách tên vốn đã công khai trên
+                // chính màn hình đăng nhập.
+                if (!rs.next()) {
+                    throw new IllegalArgumentException(
+                            "Nhân viên này chưa có tài khoản. Quản lý vào màn hình Nhân viên để tạo.");
+                }
+                if (!rs.getBoolean("active") || !rs.getBoolean("staffActive")) {
+                    throw new IllegalArgumentException("Tài khoản đã bị vô hiệu hoá.");
+                }
+                hash = readString(rs.getString("pinHash"), "");
+                salt = readString(rs.getString("pinSalt"), "");
+                username = readString(rs.getString("username"), "");
+                fullName = readString(rs.getString("staffName"), readString(rs.getString("fullName"), ""));
+            }
+        }
+        if (hash.isEmpty() || !utils.PasswordUtils.matches(pin, salt, hash)) return null;
+
+        String role = resolveShiftRole(staffId);
+        if (role.isEmpty()) {
+            if (!adminOverride) {
+                throw new IllegalStateException("Hôm nay bạn không được xếp ca. Cần quản lý mở khoá để đăng nhập.");
+            }
+            // Mở khoá ngoài ca: cho vào với quyền thấp nhất, không đoán bừa
+            // vai trò. Bồi bàn là vai trò ít quyền nhất trong ba vai trò.
+            role = "runner";
+        }
+
+        Map<String, Object> session = new LinkedHashMap<>();
+        session.put("staffId", staffId);
+        session.put("staffName", fullName);
+        session.put("username", username);
+        session.put("role", role);
+        session.put("fullName", fullName);
+        session.put("adminOverride", adminOverride);
+        return session;
+    }
+
+    /** Admin đặt lại PIN cho một nhân viên. Trả về PIN mới. */
+    public String resetStaffPin(int staffId, String newPin) throws Exception {
+        String pin = readString(newPin, "").replaceAll("[^0-9]", "");
+        if (pin.isEmpty()) pin = defaultPinFor(staffId);
+        if (pin.length() < 4 || pin.length() > 8) {
+            throw new IllegalArgumentException("PIN phải có từ 4 đến 8 chữ số.");
+        }
+        String salt = utils.PasswordUtils.newSalt();
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Users SET pinHash=?, pinSalt=? WHERE staffId=?")) {
+            ps.setString(1, utils.PasswordUtils.hash(pin, salt));
+            ps.setString(2, salt);
+            ps.setInt(3, staffId);
+            if (ps.executeUpdate() == 0) {
+                throw new IllegalArgumentException("Nhân viên này chưa có tài khoản.");
+            }
+        }
+        return pin;
+    }
+
+    /** Danh sách vai trò — nguồn duy nhất, thay cho các chuỗi rải rác trong code. */
+    public List<Map<String, Object>> getRoles() throws Exception {
+        try (Connection con = db.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT code, nameVi, nameEn, sortOrder FROM dbo.Roles ORDER BY sortOrder");
+             ResultSet rs = ps.executeQuery()) {
+            return rows(rs);
+        }
+    }
+
+    /**
+     * Nhân viên được xếp làm vai trò này trong ngày hôm nay.
+     * Dùng cho màn đăng nhập: chọn đúng người đang trong ca, nhờ đó log ghi
+     * được tên thật thay vì tên tài khoản vị trí dùng chung.
+     */
+    public List<Map<String, Object>> getStaffOnDuty(String roleCode) throws Exception {
+        String role = readString(roleCode, "").toLowerCase(Locale.ROOT);
+        String today = appToday().toString();
+        String sql = "SELECT DISTINCT s.id, s.name, sh.shiftName, sh.hours "
+                + "FROM dbo.Staff s JOIN dbo.Shifts sh ON sh.staffId = s.id "
+                + "WHERE sh.shiftDate = ? AND s.active = 1 AND s.status = 'Active' "
+                + (role.isEmpty() ? "" : "AND sh.assignedRole = ? ")
+                + "ORDER BY s.name";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, today);
+            if (!role.isEmpty()) ps.setString(2, role);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rows(rs);
+            }
+        }
+    }
+
+    /** Nhân viên này có thật sự được xếp ca vai trò đó hôm nay không. */
+    public boolean isStaffOnDuty(int staffId, String roleCode) throws Exception {
+        if (staffId <= 0) return false;
+        String sql = "SELECT COUNT(*) FROM dbo.Shifts sh JOIN dbo.Staff s ON s.id = sh.staffId "
+                + "WHERE sh.staffId = ? AND sh.shiftDate = ? AND sh.assignedRole = ? AND s.active = 1";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, staffId);
+            ps.setString(2, appToday().toString());
+            ps.setString(3, readString(roleCode, "").toLowerCase(Locale.ROOT));
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    public String getStaffName(int staffId) throws Exception {
+        if (staffId <= 0) return "";
+        try (Connection con = db.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT name FROM dbo.Staff WHERE id=?")) {
+            ps.setInt(1, staffId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? readString(rs.getString("name"), "") : "";
+            }
         }
     }
 
@@ -2126,7 +2955,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getOrderById(int id) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, customerPhone, status, total, note, createdAt, invoicePrinted FROM dbo.Orders WHERE id=?")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders WHERE id=?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;

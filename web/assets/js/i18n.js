@@ -86,7 +86,7 @@ const dict = {
         tableSaved: 'Đã lưu bàn', tableDeleted: 'Đã xoá bàn', copyDone: 'Đã sao chép link', deleteTableConfirm: 'Ẩn bàn này?',
         deleteTableHard: 'Xoá bàn', deleteTableConfirm1: 'Bàn sẽ bị xoá khỏi hệ thống. Tiếp tục?', deleteTableConfirm2: 'Nhập đúng tên bàn để xác nhận xoá:', confirmTextMismatch: 'Nội dung xác nhận không đúng.',
         regenerateQrConfirm: 'Đổi mã QR sẽ làm QR cũ không dùng được. Tiếp tục?',
-        qrWelcomeTitle: 'Đã nhận bàn', qrMissingTable: 'Không tìm thấy bàn từ mã QR này.', qrRequired: 'Vui lòng quét QR trên bàn để mở thực đơn.',
+        qrWelcomeTitle: 'Đã nhận bàn', noTableYet: 'Chưa chọn bàn', qrMissingTable: 'Không tìm thấy bàn từ mã QR này.', qrRequired: 'Vui lòng quét QR trên bàn để mở thực đơn.',
         hasSizes: 'Sản phẩm có size', sizeName: 'Tên size', extraPrice: 'Tiền chênh', addSize: 'Thêm size', baseSizeHelp: 'Size S dùng giá gốc.', recipeInfo: 'Công thức món', fromDate: 'Từ ngày', toDate: 'Đến ngày', apply: 'Áp dụng',
         cashOnHand: 'Tiền mặt hiện có', cashCountBeforeLogout: 'Nhập tiền mặt hiện tại để đăng xuất', cashCountRequired: 'Cần nhập tiền mặt hiện tại trước khi đăng xuất.', cashCountInvalid: 'Số tiền mặt không hợp lệ.',
         cashHistory: 'Lịch sử tiền mặt', withdrawCash: 'Rút tiền mặt', withdrawAmount: 'Nhập số tiền cần rút', cashWithdrawn: 'Đã rút tiền mặt', adminWithdrawNotice: 'Quản lý vừa rút tiền mặt', cashCountSaved: 'Đã ghi nhận tiền mặt',
@@ -128,7 +128,68 @@ const dict = {
         tablesAdminTitle: 'Quản lý bàn & QR', dashboardTitle: 'Dashboard', cashierTitle: 'Thu ngân',
         runnerTitle: 'Bồi bàn', baristaTitle: 'Pha chế', loginTitle: 'Đăng nhập nhân viên',
         orderStatusTitle: 'Tra cứu đơn', menuPageTitle: 'Thực đơn', systemLogsTitle: 'Log hệ thống',
-        counterOrderTitle: 'Gọi món tại quầy', transferTableTitle: 'Đổi bàn', homeTitle: 'coffeshop'
+        counterOrderTitle: 'Gọi món tại quầy', transferTableTitle: 'Đổi bàn', homeTitle: 'coffeshop',
+
+        // ── Tài khoản khách hàng & tích điểm ──
+        customerLoginTitle: 'Đăng nhập khách hàng', customerAccountTitle: 'Tài khoản của tôi',
+        customerLogin: 'Đăng nhập', customerRegister: 'Đăng ký', myAccount: 'Tài khoản',
+        phoneNumber: 'Số điện thoại', password: 'Mật khẩu', passwordConfirm: 'Nhập lại mật khẩu',
+        fullName: 'Họ và tên', fullNamePlaceholder: 'Nguyễn Văn A',
+        passwordHint: 'Tối thiểu 6 ký tự.', passwordMismatch: 'Hai mật khẩu không khớp.',
+        registerFailed: 'Không đăng ký được. Vui lòng kiểm tra lại thông tin.',
+        networkError: 'Không kết nối được máy chủ. Vui lòng thử lại.',
+        loyaltyPitch: 'Đăng nhập để tích điểm và xem lại lịch sử đơn hàng.',
+        continueAsGuest: 'Tiếp tục gọi món không cần tài khoản',
+        points: 'điểm', totalSpent: 'Tổng chi tiêu', orderCountLabel: 'Số đơn', memberSince: 'Thành viên từ',
+        tierBronze: 'Hạng Đồng', tierSilver: 'Hạng Bạc', tierGold: 'Hạng Vàng',
+        tierProgress: 'Chi thêm {amount} để lên hạng tiếp theo.', tierMaxReached: 'Bạn đang ở hạng cao nhất.',
+        orderHistory: 'Lịch sử đơn', pointHistory: 'Sổ điểm', accountSettings: 'Tài khoản',
+        noOrderHistory: 'Bạn chưa có đơn hàng nào.', noPointHistory: 'Chưa có giao dịch điểm nào.',
+        pointEarned: 'Tích điểm', pointRedeemed: 'Đổi điểm', pointAdjusted: 'Điều chỉnh',
+        balanceAfter: 'Số dư', discountByPoints: 'Giảm giá bằng {points} điểm',
+        profileInfo: 'Thông tin cá nhân', changePassword: 'Đổi mật khẩu',
+        currentPassword: 'Mật khẩu hiện tại', newPassword: 'Mật khẩu mới',
+        saved: 'Đã lưu.', saveFailed: 'Không lưu được.', passwordChanged: 'Đã đổi mật khẩu.',
+        usePoints: 'Dùng điểm', pointsAvailable: 'Bạn có {points} điểm', pointsWorth: 'trị giá {amount}',
+        redeemPlaceholder: 'Số điểm muốn dùng', redeemApply: 'Áp dụng', redeemClear: 'Bỏ dùng điểm',
+        redeemMax: 'Tối đa {points} điểm cho đơn này', redeemTooFew: 'Cần tối thiểu {points} điểm mới đổi được.',
+        subtotalLabel: 'Tiền hàng', discountLabel: 'Giảm giá', payableLabel: 'Phải trả',
+        loginToEarn: 'Đăng nhập để tích điểm cho đơn này',
+        earnPreview: 'Đơn này sẽ tích khoảng {points} điểm',
+
+        // ── Trang đăng nhập khách (giao diện mới) ──
+        loyaltyHeroTitle: 'Mỗi ly cà phê đều được cộng điểm',
+        loyaltyHeroText: 'Tạo tài khoản để tích điểm, đổi điểm lấy giảm giá và xem lại toàn bộ đơn đã gọi.',
+        benefitEarnTitle: 'Tích điểm tự động', benefitEarnText: 'Cứ 10.000đ thanh toán là 1 điểm.',
+        benefitRedeemTitle: 'Đổi điểm lấy giảm giá', benefitRedeemText: '1 điểm bằng 1.000đ, dùng ngay khi gọi món.',
+        benefitHistoryTitle: 'Lịch sử đơn hàng', benefitHistoryText: 'Xem lại mọi đơn đã gọi trên mọi thiết bị.',
+        welcomeBack: 'Chào bạn quay lại', loginSubtitle: 'Đăng nhập bằng số điện thoại đã đăng ký.',
+        createAccount: 'Tạo tài khoản', registerSubtitle: 'Chỉ cần số điện thoại, mất khoảng 30 giây.',
+        showPassword: 'Hiện mật khẩu', hidePassword: 'Ẩn mật khẩu', orLabel: 'hoặc',
+        pwWeak: 'Mật khẩu yếu — nên thêm chữ và số.',
+        pwMedium: 'Mật khẩu tạm ổn.',
+        pwStrong: 'Mật khẩu mạnh.',
+
+        // ── Vai trò, thanh toán, sổ kho ──
+        whoAreYou: 'Bạn là ai?', staffPickerNone: '— Không chọn —',
+        staffPickerHint: 'Chọn tên để hệ thống ghi đúng người thao tác.',
+        paymentMethod: 'Hình thức thanh toán', payCash: 'Tiền mặt', payTransfer: 'Chuyển khoản',
+        receivedAmount: 'Khách đưa', changeAmount: 'Tiền thối', confirmPayment: 'Xác nhận thu tiền',
+        receivedTooLow: 'Số tiền khách đưa nhỏ hơn số phải trả.',
+        paymentSummary: 'Đối soát ca', stockLedger: 'Sổ kho', stockAudit: 'Đối soát kho',
+        revenueByFloor: 'Doanh thu theo tầng', grossProfit: 'Lợi nhuận gộp', cogsLabel: 'Giá vốn',
+
+        // ── Đăng nhập bằng tài khoản cá nhân ──
+        pickYourself: 'Chọn tên của bạn', personalPin: 'Mã PIN cá nhân',
+        rosterToday: 'Ca làm hôm nay · {date}', rosterEmpty: 'Chưa có nhân viên nào đang làm việc.',
+        noShiftToday: 'Hôm nay không có ca', managerPin: 'PIN quản lý',
+        overrideHint: 'Người này không có ca hôm nay. Quản lý nhập PIN để mở khoá.',
+        offShiftBlocked: 'Hôm nay bạn không được xếp ca.',
+        resetPin: 'Đặt lại PIN', pinResetDone: 'PIN mới là {pin}',
+        noAccountYet: 'Chưa có tài khoản', nextShiftOn: 'Ca gần nhất: {date}',
+        rosterLoadFailed: 'Không tải được danh sách nhân viên. Kiểm tra log Tomcat.',
+        noAccountHelp: 'Nhân viên này chưa có tài khoản đăng nhập. Quản lý mở màn hình Nhân viên, bấm Lưu để hệ thống tạo tài khoản.',
+        pinIssued: 'Đã tạo tài khoản. PIN đăng nhập: {pin}'
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
@@ -215,7 +276,7 @@ const dict = {
         tableSaved: 'Table saved', tableDeleted: 'Table deleted', copyDone: 'Link copied', deleteTableConfirm: 'Hide this table?',
         deleteTableHard: 'Delete table', deleteTableConfirm1: 'This table will be removed from the system. Continue?', deleteTableConfirm2: 'Type the table name to confirm deletion:', confirmTextMismatch: 'Confirmation text does not match.',
         regenerateQrConfirm: 'Changing the QR code makes the old QR unusable. Continue?',
-        qrWelcomeTitle: 'Table detected', qrMissingTable: 'Could not find a table for this QR code.', qrRequired: 'Please scan the QR code on your table to open the menu.',
+        qrWelcomeTitle: 'Table detected', noTableYet: 'No table yet', qrMissingTable: 'Could not find a table for this QR code.', qrRequired: 'Please scan the QR code on your table to open the menu.',
         hasSizes: 'Product has sizes', sizeName: 'Size name', extraPrice: 'Extra price', addSize: 'Add size', baseSizeHelp: 'Size S uses the base price.', recipeInfo: 'Recipe', fromDate: 'From', toDate: 'To', apply: 'Apply',
         cashOnHand: 'Cash on hand', cashCountBeforeLogout: 'Enter current cash before logging out', cashCountRequired: 'Current cash is required before logging out.', cashCountInvalid: 'Invalid cash amount.',
         cashHistory: 'Cash history', withdrawCash: 'Withdraw cash', withdrawAmount: 'Enter withdrawal amount', cashWithdrawn: 'Cash withdrawn', adminWithdrawNotice: 'Manager withdrew cash', cashCountSaved: 'Cash count saved',
@@ -257,7 +318,68 @@ const dict = {
         tablesAdminTitle: 'Tables & QR', dashboardTitle: 'Dashboard', cashierTitle: 'Cashier',
         runnerTitle: 'Waiter', baristaTitle: 'Barista', loginTitle: 'Staff sign in',
         orderStatusTitle: 'Order tracking', menuPageTitle: 'Menu', systemLogsTitle: 'System logs',
-        counterOrderTitle: 'Counter order', transferTableTitle: 'Move table', homeTitle: 'coffeshop'
+        counterOrderTitle: 'Counter order', transferTableTitle: 'Move table', homeTitle: 'coffeshop',
+
+        // ── Customer accounts & loyalty ──
+        customerLoginTitle: 'Customer sign in', customerAccountTitle: 'My account',
+        customerLogin: 'Sign in', customerRegister: 'Sign up', myAccount: 'Account',
+        phoneNumber: 'Phone number', password: 'Password', passwordConfirm: 'Confirm password',
+        fullName: 'Full name', fullNamePlaceholder: 'Jane Doe',
+        passwordHint: 'At least 6 characters.', passwordMismatch: 'Passwords do not match.',
+        registerFailed: 'Could not sign up. Please check your details.',
+        networkError: 'Cannot reach the server. Please try again.',
+        loyaltyPitch: 'Sign in to earn points and see your order history.',
+        continueAsGuest: 'Continue ordering without an account',
+        points: 'points', totalSpent: 'Total spent', orderCountLabel: 'Orders', memberSince: 'Member since',
+        tierBronze: 'Bronze', tierSilver: 'Silver', tierGold: 'Gold',
+        tierProgress: 'Spend {amount} more to reach the next tier.', tierMaxReached: 'You are at the top tier.',
+        orderHistory: 'Order history', pointHistory: 'Points ledger', accountSettings: 'Account',
+        noOrderHistory: 'You have no orders yet.', noPointHistory: 'No point activity yet.',
+        pointEarned: 'Points earned', pointRedeemed: 'Points redeemed', pointAdjusted: 'Adjustment',
+        balanceAfter: 'Balance', discountByPoints: 'Discount using {points} points',
+        profileInfo: 'Profile', changePassword: 'Change password',
+        currentPassword: 'Current password', newPassword: 'New password',
+        saved: 'Saved.', saveFailed: 'Could not save.', passwordChanged: 'Password changed.',
+        usePoints: 'Use points', pointsAvailable: 'You have {points} points', pointsWorth: 'worth {amount}',
+        redeemPlaceholder: 'Points to use', redeemApply: 'Apply', redeemClear: 'Remove points',
+        redeemMax: 'Up to {points} points on this order', redeemTooFew: 'You need at least {points} points to redeem.',
+        subtotalLabel: 'Subtotal', discountLabel: 'Discount', payableLabel: 'To pay',
+        loginToEarn: 'Sign in to earn points on this order',
+        earnPreview: 'This order earns about {points} points',
+
+        // ── Customer sign-in page (new layout) ──
+        loyaltyHeroTitle: 'Every cup earns you points',
+        loyaltyHeroText: 'Create an account to earn points, redeem them for discounts and revisit every order.',
+        benefitEarnTitle: 'Automatic points', benefitEarnText: 'Every 10,000 VND paid earns 1 point.',
+        benefitRedeemTitle: 'Redeem for discounts', benefitRedeemText: '1 point equals 1,000 VND, used at checkout.',
+        benefitHistoryTitle: 'Order history', benefitHistoryText: 'Revisit every order from any device.',
+        welcomeBack: 'Welcome back', loginSubtitle: 'Sign in with your registered phone number.',
+        createAccount: 'Create an account', registerSubtitle: 'Just a phone number, about 30 seconds.',
+        showPassword: 'Show password', hidePassword: 'Hide password', orLabel: 'or',
+        pwWeak: 'Weak password — add letters and numbers.',
+        pwMedium: 'Decent password.',
+        pwStrong: 'Strong password.',
+
+        // ── Roles, payments, stock ledger ──
+        whoAreYou: 'Who are you?', staffPickerNone: '— Not specified —',
+        staffPickerHint: 'Pick your name so actions are logged to the right person.',
+        paymentMethod: 'Payment method', payCash: 'Cash', payTransfer: 'Bank transfer',
+        receivedAmount: 'Received', changeAmount: 'Change', confirmPayment: 'Confirm payment',
+        receivedTooLow: 'Received amount is less than the amount due.',
+        paymentSummary: 'Shift reconciliation', stockLedger: 'Stock ledger', stockAudit: 'Stock audit',
+        revenueByFloor: 'Revenue by floor', grossProfit: 'Gross profit', cogsLabel: 'Cost of goods',
+
+        // ── Personal account sign-in ──
+        pickYourself: 'Select your name', personalPin: 'Your PIN',
+        rosterToday: 'Today\'s roster · {date}', rosterEmpty: 'No active staff yet.',
+        noShiftToday: 'No shift today', managerPin: 'Manager PIN',
+        overrideHint: 'This person has no shift today. A manager PIN unlocks sign-in.',
+        offShiftBlocked: 'You are not scheduled today.',
+        resetPin: 'Reset PIN', pinResetDone: 'New PIN is {pin}',
+        noAccountYet: 'No account yet', nextShiftOn: 'Next shift: {date}',
+        rosterLoadFailed: 'Could not load the staff list. Check the Tomcat log.',
+        noAccountHelp: 'This staff member has no login account. A manager can open the Staff screen and press Save to create one.',
+        pinIssued: 'Account created. Login PIN: {pin}'
     }
 };
 
@@ -289,7 +411,12 @@ function staffStatusText(status) {
     return status || '—';
 }
 function roleScheduleText(role) {
-    const map = { Barista: 'roleBarista', Cashier: 'roleCashier', Waiter: 'roleRunner' };
+    // Sau khi chuẩn hoá, CSDL lưu mã thường (barista/cashier/runner).
+    // Vẫn nhận dạng cũ để dữ liệu chưa migrate không hiện ra chuỗi thô.
+    const map = {
+        barista: 'roleBarista', cashier: 'roleCashier', runner: 'roleRunner',
+        Barista: 'roleBarista', Cashier: 'roleCashier', Waiter: 'roleRunner'
+    };
     return t(map[role] || role) || role;
 }
 function formatTableName(name) {
@@ -434,14 +561,45 @@ function nav(role) {
     const statusHref = tableCode
         ? `order-status.jsp?tableCode=${encodeURIComponent(tableCode)}`
         : (tableName ? `order-status.jsp?table=${encodeURIComponent(tableName)}` : 'order-status.jsp');
+    // customerSession do loadNav() gán trước khi gọi nav(). Khách đã đăng nhập
+    // thấy tên + số điểm; khách vãng lai thấy nút đăng nhập. Cả hai đều gọi
+    // món được như nhau — đăng nhập không phải điều kiện để đặt hàng.
+    const customer = window.customerSession || null;
+    const accountLink = customer
+        ? `<a class="link nav-account" href="${withTab('customer-account.jsp')}">
+               <span class="nav-account-name">${escapeNav(customer.fullName || t('myAccount'))}</span>
+               <span class="nav-account-points">${Number(customer.points || 0)} ${t('points')}</span>
+           </a>`
+        : `<a class="link" href="${withTab('customer-login.jsp?return=menu.jsp')}" data-i18n="customerLogin">${t('customerLogin')}</a>`;
     return `
         <a class="link" href="${withTab('menu.jsp')}" data-i18n="order">${t('order')}</a>
         <a class="link" href="${withTab(statusHref)}" data-i18n="status">${t('status')}</a>
+        ${accountLink}
     `;
+}
+
+function escapeNav(value) {
+    return String(value == null ? '' : value)
+        .replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 async function loadNav() {
     const res = await api('/auth/session');
     const session = res.ok ? await res.json() : {};
+    window.customerSession = session.customerAuthenticated ? (session.customer || null) : null;
+    // Trang chủ (index.html) không có #nav-links mà chỉ có một liên kết tài khoản.
+    // Xử lý riêng ở đây để mọi trang đều có lối vào tài khoản khách.
+    const homeAccount = document.getElementById('home-account-link');
+    if (homeAccount) {
+        if (window.customerSession) {
+            homeAccount.href = withTab('customer-account.jsp');
+            homeAccount.removeAttribute('data-i18n');
+            homeAccount.textContent = window.customerSession.fullName || t('myAccount');
+        } else {
+            homeAccount.href = withTab('customer-login.jsp?return=menu.jsp');
+            homeAccount.setAttribute('data-i18n', 'customerLogin');
+            homeAccount.textContent = t('customerLogin');
+        }
+    }
     const holder = document.getElementById('nav-links');
     if (holder) holder.innerHTML = nav(session.role || '');
     const brand = document.querySelector('.nav .brand');
@@ -618,4 +776,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (select) select.addEventListener('change', e => setLang(e.target.value));
     loadNav();
     applyI18n();
+});
+
+/**
+ * Điểm được cộng lúc thu ngân bấm "Đã thanh toán" — tức là ở máy khác.
+ * Trình duyệt của khách không có cách nào biết việc đó vừa xảy ra.
+ * Cách rẻ nhất mà vẫn đúng: mỗi lần khách quay lại tab, hỏi lại server một
+ * lần. Không tốn gì khi tab đang ẩn, và đúng vào lúc khách thực sự nhìn.
+ */
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') loadNav();
 });

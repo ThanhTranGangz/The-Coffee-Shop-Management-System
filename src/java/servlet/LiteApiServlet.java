@@ -39,6 +39,12 @@ public class LiteApiServlet extends HttpServlet {
     private static final String ATTR_ROLE = "role";
     private static final String ATTR_USER = "user";
     private static final String ATTR_PAID_ORDER_IDS = "paidOrderIds";
+    private static final String ATTR_CUSTOMER_ID = "customerId";
+    private static final String ATTR_STAFF_ID = "staffId";
+    private static final String ATTR_STAFF_NAME = "staffName";
+    /** PIN quản trị. Trước đây viết thẳng "8888" trong thân hàm ở nhiều chỗ. */
+    private static final String ADMIN_PIN = "8888";
+    private final dao.CustomerDAO customerDao = new dao.CustomerDAO();
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
@@ -62,6 +68,103 @@ public class LiteApiServlet extends HttpServlet {
                 case "/auth/session":
                     resp.getWriter().write(JsonUtils.toJson(sessionInfo(req)));
                     break;
+                case "/roles":
+                    resp.getWriter().write(JsonUtils.toJson(service.getRoles()));
+                    break;
+                case "/staff/roster":
+                    // Công khai: màn đăng nhập cần danh sách này trước khi có phiên.
+                    // Chỉ gồm id, tên và ca hôm nay — không có gì để mạo danh,
+                    // vì vẫn phải nhập đúng PIN cá nhân mới vào được.
+                    resp.getWriter().write(JsonUtils.toJson(service.getLoginRoster()));
+                    break;
+                case "/shifts/on-duty":
+                    // Công khai: màn đăng nhập cần danh sách này TRƯỚC khi có phiên.
+                    // Chỉ trả id + tên + ca, không lộ gì nhạy cảm.
+                    resp.getWriter().write(JsonUtils.toJson(service.getStaffOnDuty(req.getParameter("role"))));
+                    break;
+                case "/payments/order": {
+                    String payRole = role(req);
+                    if (payRole.isEmpty()) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ nhân viên xem được thông tin thanh toán.");
+                        break;
+                    }
+                    Map<String, Object> pay = service.getPaymentByOrder(readInt(req.getParameter("orderId"), 0));
+                    if (pay == null) error(resp, HttpServletResponse.SC_NOT_FOUND, "Đơn này chưa được thanh toán.");
+                    else resp.getWriter().write(JsonUtils.toJson(pay));
+                    break;
+                }
+                case "/payments/summary": {
+                    String sumRole = role(req);
+                    if (!"admin".equals(sumRole) && !"cashier".equals(sumRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin hoặc thu ngân xem được đối soát.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(
+                            service.getPaymentSummary(req.getParameter("from"), req.getParameter("to"))));
+                    break;
+                }
+                case "/reports/revenue-by-floor": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin xem được báo cáo.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(
+                            service.getRevenueByFloor(req.getParameter("from"), req.getParameter("to"))));
+                    break;
+                }
+                case "/reports/cogs": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin xem được báo cáo.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(
+                            service.getCostOfGoodsSold(req.getParameter("from"), req.getParameter("to"))));
+                    break;
+                }
+                case "/inventory/ledger": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin xem được sổ kho.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(
+                            service.getStockLedger(req.getParameter("ingredientId"), readInt(req.getParameter("limit"), 100))));
+                    break;
+                }
+                case "/inventory/audit": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin xem được đối soát kho.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(service.getStockAudit()));
+                    break;
+                }
+                case "/customer/me": {
+                    model.Customer me = currentCustomer(req);
+                    if (me == null) {
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Bạn chưa đăng nhập.");
+                    } else {
+                        resp.getWriter().write(JsonUtils.toJson(customerPayload(me)));
+                    }
+                    break;
+                }
+                case "/customer/history": {
+                    int meId = customerId(req);
+                    if (meId <= 0) {
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Bạn chưa đăng nhập.");
+                    } else {
+                        resp.getWriter().write(JsonUtils.toJson(customerDao.getOrderHistory(meId, readInt(req.getParameter("limit"), 50))));
+                    }
+                    break;
+                }
+                case "/customer/points": {
+                    int meId = customerId(req);
+                    if (meId <= 0) {
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Bạn chưa đăng nhập.");
+                    } else {
+                        resp.getWriter().write(JsonUtils.toJson(customerDao.getPointHistory(meId, readInt(req.getParameter("limit"), 50))));
+                    }
+                    break;
+                }
                 case "/menu":
                     boolean admin = "admin".equals(role(req));
                     resp.getWriter().write(JsonUtils.toJson(service.getMenu(admin)));
@@ -106,7 +209,11 @@ public class LiteApiServlet extends HttpServlet {
                     Map<String, Object> order = service.getOrderByNumber(orderNumber);
                     if (order == null) {
                         error(resp, HttpServletResponse.SC_NOT_FOUND, "Không tìm thấy đơn hàng.");
-                    } else if (role(req).isEmpty() && !guestOrderIds(req, false).contains(readInt(order.get("id"), 0))) {
+                    } else if (role(req).isEmpty()
+                            && !guestOrderIds(req, false).contains(readInt(order.get("id"), 0))
+                            && !(customerId(req) > 0 && customerId(req) == readInt(order.get("customerId"), 0))) {
+                        // Chủ đơn đã đăng nhập thì tra được đơn của mình ở bất kỳ
+                        // thiết bị nào — đây chính là thứ phiên guest không làm được.
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ xem được đơn của phiên gọi món hiện tại.");
                     } else {
                         resp.getWriter().write(JsonUtils.toJson(order));
@@ -234,27 +341,127 @@ public class LiteApiServlet extends HttpServlet {
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Admin mở dashboard.jsp để nhập PIN.");
                         return;
                     }
-                    Map<String, Object> user = service.login(str(body.get("username")), str(body.get("password")));
-                    if (user == null) {
-                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Sai tài khoản hoặc mật khẩu.");
-                    } else {
-                        HttpSession session = req.getSession(true);
-                        session.setAttribute(tabAttr(req, ATTR_ROLE), user.get("role"));
-                        session.setAttribute(tabAttr(req, ATTR_USER), user.get("fullName"));
-                        if ("cashier".equals(user.get("role"))) {
-                            session.setAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS), new ArrayList<Integer>());
-                        } else {
-                            session.removeAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS));
-                        }
-                        service.addSystemLog(str(user.get("role")), str(user.get("fullName")), "LOGIN",
-                                str(user.get("fullName")) + " đăng nhập lúc " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")),
-                                str(user.get("fullName")) + " signed in at " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy")),
-                                null);
-                        resp.getWriter().write(JsonUtils.toJson(user));
-                    }
+                    // Đường đăng nhập bằng tài khoản vị trí dùng chung đã bị bỏ.
+                    // Giữ lại endpoint để client cũ nhận được lý do rõ ràng thay
+                    // vì lỗi khó hiểu, nhưng không cho vào nữa.
+                    error(resp, HttpServletResponse.SC_GONE,
+                            "Tài khoản dùng chung đã ngừng sử dụng. Vui lòng chọn tên của bạn và nhập PIN cá nhân.");
+                    return;
+                case "/customer/register": {
+                    model.Customer created = customerDao.register(
+                            str(body.get("phone")), str(body.get("password")), str(body.get("fullName")));
+                    startCustomerSession(req, created);
+                    service.addSystemLog("guest", created.getFullName(), "CUSTOMER_REGISTER",
+                            "Khách " + maskPhone(created.getPhone()) + " đăng ký tài khoản",
+                            "Customer " + maskPhone(created.getPhone()) + " registered an account",
+                            created.getId());
+                    resp.getWriter().write(JsonUtils.toJson(customerPayload(created)));
                     break;
+                }
+                case "/customer/login": {
+                    model.Customer logged = customerDao.login(str(body.get("phone")), str(body.get("password")));
+                    if (logged == null) {
+                        // Một thông báo duy nhất cho mọi lý do sai: không tiết lộ
+                        // số điện thoại nào đã tồn tại trong hệ thống.
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Số điện thoại hoặc mật khẩu không đúng.");
+                        return;
+                    }
+                    startCustomerSession(req, logged);
+                    resp.getWriter().write(JsonUtils.toJson(customerPayload(logged)));
+                    break;
+                }
+                case "/customer/logout": {
+                    HttpSession customerSession = req.getSession(false);
+                    if (customerSession != null) {
+                        customerSession.removeAttribute(tabAttr(req, ATTR_CUSTOMER_ID));
+                    }
+                    Map<String, Object> bye = new LinkedHashMap<>();
+                    bye.put("ok", true);
+                    resp.getWriter().write(JsonUtils.toJson(bye));
+                    break;
+                }
+                case "/customer/profile": {
+                    int meId = customerId(req);
+                    if (meId <= 0) {
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Bạn chưa đăng nhập.");
+                        return;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(customerPayload(customerDao.updateProfile(meId, str(body.get("fullName"))))));
+                    break;
+                }
+                case "/customer/password": {
+                    int meId = customerId(req);
+                    if (meId <= 0) {
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Bạn chưa đăng nhập.");
+                        return;
+                    }
+                    customerDao.changePassword(meId, str(body.get("oldPassword")), str(body.get("newPassword")));
+                    Map<String, Object> ok = new LinkedHashMap<>();
+                    ok.put("ok", true);
+                    resp.getWriter().write(JsonUtils.toJson(ok));
+                    break;
+                }
+                case "/auth/staff-login": {
+                    int loginId = readInt(body.get("staffId"), 0);
+                    String pin = str(body.get("pin"));
+                    // Mở khoá ngoài ca: phải nhập PIN quản trị, không phải cờ
+                    // do trình duyệt tự bật.
+                    boolean override = ADMIN_PIN.equals(str(body.get("adminPin")));
+                    Map<String, Object> staffSession;
+                    try {
+                        staffSession = service.loginStaff(loginId, pin, override);
+                    } catch (IllegalStateException offShift) {
+                        // 409: PIN đúng nhưng không có ca. Giao diện dựa vào mã
+                        // này để hiện ô nhập PIN quản trị.
+                        error(resp, HttpServletResponse.SC_CONFLICT, offShift.getMessage());
+                        return;
+                    }
+                    if (staffSession == null) {
+                        error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Sai mã PIN.");
+                        return;
+                    }
+                    HttpSession ss = req.getSession(true);
+                    String staffRole = str(staffSession.get("role"));
+                    ss.setAttribute(tabAttr(req, ATTR_ROLE), staffRole);
+                    ss.setAttribute(tabAttr(req, ATTR_USER), staffSession.get("staffName"));
+                    ss.setAttribute(tabAttr(req, ATTR_STAFF_ID), loginId);
+                    ss.setAttribute(tabAttr(req, ATTR_STAFF_NAME), staffSession.get("staffName"));
+                    if ("cashier".equals(staffRole)) {
+                        ss.setAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS), new ArrayList<Integer>());
+                    } else {
+                        ss.removeAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS));
+                    }
+                    LiteService.setActorStaffId(loginId);
+                    String who = str(staffSession.get("staffName"));
+                    service.addSystemLog(staffRole, who, "LOGIN",
+                            who + " đăng nhập vai trò " + staffRole
+                                    + (override ? " (QUẢN LÝ MỞ KHOÁ NGOÀI CA)" : "") + " lúc "
+                                    + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")),
+                            who + " signed in as " + staffRole
+                                    + (override ? " (MANAGER OVERRIDE, OFF SHIFT)" : "") + " at "
+                                    + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy")),
+                            loginId);
+                    resp.getWriter().write(JsonUtils.toJson(staffSession));
+                    break;
+                }
+                case "/staff/reset-pin": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin đặt lại được mã PIN.");
+                        return;
+                    }
+                    int targetStaff = readInt(body.get("staffId"), 0);
+                    String newPin = service.resetStaffPin(targetStaff, str(body.get("pin")));
+                    service.addSystemLog("admin", user(req), "STAFF_PIN_RESET",
+                            "Admin đặt lại PIN cho nhân viên #" + targetStaff,
+                            "Admin reset PIN for staff #" + targetStaff, targetStaff);
+                    Map<String, Object> pinResult = new LinkedHashMap<>();
+                    pinResult.put("staffId", targetStaff);
+                    pinResult.put("pin", newPin);
+                    resp.getWriter().write(JsonUtils.toJson(pinResult));
+                    break;
+                }
                 case "/auth/admin-pin":
-                    if (!"8888".equals(str(body.get("pin")))) {
+                    if (!ADMIN_PIN.equals(str(body.get("pin")))) {
                         error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Sai mã PIN quản trị.");
                         return;
                     }
@@ -288,6 +495,12 @@ public class LiteApiServlet extends HttpServlet {
                     if (role(req).isEmpty()) {
                         resp.getWriter().write(JsonUtils.toJson(createGuestOrder(req, body)));
                     } else {
+                        // Nhân viên gọi hộ tại quầy: cho phép gắn đơn vào tài khoản
+                        // khách qua số điện thoại, nhưng chỉ nhận id do server tra ra.
+                        body.remove("customerId");
+                        model.Customer byPhone = customerDao.findByPhone(str(body.get("customerPhone")));
+                        if (byPhone != null && byPhone.isActive()) body.put("customerId", byPhone.getId());
+                        body.remove("redeemPoints");
                         resp.getWriter().write(JsonUtils.toJson(service.createOrder(body, role(req), user(req))));
                     }
                     break;
@@ -304,7 +517,18 @@ public class LiteApiServlet extends HttpServlet {
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ được chuyển trạng thái theo đúng thứ tự.");
                         return;
                     }
-                    Map<String, Object> updatedOrder = service.updateOrderStatus(orderId, status, currentRole, user(req));
+                    // Thu ngân gửi kèm hình thức thanh toán và số tiền khách đưa.
+                    Map<String, Object> paymentInfo = null;
+                    if ("Paid".equals(status)) {
+                        paymentInfo = new LinkedHashMap<>();
+                        paymentInfo.put("method", str(body.get("paymentMethod")));
+                        paymentInfo.put("receivedAmount", readInt(body.get("receivedAmount"), 0));
+                        paymentInfo.put("cashierUsername", currentRole);
+                        paymentInfo.put("cashierName", staffName(req).isEmpty() ? user(req) : staffName(req));
+                        paymentInfo.put("staffId", staffId(req));
+                        paymentInfo.put("note", str(body.get("paymentNote")));
+                    }
+                    Map<String, Object> updatedOrder = service.updateOrderStatus(orderId, status, currentRole, user(req), paymentInfo);
                     if ("cashier".equals(currentRole) && "Paid".equals(status)) {
                         rememberPaidOrder(req, orderId);
                     }
@@ -397,7 +621,9 @@ public class LiteApiServlet extends HttpServlet {
                         str(body.get("hours")),
                         str(body.get("status")),
                         str(body.get("notes")),
-                        str(body.get("assignedRole"))
+                        // Chuẩn hoá trước khi lưu: assignedRole nay có khoá ngoại
+                        // sang dbo.Roles nên chuỗi lạ sẽ bị CSDL từ chối.
+                        LiteService.normalizeRoleCode(str(body.get("assignedRole")))
                     );
                     try {
                         shiftDAO.save(shift);
@@ -457,7 +683,17 @@ public class LiteApiServlet extends HttpServlet {
                         str(body.get("status"))
                     );
                     new dao.StaffDAO().save(staff);
-                    resp.getWriter().write(JsonUtils.toJson(staff));
+                    // Tạo tài khoản đăng nhập NGAY, không đợi tới lần khởi động sau.
+                    // Nếu vừa tạo thì trả PIN mặc định về cho admin đọc một lần.
+                    String issuedPin = service.ensureAccountForStaff(staff.getId(), staff.getName());
+                    Map<String, Object> savedStaff = new LinkedHashMap<>();
+                    savedStaff.put("id", staff.getId());
+                    savedStaff.put("name", staff.getName());
+                    savedStaff.put("active", staff.isActive());
+                    savedStaff.put("status", staff.getStatus());
+                    // Rỗng nghĩa là tài khoản đã có sẵn, không phải vừa tạo.
+                    savedStaff.put("issuedPin", issuedPin);
+                    resp.getWriter().write(JsonUtils.toJson(savedStaff));
                     break;
                 case "/staff/delete":
                     if (!"admin".equals(role(req))) {
@@ -709,6 +945,13 @@ public class LiteApiServlet extends HttpServlet {
             }
         }
 
+        // customerId LUÔN lấy từ phiên trên server, không bao giờ tin body.
+        // Nếu trình duyệt tự khai customerId thì giá trị đó bị xoá ở đây.
+        body.remove("customerId");
+        int sessionCustomerId = customerId(req);
+        if (sessionCustomerId > 0) body.put("customerId", sessionCustomerId);
+        else body.remove("redeemPoints");
+
         Map<String, Object> order = service.createOrder(body);
         int orderId = readInt(order.get("id"), 0);
         rememberGuestOrder(req, orderId);
@@ -872,6 +1115,24 @@ public class LiteApiServlet extends HttpServlet {
         info.put("role", session == null ? null : session.getAttribute(tabAttr(req, ATTR_ROLE)));
         info.put("user", session == null ? null : session.getAttribute(tabAttr(req, ATTR_USER)));
         info.put("tabSession", tabKey(req));
+        info.put("staffId", staffId(req));
+        info.put("staffName", staffName(req));
+        // Thông tin khách hàng để thanh điều hướng biết hiển thị "Đăng nhập"
+        // hay tên khách + số điểm. Lỗi ở đây không được làm hỏng cả trang.
+        int cid = customerId(req);
+        info.put("customerAuthenticated", cid > 0);
+        if (cid > 0) {
+            try {
+                model.Customer customer = customerDao.findById(cid);
+                if (customer != null && customer.isActive()) {
+                    info.put("customer", customer.toMap());
+                } else {
+                    info.put("customerAuthenticated", false);
+                }
+            } catch (Exception e) {
+                info.put("customerAuthenticated", false);
+            }
+        }
         return info;
     }
 
@@ -881,10 +1142,73 @@ public class LiteApiServlet extends HttpServlet {
         return role == null ? "" : String.valueOf(role);
     }
 
+    // ── Phiên đăng nhập của KHÁCH HÀNG ──────────────────────────────────
+    // Tách hẳn khỏi ATTR_ROLE của nhân viên. Một khách đăng nhập vẫn có
+    // role rỗng, nên toàn bộ phân quyền nhân viên hiện có không bị ảnh hưởng.
+
+    private int customerId(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return 0;
+        return readInt(session.getAttribute(tabAttr(req, ATTR_CUSTOMER_ID)), 0);
+    }
+
+    private model.Customer currentCustomer(HttpServletRequest req) throws Exception {
+        int id = customerId(req);
+        if (id <= 0) return null;
+        model.Customer customer = customerDao.findById(id);
+        if (customer == null || !customer.isActive()) {
+            // Tài khoản bị vô hiệu hoá giữa chừng: dọn phiên ngay.
+            HttpSession session = req.getSession(false);
+            if (session != null) session.removeAttribute(tabAttr(req, ATTR_CUSTOMER_ID));
+            return null;
+        }
+        return customer;
+    }
+
+    private void startCustomerSession(HttpServletRequest req, model.Customer customer) {
+        if (customer == null) return;
+        HttpSession session = req.getSession(true);
+        session.setAttribute(tabAttr(req, ATTR_CUSTOMER_ID), customer.getId());
+    }
+
+    /** Hồ sơ khách kèm quy tắc tích/đổi điểm để giao diện không hardcode con số. */
+    private Map<String, Object> customerPayload(model.Customer customer) {
+        Map<String, Object> payload = new LinkedHashMap<>(customer.toMap());
+        Map<String, Object> rules = new LinkedHashMap<>();
+        rules.put("spendPerPoint", model.Customer.SPEND_PER_POINT);
+        rules.put("valuePerPoint", model.Customer.VALUE_PER_POINT);
+        rules.put("minRedeemPoints", model.Customer.MIN_REDEEM_POINTS);
+        rules.put("maxRedeemPercent", model.Customer.MAX_REDEEM_PERCENT);
+        rules.put("silverThreshold", model.Customer.SILVER_THRESHOLD);
+        rules.put("goldThreshold", model.Customer.GOLD_THRESHOLD);
+        payload.put("rules", rules);
+        return payload;
+    }
+
+    /** Che số điện thoại trước khi ghi vào nhật ký hệ thống. */
+    private String maskPhone(String phone) {
+        String raw = str(phone);
+        if (raw.length() < 5) return "***";
+        return raw.substring(0, 3) + "****" + raw.substring(raw.length() - 2);
+    }
+
     private String user(HttpServletRequest req) {
         HttpSession session = req.getSession(false);
         Object user = session == null ? null : session.getAttribute(tabAttr(req, ATTR_USER));
         return user == null ? "" : String.valueOf(user);
+    }
+
+    /** Nhân viên thật đang dùng tài khoản vị trí này (0 nếu không khai báo). */
+    private int staffId(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return 0;
+        return readInt(session.getAttribute(tabAttr(req, ATTR_STAFF_ID)), 0);
+    }
+
+    private String staffName(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return "";
+        return str(session.getAttribute(tabAttr(req, ATTR_STAFF_NAME)));
     }
 
     private String orderViewRole(HttpServletRequest req) {

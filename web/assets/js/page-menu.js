@@ -14,7 +14,14 @@
         let isConfirmingOrder = false;
         const MAX_QTY = 20;
 
+        // ── Tích điểm ────────────────────────────────────────────────
+        // customerProfile = null nghĩa là khách chưa đăng nhập; mọi thứ bên dưới
+        // phải chạy đúng trong cả hai trường hợp vì đăng nhập là tuỳ chọn.
+        let customerProfile = null;
+        let redeemPoints = 0;
+
         document.addEventListener('DOMContentLoaded', async () => {
+            loadCustomerProfile();
             const params = new URLSearchParams(location.search);
             const urlTableCode = params.get('tableCode') || '';
             const urlTableName = params.get('table') || '';
@@ -130,6 +137,15 @@
             const text = document.getElementById('table-welcome-text');
             welcome.classList.remove('hidden');
             text.textContent = message;
+            // Không còn là ngõ cụt: đổi tiêu đề cho đúng trạng thái và đưa ra
+            // đúng một hành động tiếp theo — quay về trang quét QR.
+            const eyebrow = document.getElementById('table-welcome-eyebrow');
+            if (eyebrow) {
+                eyebrow.removeAttribute('data-i18n');
+                eyebrow.textContent = t('noTableYet');
+            }
+            const scanLink = document.getElementById('qr-scan-link');
+            if (scanLink) scanLink.classList.remove('hidden');
             document.getElementById('chips').innerHTML = '';
             document.getElementById('menu-list').innerHTML = '';
             const favorites = document.getElementById('favorites-section');
@@ -220,6 +236,15 @@
             if (!qrTableName) return;
             const text = tf('tableWelcome', { table: qrTableName });
             document.getElementById('table-welcome-text').textContent = text;
+            // Đã có bàn: trả tiêu đề về "Đã nhận bàn" và giấu nút quét QR đi,
+            // phòng trường hợp trước đó trang đang ở trạng thái thiếu bàn.
+            const eyebrow = document.getElementById('table-welcome-eyebrow');
+            if (eyebrow) {
+                eyebrow.setAttribute('data-i18n', 'qrWelcomeTitle');
+                eyebrow.textContent = t('qrWelcomeTitle');
+            }
+            const scanLink = document.getElementById('qr-scan-link');
+            if (scanLink) scanLink.classList.add('hidden');
             document.getElementById('table-welcome').classList.remove('hidden');
         }
 
@@ -449,12 +474,192 @@
                         </div>`;
                 }).join('');
             }
-            document.getElementById('cart-total').textContent = money(total);
+            const discount = appliedDiscount(total);
+            const payable = Math.max(0, total - discount);
+            renderLoyalty(total, discount, payable);
+            document.getElementById('cart-total').textContent = money(payable);
             document.getElementById('cart-count').textContent = count;
-            document.getElementById('cart-bar-total').textContent = money(total);
+            document.getElementById('cart-bar-total').textContent = money(payable);
             document.getElementById('cart-bar').classList.toggle('show', cart.length > 0);
             document.getElementById('submit-order').disabled = cart.length === 0 || isSubmitting || isConfirmingOrder;
             updateScrollTop();
+        }
+
+        // ── Khối tích điểm trong giỏ hàng ────────────────────────────
+
+        const LOYALTY_REFRESH_MS = 10000;
+        let loyaltyTimer = null;
+
+        /**
+         * Số điểm thay đổi ở máy thu ngân, trang này không thể biết.
+         * Hỏi lại định kỳ, và CHỈ khi khách đã đăng nhập — khách vãng lai mà
+         * cứ 10 giây gọi /customer/me thì chỉ nhận 401, không được gì.
+         */
+        function startLoyaltyRefresh() {
+            stopLoyaltyRefresh();
+            if (!customerProfile) return;
+            if (document.visibilityState !== 'visible') return;
+            loyaltyTimer = setInterval(() => loadCustomerProfile(), LOYALTY_REFRESH_MS);
+        }
+
+        function stopLoyaltyRefresh() {
+            if (loyaltyTimer) clearInterval(loyaltyTimer);
+            loyaltyTimer = null;
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                loadCustomerProfile();   // cập nhật ngay khi quay lại, không đợi hết nhịp
+            } else {
+                stopLoyaltyRefresh();
+            }
+        });
+
+        window.addEventListener('pagehide', stopLoyaltyRefresh);
+
+        async function loadCustomerProfile() {
+            try {
+                const res = await api('/customer/me');
+                customerProfile = res.ok ? await res.json() : null;
+            } catch (err) {
+                customerProfile = null;
+            }
+            renderCart();
+            // Thanh điều hướng cũng hiển thị số điểm. Trước đây chỉ có khối
+            // trong giỏ hàng được cập nhật, nên sau khi đặt đơn có dùng điểm
+            // thì con số trên nav vẫn là số cũ cho tới khi tải lại trang.
+            if (typeof loadNav === 'function') loadNav();
+            // Vừa biết được trạng thái đăng nhập thì mới quyết định được có
+            // cần chạy nhịp tự làm mới hay không.
+            startLoyaltyRefresh();
+        }
+
+        function loyaltyRules() {
+            return (customerProfile && customerProfile.rules) || {
+                spendPerPoint: 10000, valuePerPoint: 1000, minRedeemPoints: 10, maxRedeemPercent: 50
+            };
+        }
+
+        /**
+         * Số điểm tối đa dùng được cho giỏ hiện tại.
+         * Đây là bản sao quy tắc của server chỉ để hiển thị — server vẫn tính
+         * lại và từ chối nếu sai. Không bao giờ tin con số tính ở trình duyệt.
+         */
+        function maxRedeemable(subtotal) {
+            if (!customerProfile) return 0;
+            const rules = loyaltyRules();
+            const balance = Number(customerProfile.points || 0);
+            if (balance < rules.minRedeemPoints || subtotal <= 0) return 0;
+            const capByOrder = Math.floor((subtotal * rules.maxRedeemPercent / 100) / rules.valuePerPoint);
+            const allowed = Math.min(balance, capByOrder);
+            return allowed < rules.minRedeemPoints ? 0 : allowed;
+        }
+
+        function appliedDiscount(subtotal) {
+            const max = maxRedeemable(subtotal);
+            // Giỏ hàng đổi liên tục: nếu điểm đã chọn vượt trần mới thì tự hạ xuống.
+            if (redeemPoints > max) redeemPoints = max;
+            if (redeemPoints < 0) redeemPoints = 0;
+            return redeemPoints * loyaltyRules().valuePerPoint;
+        }
+
+        function renderLoyalty(subtotal, discount, payable) {
+            const box = document.getElementById('loyalty-box');
+            if (!box) return;
+            // Hàm này ghi đè toàn bộ innerHTML. Nếu đúng lúc khách đang gõ số
+            // điểm mà nhịp tự làm mới chạy vào đây thì chữ đang gõ bị xoá sạch
+            // và con trỏ văng đi. Lưu lại trước, trả về sau.
+            const active = document.activeElement;
+            const typing = !!(active && active.id === 'redeem-input');
+            const typedValue = typing ? active.value : null;
+            const caret = typing ? active.selectionStart : null;
+            if (!cart.length) {
+                box.innerHTML = '';
+                box.classList.add('hidden');
+                return;
+            }
+            box.classList.remove('hidden');
+
+            if (!customerProfile) {
+                // Quay lại đúng menu.jsp sau khi đăng nhập; mã bàn đã nằm trong
+                // sessionStorage nên trang đăng nhập tự khôi phục được.
+                box.innerHTML = `
+                    <a class="loyalty-cta" href="${withTab('customer-login.jsp?return=menu.jsp')}">
+                        <span>${t('loginToEarn')}</span>
+                        <span aria-hidden="true">›</span>
+                    </a>`;
+                return;
+            }
+
+            const rules = loyaltyRules();
+            const max = maxRedeemable(subtotal);
+            const earn = Math.floor(payable / rules.spendPerPoint);
+            const balance = Number(customerProfile.points || 0);
+
+            const redeemRow = max > 0
+                ? `<div class="loyalty-redeem">
+                       <input id="redeem-input" type="number" min="0" max="${max}" step="1"
+                              value="${redeemPoints || ''}" inputmode="numeric"
+                              placeholder="${t('redeemPlaceholder')}">
+                       <button class="btn" type="button" onclick="applyRedeem()">${t('redeemApply')}</button>
+                   </div>
+                   <p class="cust-hint">${tf('redeemMax', { points: max })}</p>`
+                : `<p class="cust-hint">${tf('redeemTooFew', { points: rules.minRedeemPoints })}</p>`;
+
+            const breakdown = discount > 0
+                ? `<div class="loyalty-breakdown">
+                       <div><span>${t('subtotalLabel')}</span><span>${money(subtotal)}</span></div>
+                       <div class="discount"><span>${t('discountLabel')}</span><span>− ${money(discount)}</span></div>
+                       <div class="payable"><span>${t('payableLabel')}</span><b>${money(payable)}</b></div>
+                       <button class="link" type="button" onclick="clearRedeem()">${t('redeemClear')}</button>
+                   </div>`
+                : '';
+
+            box.innerHTML = `
+                <div class="loyalty-mini">
+                    <b>${tf('pointsAvailable', { points: balance })}</b>
+                    <span class="cust-hint">${tf('pointsWorth', { amount: money(balance * rules.valuePerPoint) })}</span>
+                </div>
+                ${redeemRow}
+                ${breakdown}
+                <p class="cust-hint earn-preview">${tf('earnPreview', { points: earn })}</p>`;
+
+            if (typedValue !== null) {
+                const again = document.getElementById('redeem-input');
+                if (again) {
+                    again.value = typedValue;
+                    again.focus();
+                    try { again.setSelectionRange(caret, caret); } catch (err) {}
+                }
+            }
+        }
+
+        function applyRedeem() {
+            const input = document.getElementById('redeem-input');
+            if (!input) return;
+            const wanted = Math.max(0, Math.floor(Number(input.value) || 0));
+            const subtotal = cartSubtotal();
+            const max = maxRedeemable(subtotal);
+            const rules = loyaltyRules();
+            // Chỉ nhận 0 hoặc một số >= mức tối thiểu; số lẻ ở giữa là vô nghĩa.
+            if (wanted > 0 && wanted < rules.minRedeemPoints) {
+                redeemPoints = 0;
+            } else {
+                redeemPoints = Math.min(wanted, max);
+            }
+            renderCart();
+        }
+
+        function clearRedeem() {
+            redeemPoints = 0;
+            renderCart();
+        }
+
+        function cartSubtotal() {
+            return cart.reduce((sum, line) => {
+                const menu = menuItems.find(item => item.id === line.menuItemId);
+                return menu ? sum + priceFor(menu, line.size) * line.quantity : sum;
+            }, 0);
         }
 
         function changeQty(index, delta) {
@@ -522,11 +727,16 @@
                         tableCode: preferredTableCode,
                         customerPhone: '',
                         note: orderNote,
+                        redeemPoints: customerProfile ? redeemPoints : 0,
                         items: cart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: Math.min(MAX_QTY, line.quantity) }))
                     })
                 });
                 if (res.ok) {
                     const order = await res.json();
+                    // Điểm đã bị trừ ở server: nạp lại số dư để giao diện không
+                    // hiển thị số cũ và cho khách đổi lại số điểm vừa dùng.
+                    redeemPoints = 0;
+                    if (customerProfile) loadCustomerProfile();
                     if (order.tableName) {
                         preferredTable = order.tableName;
                         qrTableName = lockedTable ? order.tableName : qrTableName;

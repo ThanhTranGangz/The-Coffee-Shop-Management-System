@@ -7,8 +7,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <title>Quản lý nhân viên - Admin</title>
         <meta name="page-title-key" content="staffAdminTitle">
-        <link rel="stylesheet" href="assets/css/app.css?v=admin-staff-3">
-        <script defer src="assets/js/i18n.js?v=i18n-sync-2"></script>
+        <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
+        <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
         <style>
             /* Custom styles for the staff calendar prototype */
             .staff-calendar {
@@ -246,9 +246,9 @@
                                 <label data-i18n="roleLabel">Vị trí (Vai trò)</label>
                                 <select id="assignedRole" required
                                     style="width:100%; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm);">
-                                    <option value="Barista" data-i18n="roleBaristaFull">Barista (Pha chế)</option>
-                                    <option value="Cashier" data-i18n="roleCashierFull">Cashier (Thu ngân)</option>
-                                    <option value="Waiter" data-i18n="roleWaiterFull">Waiter (Phục vụ)</option>
+                                    <option value="barista" data-i18n="roleBaristaFull">Barista (Pha chế)</option>
+                                    <option value="cashier" data-i18n="roleCashierFull">Cashier (Thu ngân)</option>
+                                    <option value="runner" data-i18n="roleWaiterFull">Waiter (Phục vụ)</option>
                                 </select>
                             </div>
                         </div>
@@ -289,9 +289,9 @@
                             <select id="payrollRoleFilter" onchange="applyPayrollFilter()"
                                 style="padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm);">
                                 <option value="All" data-i18n="allRoles">Tất cả</option>
-                                <option value="Barista" data-i18n="roleBaristaFull">Barista (Pha chế)</option>
-                                <option value="Cashier" data-i18n="roleCashierFull">Cashier (Thu ngân)</option>
-                                <option value="Waiter" data-i18n="roleWaiterFull">Waiter (Phục vụ)</option>
+                                <option value="barista" data-i18n="roleBaristaFull">Barista (Pha chế)</option>
+                                <option value="cashier" data-i18n="roleCashierFull">Cashier (Thu ngân)</option>
+                                <option value="runner" data-i18n="roleWaiterFull">Waiter (Phục vụ)</option>
                             </select>
                         </div>
                         <div>

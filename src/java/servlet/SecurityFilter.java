@@ -10,6 +10,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
+import service.LiteService;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -17,6 +19,7 @@ import java.util.List;
 @WebFilter("/*")
 public class SecurityFilter implements Filter {
     private static final String ATTR_ROLE = "role";
+    private static final String ATTR_STAFF_ID = "staffId";
     private final List<String> adminPages = Arrays.asList(
             "/admin-menu.jsp",
             "/admin-tables.jsp",
@@ -28,13 +31,31 @@ public class SecurityFilter implements Filter {
     private final List<String> cashierPages = Arrays.asList("/cashier.jsp", "/counter-order.jsp");
     private final List<String> runnerPages = Arrays.asList("/runner.jsp");
     private final List<String> transferPages = Arrays.asList("/table-transfer.jsp");
-    private final List<String> publicPages = Arrays.asList("/", "/index.html", "/staff-login.jsp", "/dashboard.jsp", "/menu.jsp", "/order-status.jsp");
+    private final List<String> publicPages = Arrays.asList("/", "/index.html", "/staff-login.jsp", "/dashboard.jsp", "/menu.jsp", "/order-status.jsp",
+            "/customer-login.jsp", "/customer-account.jsp");
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
         HttpServletRequest req = (HttpServletRequest) request;
         HttpServletResponse res = (HttpServletResponse) response;
         String path = req.getRequestURI().substring(req.getContextPath().length());
+
+        // Gắn nhân viên thật vào ngữ cảnh của request để mọi bản ghi nhật ký
+        // và sổ quỹ sinh ra bên trong đều quy được trách nhiệm.
+        // BẮT BUỘC dọn ở finally: Tomcat dùng lại thread cho request khác,
+        // quên clear là log của người này sẽ mang tên người kia.
+        LiteService.setActorStaffId(staffIdOf(req));
+        try {
+            filterInternal(req, res, chain, path);
+        } finally {
+            LiteService.clearActorStaffId();
+        }
+    }
+
+    private void filterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain, String path)
+            throws IOException, ServletException {
+        ServletRequest request = req;
+        ServletResponse response = res;
 
         if (path.startsWith("/assets/") || publicPages.contains(path)) {
             chain.doFilter(request, response);
@@ -77,6 +98,21 @@ public class SecurityFilter implements Filter {
 
     private boolean isPublicApi(String method, String path) {
         if (path.equals("/api/auth/login") || path.equals("/api/auth/admin-pin") || path.equals("/api/auth/logout") || path.equals("/api/auth/session")) return true;
+        // Đăng nhập bằng tài khoản cá nhân: phải công khai vì đây chính là
+        // cửa vào. Bản thân endpoint tự xác thực PIN đã băm.
+        if (path.equals("/api/auth/staff-login")) return true;
+        // Toàn bộ API khách hàng đi qua đây vì khách KHÔNG có role nhân viên.
+        // "Public" ở tầng filter chỉ nghĩa là không đòi role; bản thân servlet
+        // vẫn kiểm tra phiên đăng nhập khách cho /me, /history, /points,
+        // /profile, /password và trả 401 nếu chưa đăng nhập.
+        if (path.startsWith("/api/customer/")) return true;
+        // Màn đăng nhập cần hai danh sách này TRƯỚC khi có phiên, để khách
+        // chọn đúng vị trí và đúng người đang trong ca. Cả hai chỉ đọc và
+        // không lộ gì nhạy cảm (mã vai trò, id + tên nhân viên trong ca).
+        if ("GET".equals(method) || "HEAD".equals(method)) {
+            if (path.equals("/api/roles") || path.equals("/api/shifts/on-duty")
+                    || path.equals("/api/staff/roster")) return true;
+        }
         if ("GET".equals(method) || "HEAD".equals(method)) {
             return path.equals("/api/menu") || path.equals("/api/tables") || path.equals("/api/tables/by-code") || path.equals("/api/tables/qr") || path.equals("/api/orders/lookup") || path.equals("/api/orders/table");
         }
@@ -93,10 +129,13 @@ public class SecurityFilter implements Filter {
         if ("cashier".equals(role)) {
             return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/split")
                     || path.equals("/api/tables/map") || path.equals("/api/tables/transfer")
-                    || path.equals("/api/cash/status") || path.equals("/api/cash/count") || path.equals("/api/cash/ack-withdrawals");
+                    || path.equals("/api/cash/status") || path.equals("/api/cash/count") || path.equals("/api/cash/ack-withdrawals")
+                    // Thu ngân phải đối soát được ca của chính mình.
+                    || path.equals("/api/payments/order") || path.equals("/api/payments/summary");
         }
         if ("runner".equals(role)) {
-            return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/invoice")
+            return path.equals("/api/payments/order")
+                    || path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/invoice")
                     || path.equals("/api/orders/invoice/printed")
                     || path.equals("/api/tables/map") || path.equals("/api/tables/clear") || path.equals("/api/tables/transfer");
         }
@@ -105,6 +144,18 @@ public class SecurityFilter implements Filter {
 
     private boolean isAdmin(String role) {
         return "admin".equals(role);
+    }
+
+    private int staffIdOf(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return 0;
+        Object value = session.getAttribute(tabAttr(req, ATTR_STAFF_ID));
+        if (value == null) return 0;
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private String role(HttpServletRequest req) {

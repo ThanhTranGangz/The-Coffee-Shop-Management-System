@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop - Kho nguyên liệu</title>
         <meta name="page-title-key" content="inventoryPageTitle">
-    <link rel="stylesheet" href="assets/css/app.css?v=order-confirm-1">
-    <script defer src="assets/js/i18n.js?v=i18n-inventory-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
+    <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
     <style>
         .stock-low { color: var(--danger); font-weight: 600; }
         .stock-ok { color: var(--success); }

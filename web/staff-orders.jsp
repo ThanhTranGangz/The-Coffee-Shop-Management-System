@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
         <meta name="page-title-key" content="baristaTitle">
-    <link rel="stylesheet" href="assets/css/app.css?v=barista-prep-flow-1">
-    <script defer src="assets/js/i18n.js?v=i18n-sync-1"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
+    <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
 </head>
 <body>
     <nav class="nav">

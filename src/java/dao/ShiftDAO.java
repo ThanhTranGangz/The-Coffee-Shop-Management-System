@@ -117,23 +117,51 @@ public class ShiftDAO {
      * 
      * @param shift the shift to save or update
      */
+    /**
+     * Tên nhân viên để ghi vào Shifts.staffName.
+     * Ưu tiên tên client gửi lên; nếu trống thì tra từ dbo.Staff theo khoá.
+     * Nguồn sự thật vẫn là dbo.Staff — đây chỉ là bản chụp cho cột NOT NULL cũ.
+     */
+    private String resolveStaffName(Connection con, Shift shift) {
+        String name = shift.getStaffName() == null ? "" : shift.getStaffName().trim();
+        if (!name.isEmpty()) return name;
+        try (PreparedStatement ps = con.prepareStatement("SELECT name FROM dbo.Staff WHERE id = ?")) {
+            ps.setInt(1, shift.getStaffId());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getString("name");
+            }
+        } catch (Exception e) {
+            System.err.println("ShiftDAO.resolveStaffName failed: " + e.getMessage());
+        }
+        return "";
+    }
+
     public void save(Shift shift) {
+        // staffName BẮT BUỘC phải nằm trong câu lệnh này.
+        // Trước đây nó bị bỏ sót ở CẢ hai nhánh MERGE, trong khi cột lại là
+        // NOT NULL và không có DEFAULT — nên mọi lần thêm ca mới đều chết với
+        // "Cannot insert the value NULL into column 'staffName'".
+        //
+        // Bản thân cột này là dữ liệu thừa (getAll() đã JOIN sang dbo.Staff để
+        // lấy tên), nhưng vẫn ghi cho đúng để dữ liệu không tự mâu thuẫn.
         String sql = "MERGE dbo.Shifts AS target " +
-                     "USING (SELECT ? AS id, ? AS staffId, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes, ? AS assignedRole) AS source " +
+                     "USING (SELECT ? AS id, ? AS staffId, ? AS staffName, ? AS shiftDate, ? AS shiftName, ? AS hours, ? AS status, ? AS notes, ? AS assignedRole) AS source " +
                      "ON target.id = source.id " +
-                     "WHEN MATCHED THEN UPDATE SET staffId = source.staffId, shiftDate = source.shiftDate, shiftName = source.shiftName, hours = source.hours, status = source.status, notes = source.notes, assignedRole = source.assignedRole " +
-                     "WHEN NOT MATCHED THEN INSERT (id, staffId, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES (source.id, source.staffId, source.shiftDate, source.shiftName, source.hours, source.status, source.notes, source.assignedRole);";
+                     "WHEN MATCHED THEN UPDATE SET staffId = source.staffId, staffName = source.staffName, shiftDate = source.shiftDate, shiftName = source.shiftName, hours = source.hours, status = source.status, notes = source.notes, assignedRole = source.assignedRole " +
+                     "WHEN NOT MATCHED THEN INSERT (id, staffId, staffName, shiftDate, shiftName, hours, status, notes, assignedRole) VALUES (source.id, source.staffId, source.staffName, source.shiftDate, source.shiftName, source.hours, source.status, source.notes, source.assignedRole);";
         DBContext db = new DBContext();
         try (Connection con = db.getConnection();
              PreparedStatement st = con.prepareStatement(sql)) {
             st.setString(1, shift.getId());
             st.setInt(2, shift.getStaffId());
-            st.setString(3, shift.getShiftDate());
-            st.setString(4, shift.getShiftName());
-            st.setString(5, shift.getHours());
-            st.setString(6, shift.getStatus());
-            st.setString(7, shift.getNotes());
-            st.setString(8, shift.getAssignedRole());
+            // Client không gửi tên thì tra lại từ dbo.Staff — không bao giờ để null.
+            st.setString(3, resolveStaffName(con, shift));
+            st.setString(4, shift.getShiftDate());
+            st.setString(5, shift.getShiftName());
+            st.setString(6, shift.getHours());
+            st.setString(7, shift.getStatus());
+            st.setString(8, shift.getNotes());
+            st.setString(9, shift.getAssignedRole());
             st.executeUpdate();
         } catch (Exception e) {
             System.err.println("Database save failed in ShiftDAO.save(): " + e.getMessage());
