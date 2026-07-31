@@ -1,22 +1,19 @@
 let profile = null;
 let activePanel = 'orders';
 let refreshTimer = null;
+let historyRange = '30d'; // today | 7d | 30d | all | custom
+let historyFrom = '';
+let historyTo = '';
 
-const REFRESH_MS = 10000;   // cùng nhịp với page-order-status.js (5s) nhưng thưa hơn
+const REFRESH_MS = 10000;
 
 document.addEventListener('DOMContentLoaded', () => {
     applyI18n();
+    renderHistoryPresets();
     loadAll();
     startAutoRefresh();
 });
 
-/**
- * Điểm chỉ được cộng khi thu ngân chuyển đơn sang "Đã thanh toán" — việc đó
- * xảy ra ở máy khác, trang này không thể biết. Nên phải hỏi lại server định kỳ.
- *
- * Chỉ chạy khi tab đang hiển thị: khách khoá màn hình rồi để đó cả buổi thì
- * không có lý do gì bắn request mỗi 10 giây.
- */
 function startAutoRefresh() {
     stopAutoRefresh();
     if (document.visibilityState !== 'visible') return;
@@ -30,7 +27,7 @@ function stopAutoRefresh() {
 
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-        silentRefresh();      // cập nhật ngay khi khách quay lại, không đợi hết 10s
+        silentRefresh();
         startAutoRefresh();
     } else {
         stopAutoRefresh();
@@ -39,11 +36,6 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('pagehide', stopAutoRefresh);
 
-/**
- * Làm mới ngầm. Khác loadAll() ở chỗ KHÔNG chuyển hướng khi lỗi:
- * rớt mạng một nhịp thì giữ nguyên số liệu đang hiển thị, chứ đá khách
- * ra trang đăng nhập giữa chừng là hành vi tệ.
- */
 async function silentRefresh() {
     try {
         const res = await api('/customer/me');
@@ -52,51 +44,135 @@ async function silentRefresh() {
         const pointsChanged = !profile || fresh.points !== profile.points;
         profile = fresh;
         renderProfile();
-
-        // Điểm chỉ đổi khi có đơn được thanh toán hoặc dùng điểm,
-        // nên chỉ lúc đó mới cần tải lại hai danh sách phía dưới.
         if (!pointsChanged) return;
-        const [orderRes, pointRes] = await Promise.all([
-            api('/customer/history?limit=50'),
-            api('/customer/points?limit=50')
-        ]);
-        if (orderRes.ok) window.orderHistory = await orderRes.json();
+        await loadOrderHistory();
+        const pointRes = await api('/customer/points?limit=50');
         if (pointRes.ok) window.pointHistory = await pointRes.json();
         renderPanels();
         if (typeof loadNav === 'function') loadNav();
     } catch (err) {
-        // Im lặng bỏ qua: đây là làm mới nền, không phải thao tác của khách.
+        // nền — bỏ qua
     }
 }
 
-// i18n.js gọi lại hàm này mỗi khi đổi ngôn ngữ.
 window.renderPage = () => {
     if (profile) renderProfile();
+    renderHistoryPresets();
     renderPanels();
 };
 
 async function loadAll() {
     const res = await api('/customer/me');
     if (!res.ok) {
-        // Chưa đăng nhập: đưa về trang đăng nhập, nhớ đường quay lại.
         window.location.href = withTab('customer-login.jsp?return=customer-account.jsp');
         return;
     }
     profile = await res.json();
     renderProfile();
-
-    const [orderRes, pointRes] = await Promise.all([
-        api('/customer/history?limit=50'),
-        api('/customer/points?limit=50')
-    ]);
-    window.orderHistory = orderRes.ok ? await orderRes.json() : [];
+    await loadOrderHistory();
+    const pointRes = await api('/customer/points?limit=50');
     window.pointHistory = pointRes.ok ? await pointRes.json() : [];
     renderPanels();
 }
 
+function historyQuery() {
+    const range = resolveHistoryDates();
+    const params = new URLSearchParams();
+    params.set('limit', '100');
+    if (range.from) params.set('from', range.from);
+    if (range.to) params.set('to', range.to);
+    return '/customer/history?' + params.toString();
+}
+
+function resolveHistoryDates() {
+    const today = localToday();
+    if (historyRange === 'today') return { from: today, to: today };
+    if (historyRange === '7d') return { from: addDays(today, -6), to: today };
+    if (historyRange === '30d') return { from: addDays(today, -29), to: today };
+    if (historyRange === 'custom') return { from: historyFrom || '', to: historyTo || '' };
+    return { from: '', to: '' }; // all
+}
+
+function localToday() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function addDays(yyyyMmDd, delta) {
+    const [y, m, d] = yyyyMmDd.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + delta);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+async function loadOrderHistory() {
+    const res = await api(historyQuery());
+    window.orderHistory = res.ok ? await res.json() : [];
+}
+
+function renderHistoryPresets() {
+    const holder = document.getElementById('history-presets');
+    if (!holder) return;
+    const presets = [
+        ['today', t('rangeToday')],
+        ['7d', t('rangeLast7')],
+        ['30d', t('rangeLast30')],
+        ['all', t('rangeAllTime')],
+        ['custom', t('rangeCustom')]
+    ];
+    holder.innerHTML = presets.map(([key, label]) =>
+        `<button type="button" class="history-chip ${historyRange === key ? 'active' : ''}" onclick="setHistoryRange('${key}')">${label}</button>`
+    ).join('');
+    const custom = document.getElementById('history-custom');
+    if (custom) custom.hidden = historyRange !== 'custom';
+}
+
+window.setHistoryRange = async function (key) {
+    historyRange = key;
+    if (key === 'custom') {
+        const today = localToday();
+        if (!historyFrom) historyFrom = addDays(today, -29);
+        if (!historyTo) historyTo = today;
+        document.getElementById('history-from').value = historyFrom;
+        document.getElementById('history-to').value = historyTo;
+    }
+    renderHistoryPresets();
+    if (key !== 'custom') {
+        await loadOrderHistory();
+        renderOrders();
+    }
+};
+
+window.applyCustomHistoryRange = async function () {
+    historyFrom = document.getElementById('history-from').value;
+    historyTo = document.getElementById('history-to').value;
+    if (!historyFrom || !historyTo) {
+        notifyWork(t('pickDateRange'));
+        return;
+    }
+    if (historyFrom > historyTo) {
+        notifyWork(t('invalidDateRange'));
+        return;
+    }
+    await loadOrderHistory();
+    renderOrders();
+};
+
 function tierLabel(tier) {
     const map = { Bronze: 'tierBronze', Silver: 'tierSilver', Gold: 'tierGold' };
     return t(map[tier] || 'tierBronze');
+}
+
+function currentTierBenefits() {
+    const tiers = (profile && profile.rules && profile.rules.tiers) || [];
+    const code = profile && profile.tier ? profile.tier : 'Bronze';
+    const found = tiers.find(x => x.code === code);
+    if (!found) return '';
+    const list = lang() === 'en' ? (found.benefitsEn || []) : (found.benefitsVi || []);
+    return list[0] || '';
 }
 
 function renderProfile() {
@@ -110,11 +186,18 @@ function renderProfile() {
     document.getElementById('loyalty-orders').textContent = Number(profile.orderCount || 0);
     document.getElementById('loyalty-since').textContent = shortDate(profile.createdAt);
 
+    const benefitLine = document.getElementById('loyalty-benefit-line');
+    if (benefitLine) {
+        const tip = currentTierBenefits();
+        benefitLine.textContent = tip
+            ? (t('yourTierBenefit') + ': ' + tip)
+            : t('tapTierGuide');
+    }
+
     const card = document.getElementById('loyalty-card');
     card.classList.remove('tier-bronze', 'tier-silver', 'tier-gold');
     card.classList.add('tier-' + String(profile.tier || 'Bronze').toLowerCase());
 
-    // Thanh tiến độ lên hạng kế tiếp.
     const rules = profile.rules || {};
     const remaining = Number(profile.spentToNextTier || 0);
     const spent = Number(profile.totalSpent || 0);
@@ -129,12 +212,69 @@ function renderProfile() {
         const span = Math.max(1, target - floor);
         const percent = Math.max(4, Math.min(100, Math.round((spent - floor) / span * 100)));
         fill.style.width = percent + '%';
-        text.textContent = tf('tierProgress', { amount: money(remaining) });
+        const nextName = profile.nextTier ? tierLabel(profile.nextTier) : '';
+        text.textContent = nextName
+            ? tf('tierProgressNamed', { amount: money(remaining), tier: nextName })
+            : tf('tierProgress', { amount: money(remaining) });
     }
 
     const nameInput = document.getElementById('profile-name');
     if (nameInput && !nameInput.value) nameInput.value = profile.fullName || '';
 }
+
+window.openTierGuide = function () {
+    const backdrop = document.getElementById('tier-guide-backdrop');
+    const body = document.getElementById('tier-guide-body');
+    if (!backdrop || !body || !profile) return;
+    const rules = profile.rules || {};
+    const tiers = rules.tiers || [];
+    const current = profile.tier || 'Bronze';
+    const en = lang() === 'en';
+
+    body.innerHTML = `
+        <div class="tier-howto card">
+            <h3>${t('howPointsWork')}</h3>
+            <ul>
+                <li>${tf('howEarn', { spend: money(rules.spendPerPoint || 10000) })}</li>
+                <li>${tf('howRedeem', { value: money(rules.valuePerPoint || 1000) })}</li>
+                <li>${tf('howRedeemCap', { min: rules.minRedeemPoints || 10, max: rules.maxRedeemPercent || 50 })}</li>
+                <li>${t('howTierBySpend')}</li>
+            </ul>
+        </div>
+        <div class="tier-guide-list">
+            ${tiers.map(tier => {
+                const active = tier.code === current;
+                const benefits = en ? (tier.benefitsEn || []) : (tier.benefitsVi || []);
+                const title = en ? tier.titleEn : tier.titleVi;
+                const range = tier.maxSpent == null
+                    ? tf('tierFrom', { amount: money(tier.minSpent) })
+                    : (tier.minSpent <= 0
+                        ? tf('tierUpTo', { amount: money((rules.silverThreshold || 1000000) - 1) })
+                        : tf('tierBetween', { from: money(tier.minSpent), to: money(tier.maxSpent) }));
+                return `
+                <article class="card tier-guide-card ${active ? 'current' : ''} tier-${String(tier.code).toLowerCase()}">
+                    <div class="tier-guide-card-head">
+                        <div>
+                            <p class="eyebrow">${tierLabel(tier.code)}</p>
+                            <h3>${escapeHtml(title)}</h3>
+                        </div>
+                        ${active ? `<span class="cust-chip earn">${t('yourTier')}</span>` : ''}
+                    </div>
+                    <p class="cust-hint">${range}</p>
+                    <ul>${benefits.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>
+                </article>`;
+            }).join('')}
+        </div>
+    `;
+    backdrop.classList.remove('hidden');
+    document.body.classList.add('tier-guide-open');
+};
+
+window.closeTierGuide = function () {
+    const backdrop = document.getElementById('tier-guide-backdrop');
+    if (backdrop) backdrop.classList.add('hidden');
+    document.body.classList.remove('tier-guide-open');
+};
 
 function switchPanel(panel) {
     activePanel = panel;
@@ -150,7 +290,7 @@ function renderPanels() {
 }
 
 function renderOrders() {
-    const holder = document.getElementById('panel-orders');
+    const holder = document.getElementById('orders-list') || document.getElementById('panel-orders');
     const orders = window.orderHistory || [];
     if (!orders.length) {
         holder.innerHTML = `<div class="card empty-note">${t('noOrderHistory')}</div>`;
@@ -216,8 +356,6 @@ function renderPoints() {
     }).join('');
 }
 
-// ── Cài đặt tài khoản ───────────────────────────────────────────────
-
 document.getElementById('profile-form').addEventListener('submit', async event => {
     event.preventDefault();
     const box = document.getElementById('profile-message');
@@ -272,14 +410,11 @@ function showBox(box, text, isError) {
     box.classList.toggle('notice-error', !!isError);
 }
 
-// ── Tiện ích ────────────────────────────────────────────────────────
-
 function escapeHtml(value) {
     return String(value == null ? '' : value)
         .replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
 
-/** SQL Server trả DATETIME2 dạng "2026-07-30 08:15:00.0" — Date không parse được chuỗi này trên Safari. */
 function parseServerDate(raw) {
     const text = String(raw || '').trim();
     if (!text) return null;

@@ -21,7 +21,7 @@
             await loadCupStatus();
             renderViewToggle();
             loadOrders();
-            pollTimer = setInterval(() => loadOrders({ silent: false }), 5000);
+            subscribeLive(() => loadOrders({ silent: false }), 5000);
             setInterval(loadCupStatus, 6000);
         });
 
@@ -247,8 +247,14 @@
                     <div class="order-lines" style="flex: 1; overflow-y: auto; display: block; margin: 4px 0;">
                         ${itemsHtml}
                     </div>
+                    ${(order.status === 'Pending' || order.status === 'Preparing') ? `<div class="links" style="margin-top:8px"><button class="btn danger" type="button" onclick="event.stopPropagation(); cancelStaffOrder(${order.id})">${t('cancelOrder')}</button></div>` : ''}
                 </article>
             `;
+        }
+
+        async function cancelStaffOrder(id) {
+            const result = await cancelOrderPrompt(id);
+            if (result) loadOrders({ silent: true });
         }
 
         function nextStatus(status) {

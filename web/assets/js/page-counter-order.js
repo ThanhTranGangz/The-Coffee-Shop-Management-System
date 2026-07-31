@@ -2,7 +2,9 @@
         let counterTables = [];
         let counterCart = [];
         let counterTable = '';
+        let counterOrderType = 'DINE_IN';
         let counterNote = '';
+        let counterPromo = '';
         let counterMessage = '';
         let counterSubmitting = false;
         let counterConfirming = false;
@@ -26,7 +28,13 @@
                         <p class="eyebrow">${t('cashier')}</p>
                         <h2>${t('orderForTable')}</h2>
                     </div>
-                    <select class="counter-table-select" onchange="setCounterTable(this.value)">${tableOptions}</select>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <select class="counter-table-select" onchange="setCounterOrderType(this.value)">
+                            <option value="DINE_IN" ${counterOrderType === 'DINE_IN' ? 'selected' : ''}>${t('dineIn')}</option>
+                            <option value="TAKEAWAY" ${counterOrderType === 'TAKEAWAY' ? 'selected' : ''}>${t('takeaway')}</option>
+                        </select>
+                        ${counterOrderType === 'DINE_IN' ? `<select class="counter-table-select" onchange="setCounterTable(this.value)">${tableOptions}</select>` : ''}
+                    </div>
                 </div>
                 <div class="counter-order-layout">
                     <div class="counter-menu-grid">
@@ -37,10 +45,14 @@
                         <div class="list">${counterCartHtml()}</div>
                         <div class="cart-total"><span>${t('total')}</span><b class="price">${money(counterTotal())}</b></div>
                         <div style="margin-top:12px">
+                            <label>${t('promoCode')}</label>
+                            <input value="${escapeAttr(counterPromo)}" oninput="counterPromo=this.value" placeholder="SALE10">
+                        </div>
+                        <div style="margin-top:12px">
                             <label>${t('orderNote')}</label>
                             <textarea rows="3" oninput="counterNote=this.value" placeholder="${escapeAttr(t('notePlaceholder'))}">${escapeHtml(counterNote)}</textarea>
                         </div>
-                        <button class="btn primary big block" type="button" onclick="submitCounterOrder()" ${counterCart.length && !counterSubmitting && !counterConfirming ? '' : 'disabled'}>${t('checkout')}</button>
+                        <button class="btn primary big block" type="button" onclick="submitCounterOrder()" ${counterCart.length && !counterSubmitting && !counterConfirming && (counterOrderType === 'TAKEAWAY' || counterTable) ? '' : 'disabled'}>${t('checkout')}</button>
                         ${counterMessage ? `<div class="notice" style="margin-top:10px">${escapeHtml(counterMessage)}</div>` : ''}
                     </aside>
                 </div>
@@ -49,6 +61,11 @@
 
         function setCounterTable(value) {
             counterTable = value;
+        }
+
+        function setCounterOrderType(value) {
+            counterOrderType = value === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN';
+            renderCounterOrder();
         }
 
         function counterItemHtml(item) {
@@ -152,7 +169,7 @@
         }
 
         async function submitCounterOrder() {
-            if (!counterTable || !counterCart.length || counterSubmitting || counterConfirming) return;
+            if ((counterOrderType === 'DINE_IN' && !counterTable) || !counterCart.length || counterSubmitting || counterConfirming) return;
             counterConfirming = true;
             renderCounterOrder();
             let confirmed = false;
@@ -167,20 +184,24 @@
             counterSubmitting = true;
             renderCounterOrder();
             try {
+                const payload = {
+                    orderType: counterOrderType,
+                    customerPhone: '',
+                    note: counterNote.trim(),
+                    promoCode: counterPromo.trim(),
+                    items: counterCart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: Math.min(MAX_QTY, line.quantity) }))
+                };
+                if (counterOrderType === 'DINE_IN') payload.tableName = counterTable;
                 const res = await api('/orders', {
                     method:'POST',
                     headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({
-                        tableName: counterTable,
-                        customerPhone: '',
-                        note: counterNote.trim(),
-                        items: counterCart.map(line => ({ menuItemId: line.menuItemId, size: line.size, quantity: Math.min(MAX_QTY, line.quantity) }))
-                    })
+                    body: JSON.stringify(payload)
                 });
                 if (res.ok) {
                     const order = await res.json();
                     counterCart = [];
                     counterNote = '';
+                    counterPromo = '';
                     counterMessage = `${t('orderCreated')} #${order.orderNumber}`;
                     notifyWork(counterMessage);
                     await loadCounterData();

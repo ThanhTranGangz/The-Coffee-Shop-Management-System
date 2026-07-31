@@ -204,21 +204,30 @@ public class InventoryDAO {
 
         String insertSql = "INSERT INTO dbo.Inventory (id, name, unit, stock, minStock, importCost) VALUES (?, ?, ?, ?, ?, ?)";
         DBContext db = new DBContext();
-        try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(insertSql)) {
-            st.setString(1, ing.getId().trim());
-            st.setString(2, ing.getName());
-            st.setString(3, ing.getUnit());
-            st.setInt(4, ing.getStock());
-            st.setInt(5, ing.getMinStock());
-            st.setInt(6, ing.getImportCost());
-            st.executeUpdate();
-        } catch (Exception e) {
-            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
-            if (msg.contains("duplicate") || msg.contains("unique") || msg.contains("primary key")) {
-                throw new IllegalStateException("DUPLICATE_ID");
+        try (Connection con = db.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                try (PreparedStatement st = con.prepareStatement(insertSql)) {
+                    st.setString(1, ing.getId().trim());
+                    st.setString(2, ing.getName());
+                    st.setString(3, ing.getUnit());
+                    st.setInt(4, ing.getStock());
+                    st.setInt(5, ing.getMinStock());
+                    st.setInt(6, ing.getImportCost());
+                    st.executeUpdate();
+                }
+                // Mở sổ cái ngay khi tạo nguyên liệu — giữ bất biến SUM(ledger)=stock.
+                writeLedgerAdjust(con, ing.getId().trim(), ing.getStock(), ing.getStock(), ing.getImportCost(),
+                        "Số dư đầu kỳ khi thêm nguyên liệu");
+                con.commit();
+            } catch (Exception e) {
+                con.rollback();
+                String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+                if (msg.contains("duplicate") || msg.contains("unique") || msg.contains("primary key")) {
+                    throw new IllegalStateException("DUPLICATE_ID");
+                }
+                throw e;
             }
-            throw e;
         }
 
         syncFallbackAfterWrite(ing, false);
@@ -240,17 +249,46 @@ public class InventoryDAO {
         // ID is immutable on update; keep the stored id from originalId.
         String updateSql = "UPDATE dbo.Inventory SET name = ?, unit = ?, stock = ?, minStock = ?, importCost = ? WHERE id = ?";
         DBContext db = new DBContext();
-        try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(updateSql)) {
-            st.setString(1, ing.getName());
-            st.setString(2, ing.getUnit());
-            st.setInt(3, ing.getStock());
-            st.setInt(4, ing.getMinStock());
-            st.setInt(5, ing.getImportCost());
-            st.setString(6, originalId.trim());
-            int affected = st.executeUpdate();
-            if (affected <= 0) {
-                return false;
+        try (Connection con = db.getConnection()) {
+            con.setAutoCommit(false);
+            try {
+                int oldStock = 0;
+                int oldCost = 0;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT stock, importCost FROM dbo.Inventory WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
+                    ps.setString(1, originalId.trim());
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (!rs.next()) {
+                            con.rollback();
+                            return false;
+                        }
+                        oldStock = rs.getInt("stock");
+                        oldCost = rs.getInt("importCost");
+                    }
+                }
+                try (PreparedStatement st = con.prepareStatement(updateSql)) {
+                    st.setString(1, ing.getName());
+                    st.setString(2, ing.getUnit());
+                    st.setInt(3, ing.getStock());
+                    st.setInt(4, ing.getMinStock());
+                    st.setInt(5, ing.getImportCost());
+                    st.setString(6, originalId.trim());
+                    int affected = st.executeUpdate();
+                    if (affected <= 0) {
+                        con.rollback();
+                        return false;
+                    }
+                }
+                int delta = ing.getStock() - oldStock;
+                if (delta != 0) {
+                    writeLedgerAdjust(con, originalId.trim(), delta, ing.getStock(),
+                            ing.getImportCost() > 0 ? ing.getImportCost() : oldCost,
+                            "Điều chỉnh tồn kho thủ công");
+                }
+                con.commit();
+            } catch (Exception e) {
+                con.rollback();
+                throw e;
             }
         }
 
@@ -290,18 +328,54 @@ public class InventoryDAO {
         if (id == null || id.trim().isEmpty()) {
             throw new IllegalArgumentException("Mã nguyên liệu không hợp lệ.");
         }
-        String sql = "DELETE FROM dbo.Inventory WHERE id = ?";
+        int recipeUsage = countRecipeUsage(id);
+        if (recipeUsage > 0) {
+            throw new IllegalStateException("Không thể xoá nguyên liệu đang dùng trong " + recipeUsage + " công thức.");
+        }
         DBContext db = new DBContext();
-        try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(sql)) {
-            st.setString(1, id.trim());
-            int affected = st.executeUpdate();
-            if (affected <= 0) {
-                return false;
+        try (Connection con = db.getConnection()) {
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT COUNT(*) FROM dbo.StockTransactions WHERE ingredientId=?")) {
+                ps.setString(1, id.trim());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        throw new IllegalStateException(
+                                "Không thể xoá nguyên liệu đã có lịch sử sổ cái. Hãy đặt tồn về 0 thay vì xoá.");
+                    }
+                }
+            } catch (IllegalStateException e) {
+                throw e;
+            } catch (Exception e) {
+                String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+                if (!msg.contains("invalid object name")) throw e;
+            }
+            try (PreparedStatement st = con.prepareStatement("DELETE FROM dbo.Inventory WHERE id = ?")) {
+                st.setString(1, id.trim());
+                int affected = st.executeUpdate();
+                if (affected <= 0) {
+                    return false;
+                }
             }
         }
         syncFallbackAfterWrite(new Ingredient(id.trim(), "", "", 0, 0, 0), true);
         return true;
+    }
+
+    /** Ghi ADJUST vào StockTransactions nếu bảng đã tồn tại; bỏ qua êm nếu chưa có sổ. */
+    private void writeLedgerAdjust(Connection con, String ingredientId, int quantity, int stockAfter,
+                                   int unitCost, String note) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(
+                "IF OBJECT_ID('dbo.StockTransactions','U') IS NOT NULL "
+                        + "INSERT INTO dbo.StockTransactions "
+                        + "(ingredientId,type,quantity,stockAfter,unitCost,actorRole,actorName,note) "
+                        + "VALUES (?,'ADJUST',?,?,?,'system',N'Admin',?)")) {
+            ps.setString(1, ingredientId);
+            ps.setInt(2, quantity);
+            ps.setInt(3, stockAfter);
+            ps.setInt(4, Math.max(0, unitCost));
+            ps.setString(5, note);
+            ps.executeUpdate();
+        }
     }
 
     private void syncFallbackAfterWrite(Ingredient ing, boolean deleted) {

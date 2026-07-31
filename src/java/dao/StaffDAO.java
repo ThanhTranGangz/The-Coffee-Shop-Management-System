@@ -83,12 +83,17 @@ public class StaffDAO {
             try (Connection con = db.getConnection();
                  PreparedStatement st = con.prepareStatement(updateSql)) {
                 st.setString(1, staff.getName());
-                st.setBoolean(3, staff.isActive());
-                st.setString(4, staff.getStatus());
-                st.setInt(7, staff.getId());
-                st.executeUpdate();
+                st.setBoolean(2, staff.isActive());
+                st.setString(3, staff.getStatus());
+                st.setInt(4, staff.getId());
+                int affected = st.executeUpdate();
+                if (affected <= 0) {
+                    throw new IllegalStateException("Không cập nhật được nhân viên #" + staff.getId());
+                }
+            } catch (RuntimeException e) {
+                throw e;
             } catch (Exception e) {
-                System.err.println("Database update in StaffDAO.save() failed: " + e.getMessage());
+                throw new IllegalStateException("Database update in StaffDAO.save() failed: " + e.getMessage(), e);
             }
         } else {
             String insertSql = "INSERT INTO dbo.Staff (id, name, active, status) VALUES (?, ?, ?, ?)";
@@ -99,8 +104,10 @@ public class StaffDAO {
                 st.setBoolean(3, staff.isActive());
                 st.setString(4, staff.getStatus());
                 st.executeUpdate();
+            } catch (RuntimeException e) {
+                throw e;
             } catch (Exception e) {
-                System.err.println("Database insert in StaffDAO.save() failed: " + e.getMessage());
+                throw new IllegalStateException("Database insert in StaffDAO.save() failed: " + e.getMessage(), e);
             }
         }
 

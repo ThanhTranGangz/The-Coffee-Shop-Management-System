@@ -11,11 +11,24 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 public class LiteService {
-        private static final int MAX_ITEM_QUANTITY = 20;
+    private static final int MAX_ITEM_QUANTITY = 20;
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter SQL_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /** Đơn đang chiếm bàn / chưa xong vòng đời (không gồm Cancelled/Refunded). */
+    static final String ST_OPEN = "('Pending','Preparing','Ready','Served','Paid')";
+    /** Đơn chưa thanh toán (không gồm Paid/Cleared/Cancelled/Refunded). */
+    static final String ST_PRE_PAID = "('Pending','Preparing','Ready','Served')";
+    /** Doanh thu hợp lệ. */
+    static final String ST_REVENUE = "('Paid','Cleared')";
+    /** Đơn đang giữ chỗ kho. */
+    static final String ST_RESERVING = "('Pending','Preparing')";
+    static final String ORDER_TYPE_DINE_IN = "DINE_IN";
+    static final String ORDER_TYPE_TAKEAWAY = "TAKEAWAY";
     private static final LiteService INSTANCE = new LiteService();
-        private final DBContext db = new DBContext();
+    private final DBContext db = new DBContext();
+    /** SSE listeners — realtime thay polling. */
+    private final List<java.util.function.Consumer<String>> eventListeners =
+            Collections.synchronizedList(new ArrayList<>());
 
     public static LiteService getInstance() {
         return INSTANCE;
@@ -61,12 +74,15 @@ public class LiteService {
             st.execute("IF OBJECT_ID('dbo.StoreState','U') IS NULL CREATE TABLE dbo.StoreState (stateKey VARCHAR(50) PRIMARY KEY, intValue INT NOT NULL, updatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
             st.execute("IF OBJECT_ID('dbo.SystemLogs','U') IS NULL CREATE TABLE dbo.SystemLogs (id INT IDENTITY PRIMARY KEY, actorRole VARCHAR(20) NOT NULL, actorName NVARCHAR(120) NULL, actionType VARCHAR(40) NOT NULL, messageVi NVARCHAR(400) NOT NULL, messageEn NVARCHAR(400) NOT NULL, refId INT NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
             st.execute("IF OBJECT_ID('dbo.Staff','U') IS NULL CREATE TABLE dbo.Staff (id INT PRIMARY KEY, name NVARCHAR(120) NOT NULL, active BIT NOT NULL DEFAULT 1, status VARCHAR(30) NOT NULL DEFAULT 'Active')");
-            st.execute("IF OBJECT_ID('dbo.Shifts','U') IS NULL CREATE TABLE dbo.Shifts (id VARCHAR(50) PRIMARY KEY, staffId INT NOT NULL, staffName NVARCHAR(120) NOT NULL, shiftDate VARCHAR(20) NOT NULL, shiftName NVARCHAR(50) NOT NULL, hours VARCHAR(50) NOT NULL, status NVARCHAR(30) NOT NULL, notes NVARCHAR(255) NULL, assignedRole VARCHAR(30) NULL, FOREIGN KEY(staffId) REFERENCES dbo.Staff(id))");
-            st.execute("IF COL_LENGTH('dbo.Shifts','assignedRole') IS NULL ALTER TABLE dbo.Shifts ADD assignedRole VARCHAR(30) NULL");
+            // assignedRole PHẢI VARCHAR(20) khớp Roles.code — VARCHAR(30) làm FK_Shifts_Roles thất bại.
+            st.execute("IF OBJECT_ID('dbo.Shifts','U') IS NULL CREATE TABLE dbo.Shifts (id VARCHAR(50) PRIMARY KEY, staffId INT NOT NULL, staffName NVARCHAR(120) NULL, shiftDate VARCHAR(20) NOT NULL, shiftName NVARCHAR(50) NOT NULL, hours VARCHAR(50) NOT NULL, status NVARCHAR(30) NOT NULL, notes NVARCHAR(255) NULL, assignedRole VARCHAR(20) NULL, FOREIGN KEY(staffId) REFERENCES dbo.Staff(id))");
+            st.execute("IF COL_LENGTH('dbo.Shifts','assignedRole') IS NULL ALTER TABLE dbo.Shifts ADD assignedRole VARCHAR(20) NULL");
+
+            // Inventory TRƯỚC StockTransactions — mở sổ cái cần bảng Inventory đã tồn tại.
+            st.execute("IF OBJECT_ID('dbo.Inventory','U') IS NULL CREATE TABLE dbo.Inventory (id VARCHAR(50) PRIMARY KEY, name NVARCHAR(120) NOT NULL, unit NVARCHAR(20) NOT NULL, stock INT NOT NULL DEFAULT 0, minStock INT NOT NULL DEFAULT 0, importCost INT NOT NULL DEFAULT 0)");
+            st.execute("IF OBJECT_ID('dbo.RecipeItems','U') IS NULL CREATE TABLE dbo.RecipeItems (id VARCHAR(50) PRIMARY KEY, menuItemId INT NOT NULL, ingredientId VARCHAR(50) NOT NULL, quantity INT NOT NULL)");
 
             // ── Tài khoản khách hàng & tích điểm ────────────────────────────
-            // Giữ cùng phong cách "tự dựng bảng khi thiếu" như các bảng trên,
-            // để ứng dụng chạy được ngay cả khi chưa chạy customer_loyalty.sql.
             st.execute("IF OBJECT_ID('dbo.Customers','U') IS NULL CREATE TABLE dbo.Customers (id INT IDENTITY PRIMARY KEY, phone VARCHAR(20) NOT NULL, passwordHash VARCHAR(64) NOT NULL, passwordSalt VARCHAR(32) NOT NULL, fullName NVARCHAR(120) NOT NULL, points INT NOT NULL DEFAULT 0, totalSpent INT NOT NULL DEFAULT 0, orderCount INT NOT NULL DEFAULT 0, tier VARCHAR(10) NOT NULL DEFAULT 'Bronze', active BIT NOT NULL DEFAULT 1, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), updatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
             st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_Customers_Phone' AND object_id=OBJECT_ID('dbo.Customers')) CREATE UNIQUE INDEX UQ_Customers_Phone ON dbo.Customers(phone)");
             st.execute("IF OBJECT_ID('dbo.PointTransactions','U') IS NULL CREATE TABLE dbo.PointTransactions (id INT IDENTITY PRIMARY KEY, customerId INT NOT NULL, orderId INT NULL, type VARCHAR(10) NOT NULL, points INT NOT NULL, balanceAfter INT NOT NULL, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), FOREIGN KEY(customerId) REFERENCES dbo.Customers(id), FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
@@ -76,8 +92,7 @@ public class LiteService {
             st.execute("IF COL_LENGTH('dbo.Orders','pointsEarned') IS NULL ALTER TABLE dbo.Orders ADD pointsEarned INT NOT NULL DEFAULT 0");
             st.execute("IF COL_LENGTH('dbo.Orders','pointsRedeemed') IS NULL ALTER TABLE dbo.Orders ADD pointsRedeemed INT NOT NULL DEFAULT 0");
             st.execute("UPDATE dbo.Orders SET subtotal = total WHERE subtotal = 0 AND total > 0");
-            // ── Sửa 4 lỗi thiết kế mức nghiêm trọng (xem schema_fix_p0.sql) ──
-            // #1 Orders → Tables: tableName giữ lại làm BẢN CHỤP, quan hệ thật là tableId.
+            // #1 Orders → Tables: tableName = BẢN CHỤP, quan hệ thật là tableId.
             st.execute("IF COL_LENGTH('dbo.Orders','tableId') IS NULL ALTER TABLE dbo.Orders ADD tableId INT NULL");
             st.execute("UPDATE o SET o.tableId = t.id FROM dbo.Orders o JOIN dbo.Tables t ON t.name = o.tableName WHERE o.tableId IS NULL");
 
@@ -87,9 +102,8 @@ public class LiteService {
             st.execute("IF COL_LENGTH('dbo.CashEvents','orderId') IS NULL ALTER TABLE dbo.CashEvents ADD orderId INT NULL");
             st.execute("IF COL_LENGTH('dbo.CashEvents','paymentId') IS NULL ALTER TABLE dbo.CashEvents ADD paymentId INT NULL");
 
-            // #3 Sổ cái kho.
+            // #3 Sổ cái kho — chỉ tạo bảng; mở sổ chạy SAU khi seed nguyên liệu.
             st.execute("IF OBJECT_ID('dbo.StockTransactions','U') IS NULL CREATE TABLE dbo.StockTransactions (id INT IDENTITY PRIMARY KEY, ingredientId VARCHAR(50) NOT NULL, type VARCHAR(10) NOT NULL, quantity INT NOT NULL, stockAfter INT NOT NULL, unitCost INT NOT NULL DEFAULT 0, orderId INT NULL, actorRole VARCHAR(20) NULL, actorName NVARCHAR(120) NULL, note NVARCHAR(255) NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
-            st.execute("INSERT INTO dbo.StockTransactions (ingredientId,type,quantity,stockAfter,unitCost,actorRole,actorName,note) SELECT i.id,'ADJUST',i.stock,i.stock,i.importCost,'system',N'Khởi tạo sổ',N'Số dư đầu kỳ khi bắt đầu ghi sổ cái' FROM dbo.Inventory i WHERE NOT EXISTS (SELECT 1 FROM dbo.StockTransactions s WHERE s.ingredientId = i.id)");
 
             // #4 Vai trò + liên kết nhân sự ↔ tài khoản.
             st.execute("IF OBJECT_ID('dbo.Roles','U') IS NULL CREATE TABLE dbo.Roles (code VARCHAR(20) PRIMARY KEY, nameVi NVARCHAR(50) NOT NULL, nameEn VARCHAR(50) NOT NULL, sortOrder INT NOT NULL DEFAULT 0)");
@@ -97,6 +111,9 @@ public class LiteService {
             st.execute("UPDATE dbo.Shifts SET assignedRole='barista' WHERE assignedRole IN ('Barista','BARISTA')");
             st.execute("UPDATE dbo.Shifts SET assignedRole='cashier' WHERE assignedRole IN ('Cashier','CASHIER')");
             st.execute("UPDATE dbo.Shifts SET assignedRole='runner'  WHERE assignedRole IN ('Waiter','WAITER','Runner','RUNNER')");
+            // Ép độ dài khớp Roles.code trước khi tạo FK.
+            tryExec(st, "IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Shifts_Roles') ALTER TABLE dbo.Shifts DROP CONSTRAINT FK_Shifts_Roles");
+            tryExec(st, "ALTER TABLE dbo.Shifts ALTER COLUMN assignedRole VARCHAR(20) NULL");
             st.execute("IF COL_LENGTH('dbo.Users','staffId') IS NULL ALTER TABLE dbo.Users ADD staffId INT NULL");
             st.execute("IF COL_LENGTH('dbo.SystemLogs','staffId') IS NULL ALTER TABLE dbo.SystemLogs ADD staffId INT NULL");
             st.execute("IF COL_LENGTH('dbo.CashEvents','staffId') IS NULL ALTER TABLE dbo.CashEvents ADD staffId INT NULL");
@@ -151,6 +168,49 @@ public class LiteService {
             try {
                 st.execute("IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Shifts_StaffDateName' AND object_id=OBJECT_ID('dbo.Shifts')) CREATE UNIQUE INDEX UX_Shifts_StaffDateName ON dbo.Shifts(staffId, shiftDate, shiftName)");
             } catch (Exception ignored) {}
+
+            // ── Hủy đơn / hoàn tiền / mang đi / khuyến mãi / thuế-tip ──
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','cancelReason') IS NULL ALTER TABLE dbo.Orders ADD cancelReason NVARCHAR(255) NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','cancelledAt') IS NULL ALTER TABLE dbo.Orders ADD cancelledAt DATETIME2 NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','cancelledByRole') IS NULL ALTER TABLE dbo.Orders ADD cancelledByRole VARCHAR(20) NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','cancelledByName') IS NULL ALTER TABLE dbo.Orders ADD cancelledByName NVARCHAR(120) NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','orderType') IS NULL ALTER TABLE dbo.Orders ADD orderType VARCHAR(20) NOT NULL CONSTRAINT DF_Orders_orderType DEFAULT 'DINE_IN'");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','promotionId') IS NULL ALTER TABLE dbo.Orders ADD promotionId INT NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','promoDiscount') IS NULL ALTER TABLE dbo.Orders ADD promoDiscount INT NOT NULL DEFAULT 0");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','manualDiscount') IS NULL ALTER TABLE dbo.Orders ADD manualDiscount INT NOT NULL DEFAULT 0");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','discountReason') IS NULL ALTER TABLE dbo.Orders ADD discountReason NVARCHAR(255) NULL");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','taxAmount') IS NULL ALTER TABLE dbo.Orders ADD taxAmount INT NOT NULL DEFAULT 0");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','serviceCharge') IS NULL ALTER TABLE dbo.Orders ADD serviceCharge INT NOT NULL DEFAULT 0");
+            tryExec(st, "IF COL_LENGTH('dbo.Orders','tipAmount') IS NULL ALTER TABLE dbo.Orders ADD tipAmount INT NOT NULL DEFAULT 0");
+            tryExec(st, "IF OBJECT_ID('dbo.Refunds','U') IS NULL CREATE TABLE dbo.Refunds ("
+                    + "id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, paymentId INT NULL, "
+                    + "amount INT NOT NULL, method VARCHAR(20) NULL, reason NVARCHAR(255) NOT NULL, "
+                    + "restocked BIT NOT NULL DEFAULT 1, actorRole VARCHAR(20) NULL, actorName NVARCHAR(120) NULL, "
+                    + "staffId INT NULL, refundedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), "
+                    + "FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_Refunds_Order' AND object_id=OBJECT_ID('dbo.Refunds')) "
+                    + "CREATE UNIQUE INDEX UQ_Refunds_Order ON dbo.Refunds(orderId)");
+            tryExec(st, "IF OBJECT_ID('dbo.Promotions','U') IS NULL CREATE TABLE dbo.Promotions ("
+                    + "id INT IDENTITY PRIMARY KEY, code VARCHAR(40) NOT NULL, nameVi NVARCHAR(120) NOT NULL, "
+                    + "nameEn NVARCHAR(120) NOT NULL, discountType VARCHAR(10) NOT NULL, discountValue INT NOT NULL, "
+                    + "minSubtotal INT NOT NULL DEFAULT 0, maxDiscount INT NOT NULL DEFAULT 0, "
+                    + "startAt DATETIME2 NULL, endAt DATETIME2 NULL, maxUses INT NOT NULL DEFAULT 0, "
+                    + "usedCount INT NOT NULL DEFAULT 0, active BIT NOT NULL DEFAULT 1, "
+                    + "createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_Promotions_Code' AND object_id=OBJECT_ID('dbo.Promotions')) "
+                    + "CREATE UNIQUE INDEX UQ_Promotions_Code ON dbo.Promotions(code)");
+            tryExec(st, "IF OBJECT_ID('dbo.PromotionRedemptions','U') IS NULL CREATE TABLE dbo.PromotionRedemptions ("
+                    + "id INT IDENTITY PRIMARY KEY, promotionId INT NOT NULL, orderId INT NOT NULL, "
+                    + "discountAmount INT NOT NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(), "
+                    + "FOREIGN KEY(promotionId) REFERENCES dbo.Promotions(id), FOREIGN KEY(orderId) REFERENCES dbo.Orders(id))");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UQ_PromoRedeem_Order' AND object_id=OBJECT_ID('dbo.PromotionRedemptions')) "
+                    + "CREATE UNIQUE INDEX UQ_PromoRedeem_Order ON dbo.PromotionRedemptions(orderId)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name='FK_Orders_Promotions') "
+                    + "ALTER TABLE dbo.Orders ADD CONSTRAINT FK_Orders_Promotions FOREIGN KEY (promotionId) REFERENCES dbo.Promotions(id)");
+            // Cấu hình thuế / phí / tip (StoreState intValue: phần trăm hoặc cờ 0/1).
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='vatPercent') INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('vatPercent', 8)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='serviceChargePercent') INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('serviceChargePercent', 0)");
+            tryExec(st, "IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='tipEnabled') INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('tipEnabled', 1)");
             
             try {
                 st.execute("DELETE FROM dbo.OrderItems WHERE menuItemId NOT IN (SELECT id FROM dbo.MenuItems)");
@@ -169,8 +229,15 @@ public class LiteService {
                 st.execute("IF COL_LENGTH('dbo.Staff','email') IS NOT NULL ALTER TABLE dbo.Staff DROP COLUMN email");
             } catch (Exception e) {}
             seed(con);
+            // Mở sổ cái SAU khi Inventory đã có dữ liệu — trước đây chạy lúc bảng chưa tồn tại.
+            try (Statement ledger = con.createStatement()) {
+                ledger.execute("INSERT INTO dbo.StockTransactions (ingredientId,type,quantity,stockAfter,unitCost,actorRole,actorName,note) "
+                        + "SELECT i.id,'ADJUST',i.stock,i.stock,i.importCost,'system',N'Khởi tạo sổ',N'Số dư đầu kỳ khi bắt đầu ghi sổ cái' "
+                        + "FROM dbo.Inventory i WHERE NOT EXISTS (SELECT 1 FROM dbo.StockTransactions s WHERE s.ingredientId = i.id)");
+            }
         } catch (Exception e) {
             System.err.println("LiteService init failed: " + e.getMessage());
+            e.printStackTrace(System.err);
         }
         // Tạo tài khoản khách demo sau khi bảng chắc chắn đã tồn tại.
         new dao.CustomerDAO().seedDemoAccounts();
@@ -209,16 +276,16 @@ public class LiteService {
 
         if (!hadStaff) {
             String[][] staffData = {
-                {"1", "Nguyễn Văn An",   "staff", "1001", "", "1", "", "", "Active", "0"},
-                {"2", "Trần Thị Bích",   "staff", "1002", "", "1", "", "", "Active", "0"},
-                {"3", "Lê Hoàng Cường",  "staff", "1003", "", "1", "", "", "Active", "0"},
-                {"4", "Phạm Minh Đức",   "staff", "1004", "", "1", "", "", "Active", "0"},
-                {"5", "Hoàng Thị Em",    "staff", "1005", "", "1", "", "", "Active", "0"}
+                {"1", "Nguyễn Văn An", "Active"},
+                {"2", "Trần Thị Bích", "Active"},
+                {"3", "Lê Hoàng Cường", "Active"},
+                {"4", "Phạm Minh Đức", "Active"},
+                {"5", "Hoàng Thị Em", "Active"}
             };
 
-            String staffSql = "MERGE dbo.Staff AS t USING (SELECT ? AS id) AS s ON t.id = s.id " +
-                               "WHEN NOT MATCHED THEN INSERT (id, name, role, pin, shift, active, username, password, status, overtime) " +
-                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+            // Staff hiện chỉ còn id/name/active/status — cột role/pin/... đã bị DROP.
+            String staffSql = "MERGE dbo.Staff AS t USING (SELECT ? AS id) AS s ON t.id = s.id "
+                    + "WHEN NOT MATCHED THEN INSERT (id, name, active, status) VALUES (?, ?, 1, ?);";
             try (java.sql.PreparedStatement ps = con.prepareStatement(staffSql)) {
                 for (String[] s : staffData) {
                     int id = Integer.parseInt(s[0]);
@@ -226,13 +293,6 @@ public class LiteService {
                     ps.setInt(2, id);
                     ps.setNString(3, s[1]);
                     ps.setString(4, s[2]);
-                    ps.setString(5, s[3]);
-                    ps.setNString(6, s[4]);
-                    ps.setInt(7, Integer.parseInt(s[5]));
-                    ps.setString(8, s[6]);
-                    ps.setString(9, s[7]);
-                    ps.setString(10, s[8]);
-                    ps.setInt(11, Integer.parseInt(s[9]));
                     ps.executeUpdate();
                 }
             }
@@ -340,9 +400,16 @@ public class LiteService {
     private void removeLegacyTables(Connection con) throws Exception {}
 
     private void clearOrphanActiveOrders(Connection con) throws Exception {
+        // Dùng tableId (quan hệ thật). Fallback tableName chỉ cho dữ liệu cũ chưa backfill.
         String sql = "UPDATE dbo.Orders SET status='Cleared' "
-                + "WHERE status IN ('Pending','Preparing','Ready','Served','Paid') "
-                + "AND NOT EXISTS (SELECT 1 FROM dbo.Tables t WHERE t.active=1 AND t.name=dbo.Orders.tableName)";
+                + "WHERE status IN " + ST_OPEN + " "
+                + "AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                + "AND NOT EXISTS ("
+                + "  SELECT 1 FROM dbo.Tables t WHERE t.active=1 AND ("
+                + "    (dbo.Orders.tableId IS NOT NULL AND t.id = dbo.Orders.tableId)"
+                + "    OR (dbo.Orders.tableId IS NULL AND t.name = dbo.Orders.tableName)"
+                + "  )"
+                + ")";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.executeUpdate();
         }
@@ -480,7 +547,7 @@ public class LiteService {
 
     private void upsertMenuItem(Connection con, String nameVi, String nameEn, String category, int price, String imagePath) throws Exception {
         int id = 0;
-        try (PreparedStatement ps = con.prepareStatement("MERGE dbo.MenuItems AS t USING (SELECT ? nameVi, ? nameEn, ? category, ? price, ? imagePath) AS s ON t.nameVi=s.nameVi WHEN MATCHED THEN UPDATE SET nameEn=s.nameEn, category=s.category, price=s.price, imagePath=s.imagePath, active=1 WHEN NOT MATCHED THEN INSERT(nameVi,nameEn,category,price,imagePath,active) VALUES(s.nameVi,s.nameEn,s.category,s.price,s.imagePath,1);")) {
+        try (PreparedStatement ps = con.prepareStatement("MERGE dbo.MenuItems AS t USING (SELECT ? nameVi, ? nameEn, ? category, ? price, ? imagePath) AS s ON t.nameVi=s.nameVi WHEN MATCHED THEN UPDATE SET nameEn=s.nameEn, category=s.category, imagePath=CASE WHEN s.imagePath IS NULL OR LTRIM(RTRIM(s.imagePath))='' THEN t.imagePath ELSE s.imagePath END WHEN NOT MATCHED THEN INSERT(nameVi,nameEn,category,price,imagePath,active) VALUES(s.nameVi,s.nameEn,s.category,s.price,s.imagePath,1);")) {
             ps.setString(1, nameVi);
             ps.setString(2, nameEn);
             ps.setString(3, category);
@@ -514,7 +581,7 @@ public class LiteService {
         for (Map<String, Object> item : menu) {
             item.put("sizes", getMenuSizes(con, readInt(item.get("id"), 0)));
         }
-        List<Map<String, Object>> tables = queryRows(con, "SELECT name FROM dbo.Tables WHERE active=1 ORDER BY name");
+        List<Map<String, Object>> tables = queryRows(con, "SELECT id, name FROM dbo.Tables WHERE active=1 ORDER BY name");
         if (menu.isEmpty() || tables.isEmpty()) return;
 
         Random random = new Random(205063);
@@ -524,9 +591,11 @@ public class LiteService {
                 int orders = 2 + random.nextInt(4);
                 LocalDate date = start.plusDays(day);
                 for (int i = 0; i < orders; i++) {
-                    String tableName = readString(tables.get(random.nextInt(tables.size())).get("name"), "Tầng 1 - Bàn 1");
+                    Map<String, Object> table = tables.get(random.nextInt(tables.size()));
+                    String tableName = readString(table.get("name"), "Tầng 1 - Bàn 1");
+                    int tableId = readInt(table.get("id"), 0);
                     String createdAt = date + "T" + String.format(Locale.ROOT, "%02d:%02d:00", 8 + random.nextInt(13), random.nextInt(60));
-                    int orderId = insertSeedOrder(con, tableName, createdAt, "Cleared");
+                    int orderId = insertSeedOrder(con, tableId, tableName, createdAt, "Cleared");
                     int lineCount = 1 + random.nextInt(3);
                     int total = 0;
                     Set<Integer> used = new HashSet<>();
@@ -545,19 +614,22 @@ public class LiteService {
             }
         }
 
-        if (count(con, "SELECT COUNT(*) FROM dbo.Orders o JOIN dbo.Tables t ON t.name=o.tableName WHERE o.status IN ('Pending','Preparing','Ready','Served','Paid') AND t.active=1") == 0) {
-            insertLiveOrder(con, "Tầng 1 - Bàn 1", menu, "Pending", random);
-            insertLiveOrder(con, "Tầng 1 - Bàn 2", menu, "Ready", random);
-            insertLiveOrder(con, "Tầng 2 - Bàn 1", menu, "Served", random);
-            insertLiveOrder(con, "Tầng 2 - Bàn 2", menu, "Paid", random);
+        if (count(con, "SELECT COUNT(*) FROM dbo.Orders o JOIN dbo.Tables t ON t.id=o.tableId WHERE o.status IN " + ST_OPEN + " AND t.active=1") == 0) {
+            insertLiveOrder(con, tables, "Tầng 1 - Bàn 1", menu, "Pending", random);
+            insertLiveOrder(con, tables, "Tầng 1 - Bàn 2", menu, "Ready", random);
+            insertLiveOrder(con, tables, "Tầng 2 - Bàn 1", menu, "Served", random);
+            insertLiveOrder(con, tables, "Tầng 2 - Bàn 2", menu, "Paid", random);
         }
     }
 
-    private int insertSeedOrder(Connection con, String tableName, String createdAt, String status) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName, status, total, createdAt) VALUES (?,?,0,?)", Statement.RETURN_GENERATED_KEYS)) {
+    private int insertSeedOrder(Connection con, int tableId, String tableName, String createdAt, String status) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(
+                "INSERT INTO dbo.Orders (tableName, tableId, status, total, subtotal, createdAt) VALUES (?,?,?,0,0,?)",
+                Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, tableName);
-            ps.setString(2, status);
-            ps.setString(3, createdAt);
+            if (tableId > 0) ps.setInt(2, tableId); else ps.setNull(2, java.sql.Types.INTEGER);
+            ps.setString(3, status);
+            ps.setString(4, createdAt);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 keys.next();
@@ -579,16 +651,30 @@ public class LiteService {
     }
 
     private void finishSeedOrder(Connection con, int orderId, int total) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET orderNumber=?, total=? WHERE id=?")) {
+        try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET orderNumber=?, total=?, subtotal=? WHERE id=?")) {
             ps.setInt(1, 1000 + orderId);
             ps.setInt(2, total);
-            ps.setInt(3, orderId);
+            ps.setInt(3, total);
+            ps.setInt(4, orderId);
             ps.executeUpdate();
         }
     }
 
-    private void insertLiveOrder(Connection con, String tableName, List<Map<String, Object>> menu, String status, Random random) throws Exception {
-        int orderId = insertSeedOrder(con, tableName, appToday() + "T" + String.format(Locale.ROOT, "%02d:%02d:00", 9 + random.nextInt(8), random.nextInt(60)), status);
+    private void insertLiveOrder(Connection con, List<Map<String, Object>> tables, String preferredName,
+                                 List<Map<String, Object>> menu, String status, Random random) throws Exception {
+        Map<String, Object> table = null;
+        for (Map<String, Object> row : tables) {
+            if (preferredName.equals(readString(row.get("name"), ""))) {
+                table = row;
+                break;
+            }
+        }
+        if (table == null) table = tables.get(0);
+        int tableId = readInt(table.get("id"), 0);
+        String tableName = readString(table.get("name"), preferredName);
+        int orderId = insertSeedOrder(con, tableId, tableName,
+                appToday() + "T" + String.format(Locale.ROOT, "%02d:%02d:00", 9 + random.nextInt(8), random.nextInt(60)),
+                status);
         Map<String, Object> item = menu.get(random.nextInt(menu.size()));
         String size = isDrink(item) ? "M" : "";
         int price = priceForSize(item, size);
@@ -724,7 +810,7 @@ public class LiteService {
                 + "FROM dbo.OrderItems oi "
                 + "JOIN dbo.Orders o ON o.id = oi.orderId "
                 + "JOIN dbo.MenuItems m ON m.id = oi.menuItemId "
-                + "WHERE o.status IN ('Paid','Cleared') AND oi.menuItemId IS NOT NULL AND oi.menuItemId > 0 "
+                + "WHERE o.status IN " + ST_REVENUE + " AND oi.menuItemId IS NOT NULL AND oi.menuItemId > 0 "
                 + "GROUP BY m.category, oi.menuItemId "
                 + "ORDER BY m.category, SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC, oi.menuItemId";
         try (PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
@@ -1081,20 +1167,49 @@ public class LiteService {
         return getTables(false);
     }
 
+    /** Bản công khai cho khách: không lộ mã QR toàn sàn. */
+    public List<Map<String, Object>> getPublicTables() throws Exception {
+        List<Map<String, Object>> tables = getTables(false);
+        List<Map<String, Object>> sanitized = new ArrayList<>();
+        for (Map<String, Object> table : tables) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("id", table.get("id"));
+            row.put("name", table.get("name"));
+            row.put("floorNo", table.get("floorNo"));
+            row.put("tableNo", table.get("tableNo"));
+            row.put("active", table.get("active"));
+            sanitized.add(row);
+        }
+        return sanitized;
+    }
+
     public List<Map<String, Object>> getAllTables() throws Exception {
         return getTables(true);
     }
 
     public List<Map<String, Object>> getTableMap() throws Exception {
-        String sql = "SELECT t.id, t.name, t.code, t.active, t.floorNo, t.tableNo, activeOrder.id orderId, activeOrder.orderNumber, activeOrder.status "
+        String sql = "SELECT t.id, t.name, t.code, t.active, t.floorNo, t.tableNo, "
+                + "activeOrder.id orderId, activeOrder.orderNumber, activeOrder.status, "
+                + "ISNULL(openCnt.cnt,0) openOrderCount, ISNULL(unpaidCnt.cnt,0) unpaidCount "
                 + "FROM dbo.Tables t "
-                + "OUTER APPLY (SELECT TOP 1 id, orderNumber, status FROM dbo.Orders WHERE tableName=t.name AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC) activeOrder "
+                + "OUTER APPLY (SELECT TOP 1 id, orderNumber, status FROM dbo.Orders "
+                + "  WHERE status IN " + ST_OPEN + " AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                + "    AND (tableId = t.id OR (tableId IS NULL AND tableName = t.name)) "
+                + "  ORDER BY id DESC) activeOrder "
+                + "OUTER APPLY (SELECT COUNT(*) cnt FROM dbo.Orders "
+                + "  WHERE status IN " + ST_OPEN + " AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                + "    AND (tableId = t.id OR (tableId IS NULL AND tableName = t.name))) openCnt "
+                + "OUTER APPLY (SELECT COUNT(*) cnt FROM dbo.Orders "
+                + "  WHERE status IN " + ST_PRE_PAID + " AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                + "    AND (tableId = t.id OR (tableId IS NULL AND tableName = t.name))) unpaidCnt "
                 + "WHERE t.active=1 "
                 + "ORDER BY ISNULL(t.floorNo, 1), ISNULL(t.tableNo, 999), t.name";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             List<Map<String, Object>> tables = rows(rs);
             for (Map<String, Object> table : tables) {
-                table.put("busy", table.get("orderId") != null);
+                int openCount = readInt(table.get("openOrderCount"), 0);
+                table.put("busy", openCount > 0);
+                table.put("hasUnpaid", readInt(table.get("unpaidCount"), 0) > 0);
             }
             return tables;
         }
@@ -1111,23 +1226,34 @@ public class LiteService {
             row.put("tableNo", table.get("tableNo"));
             row.put("status", table.get("status"));
             row.put("busy", table.get("busy"));
+            row.put("openOrderCount", table.get("openOrderCount"));
+            row.put("hasUnpaid", table.get("hasUnpaid"));
             sanitized.add(row);
         }
         return sanitized;
     }
 
     public List<Map<String, Object>> getOpenOrdersByTable(String tableCode, String tableName) throws Exception {
+        int tableId = 0;
         String resolvedTable = readString(tableName, "");
         if (!readString(tableCode, "").isEmpty()) {
             Map<String, Object> table = getTableByCode(tableCode);
             if (table == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
             resolvedTable = readString(table.get("name"), "");
+            tableId = readInt(table.get("id"), 0);
+        } else if (!resolvedTable.isEmpty()) {
+            Map<String, Object> table = getTableByName(resolvedTable);
+            if (table != null) tableId = readInt(table.get("id"), 0);
         }
-        if (resolvedTable.isEmpty()) throw new IllegalArgumentException("Không tìm thấy bàn.");
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders "
-                + "WHERE tableName=? AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
+        if (resolvedTable.isEmpty() && tableId <= 0) throw new IllegalArgumentException("Không tìm thấy bàn.");
+        String sql = "SELECT id, orderNumber, tableName, tableId, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted, ISNULL(orderType,'DINE_IN') orderType, ISNULL(promoDiscount,0) promoDiscount, ISNULL(manualDiscount,0) manualDiscount, ISNULL(taxAmount,0) taxAmount, ISNULL(serviceCharge,0) serviceCharge, ISNULL(tipAmount,0) tipAmount FROM dbo.Orders "
+                + "WHERE status IN " + ST_OPEN + " "
+                + "AND ( (? > 0 AND tableId = ?) OR (tableId IS NULL AND tableName = ?) ) "
+                + "ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, resolvedTable);
+            ps.setInt(1, tableId);
+            ps.setInt(2, tableId);
+            ps.setString(3, resolvedTable);
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> list = rows(rs);
                 for (Map<String, Object> order : list) {
@@ -1141,8 +1267,26 @@ public class LiteService {
     public List<Map<String, Object>> getOpenOrdersByIds(List<Integer> orderIds) throws Exception {
         List<Integer> ids = cleanIds(orderIds);
         if (ids.isEmpty()) return new ArrayList<>();
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders "
-                + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
+        String sql = "SELECT id, orderNumber, tableName, tableId, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted, splitLocked, ISNULL(orderType,'DINE_IN') orderType, ISNULL(promoDiscount,0) promoDiscount, ISNULL(manualDiscount,0) manualDiscount, discountReason, ISNULL(taxAmount,0) taxAmount, ISNULL(serviceCharge,0) serviceCharge, ISNULL(tipAmount,0) tipAmount, cancelReason, cancelledAt, promotionId FROM dbo.Orders "
+                + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN " + ST_OPEN + " ORDER BY id DESC";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            bindIds(ps, ids);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<Map<String, Object>> list = rows(rs);
+                for (Map<String, Object> order : list) {
+                    order.put("items", getOrderItems(readInt(order.get("id"), 0)));
+                }
+                return list;
+            }
+        }
+    }
+
+    /** Lấy đơn theo id, mọi trạng thái (dùng cho theo dõi phiên khách). */
+    public List<Map<String, Object>> getOrdersByIds(List<Integer> orderIds) throws Exception {
+        List<Integer> ids = cleanIds(orderIds);
+        if (ids.isEmpty()) return new ArrayList<>();
+        String sql = "SELECT id, orderNumber, tableName, tableId, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted, splitLocked, ISNULL(orderType,'DINE_IN') orderType, ISNULL(promoDiscount,0) promoDiscount, ISNULL(manualDiscount,0) manualDiscount, discountReason, ISNULL(taxAmount,0) taxAmount, ISNULL(serviceCharge,0) serviceCharge, ISNULL(tipAmount,0) tipAmount, cancelReason, cancelledAt, promotionId FROM dbo.Orders "
+                + "WHERE id IN (" + placeholders(ids.size()) + ") ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             bindIds(ps, ids);
             try (ResultSet rs = ps.executeQuery()) {
@@ -1159,7 +1303,7 @@ public class LiteService {
         List<Integer> ids = cleanIds(orderIds);
         if (ids.isEmpty()) return "";
         String sql = "SELECT TOP 1 tableName FROM dbo.Orders "
-                + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN ('Pending','Preparing','Ready','Served','Paid') ORDER BY id DESC";
+                + "WHERE id IN (" + placeholders(ids.size()) + ") AND status IN " + ST_OPEN + " ORDER BY id DESC";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             bindIds(ps, ids);
             try (ResultSet rs = ps.executeQuery()) {
@@ -1184,14 +1328,15 @@ public class LiteService {
             }
             String fromName = readString(from.get("name"), "");
             String toName = readString(to.get("name"), "");
-            int sourceOrders = countOpenOrders(con, fromName, "('Pending','Preparing','Ready','Served')");
+            int sourceOrders = countOpenOrders(con, fromTableId, fromName, ST_PRE_PAID);
             if (sourceOrders == 0) throw new IllegalArgumentException("Bàn hiện tại không có đơn cần chuyển.");
-            int targetOrders = countOpenOrders(con, toName, "('Pending','Preparing','Ready','Served','Paid')");
+            int targetOrders = countOpenOrders(con, toTableId, toName, ST_OPEN);
             if (targetOrders > 0) throw new IllegalArgumentException("Bàn mới đang có khách.");
             // Chuyển bàn giờ đổi KHOÁ NGOẠI, không phải sửa chuỗi tên.
             // tableName vẫn cập nhật theo để bản chụp khớp bàn hiện tại.
             try (PreparedStatement ps = con.prepareStatement(
-                    "UPDATE dbo.Orders SET tableId=?, tableName=? WHERE tableId=? AND status IN ('Pending','Preparing','Ready','Served')")) {
+                    "UPDATE dbo.Orders SET tableId=?, tableName=? WHERE tableId=? AND status IN " + ST_PRE_PAID
+                            + " AND ISNULL(orderType,'DINE_IN')='DINE_IN'")) {
                 ps.setInt(1, toTableId);
                 ps.setString(2, toName);
                 ps.setInt(3, fromTableId);
@@ -1199,7 +1344,8 @@ public class LiteService {
             }
             // Đơn cũ chưa có tableId (dữ liệu trước khi thêm khoá) thì vẫn ghép theo tên.
             try (PreparedStatement ps = con.prepareStatement(
-                    "UPDATE dbo.Orders SET tableId=?, tableName=? WHERE tableId IS NULL AND tableName=? AND status IN ('Pending','Preparing','Ready','Served')")) {
+                    "UPDATE dbo.Orders SET tableId=?, tableName=? WHERE tableId IS NULL AND tableName=? AND status IN " + ST_PRE_PAID
+                            + " AND ISNULL(orderType,'DINE_IN')='DINE_IN'")) {
                 ps.setInt(1, toTableId);
                 ps.setString(2, toName);
                 ps.setString(3, fromName);
@@ -1230,9 +1376,14 @@ public class LiteService {
         }
     }
 
-    private int countOpenOrders(Connection con, String tableName, String statuses) throws Exception {
-        try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.Orders WHERE tableName=? AND status IN " + statuses)) {
-            ps.setString(1, tableName);
+    private int countOpenOrders(Connection con, int tableId, String tableName, String statuses) throws Exception {
+        String sql = "SELECT COUNT(*) FROM dbo.Orders WHERE status IN " + statuses
+                + " AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                + " AND ( (? > 0 AND tableId = ?) OR (tableId IS NULL AND tableName = ?) )";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, tableId);
+            ps.setInt(2, tableId);
+            ps.setString(3, tableName);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);
@@ -1251,15 +1402,19 @@ public class LiteService {
             if (table == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
             String tableName = readString(table.get("name"), "");
 
-            int notClearedYet = countOpenOrders(con, tableName, "('Pending','Preparing','Ready','Served')");
+            int notClearedYet = countOpenOrders(con, tableId, tableName, ST_PRE_PAID);
             if (notClearedYet > 0) {
                 throw new IllegalArgumentException("Bàn vẫn còn đơn đang phục vụ, chưa thể dọn.");
             }
 
             List<Integer> orderIds = new ArrayList<>();
             List<Integer> orderNumbers = new ArrayList<>();
-            try (PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE tableName=? AND status='Paid' ORDER BY id")) {
-                ps.setString(1, tableName);
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT id, orderNumber FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) "
+                            + "WHERE status='Paid' AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                            + "AND (tableId=? OR (tableId IS NULL AND tableName=?)) ORDER BY id")) {
+                ps.setInt(1, tableId);
+                ps.setString(2, tableName);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         orderIds.add(rs.getInt("id"));
@@ -1270,8 +1425,11 @@ public class LiteService {
             if (orderIds.isEmpty()) throw new IllegalArgumentException("Bàn này không có đơn chờ dọn.");
 
             int clearedCount;
-            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status='Cleared' WHERE tableName=? AND status='Paid'")) {
-                ps.setString(1, tableName);
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Orders SET status='Cleared' WHERE status='Paid' AND ISNULL(orderType,'DINE_IN')='DINE_IN' "
+                            + "AND (tableId=? OR (tableId IS NULL AND tableName=?))")) {
+                ps.setInt(1, tableId);
+                ps.setString(2, tableName);
                 clearedCount = ps.executeUpdate();
                 if (clearedCount == 0) {
                     throw new IllegalArgumentException("Bàn này vừa được cập nhật bởi thiết bị khác.");
@@ -1400,9 +1558,10 @@ public class LiteService {
             Map<String, Object> table = getTableById(id);
             if (table == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
             String name = readString(table.get("name"), "");
-            int activeOrders = countOpenOrders(con, name, "('Pending','Preparing','Ready','Served','Paid')");
+            int activeOrders = countOpenOrders(con, id, name, ST_OPEN);
             if (activeOrders > 0) throw new IllegalArgumentException("Bàn đang có đơn, không thể xoá.");
-            try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.Tables WHERE id=?")) {
+            // Soft-delete: giữ FK lịch sử Orders.tableId, chỉ ẩn bàn khỏi vận hành.
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Tables SET active=0 WHERE id=?")) {
                 ps.setInt(1, id);
                 ps.executeUpdate();
             }
@@ -1415,13 +1574,22 @@ public class LiteService {
 
     @SuppressWarnings("unchecked")
     public Map<String, Object> createOrder(Map<String, Object> data, String actorRole, String actorName) throws Exception {
-        String tableName = readString(data.get("tableName"), "Bàn 1");
-        // Lấy luôn bản ghi bàn để có KHOÁ, không chỉ để kiểm tra tồn tại.
-        // tableName vẫn được lưu, nhưng từ nay chỉ là BẢN CHỤP tên tại thời
-        // điểm đặt đơn — đổi tên bàn về sau không làm sai lịch sử nữa.
-        Map<String, Object> orderTable = getTableByName(tableName);
-        if (orderTable == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
-        int orderTableId = readInt(orderTable.get("id"), 0);
+        String orderType = readString(data.get("orderType"), ORDER_TYPE_DINE_IN).trim().toUpperCase(Locale.ROOT);
+        if (!ORDER_TYPE_TAKEAWAY.equals(orderType)) orderType = ORDER_TYPE_DINE_IN;
+        String tableName;
+        int orderTableId = 0;
+        if (ORDER_TYPE_TAKEAWAY.equals(orderType)) {
+            tableName = "Mang đi";
+            orderTableId = 0;
+        } else {
+            tableName = readString(data.get("tableName"), "Bàn 1");
+            // Lấy luôn bản ghi bàn để có KHOÁ, không chỉ để kiểm tra tồn tại.
+            // tableName vẫn được lưu, nhưng từ nay chỉ là BẢN CHỤP tên tại thời
+            // điểm đặt đơn — đổi tên bàn về sau không làm sai lịch sử nữa.
+            Map<String, Object> orderTable = getTableByName(tableName);
+            if (orderTable == null) throw new IllegalArgumentException("Không tìm thấy bàn.");
+            orderTableId = readInt(orderTable.get("id"), 0);
+        }
         String phone = readString(data.get("customerPhone"), "");
         String note = limitNote(readString(data.get("note"), ""));
         // Khách đã đăng nhập: servlet gắn sẵn customerId vào body, trình duyệt
@@ -1429,6 +1597,15 @@ public class LiteService {
         int customerId = readInt(data.get("customerId"), 0);
         int requestedRedeem = Math.max(0, readInt(data.get("redeemPoints"), 0));
         if (customerId <= 0) requestedRedeem = 0;
+        String promoCode = readString(data.get("promoCode"), "").trim().toUpperCase(Locale.ROOT);
+        int manualDiscountReq = Math.max(0, readInt(data.get("manualDiscount"), 0));
+        String discountReason = limitNote(readString(data.get("discountReason"), ""));
+        if (manualDiscountReq > 0 && !"admin".equals(normalizeActor(actorRole))) {
+            throw new IllegalArgumentException("Chỉ quản trị được giảm giá tay.");
+        }
+        if (manualDiscountReq > 0 && discountReason.isEmpty()) {
+            throw new IllegalArgumentException("Giảm giá tay bắt buộc có lý do.");
+        }
         List<?> items = data.get("items") instanceof List<?> ? (List<?>) data.get("items") : Collections.emptyList();
         if (items.isEmpty()) throw new IllegalArgumentException("Đơn hàng chưa có món.");
 
@@ -1436,13 +1613,16 @@ public class LiteService {
             con.setAutoCommit(false);
             try {
                 int orderId;
-                try (PreparedStatement ps = con.prepareStatement("INSERT INTO dbo.Orders (tableName,tableId,customerPhone,note,total,createdAt,customerId) VALUES (?,?,?,?,0,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "INSERT INTO dbo.Orders (tableName,tableId,customerPhone,note,total,createdAt,customerId,orderType) VALUES (?,?,?,?,0,?,?,?)",
+                        Statement.RETURN_GENERATED_KEYS)) {
                     ps.setString(1, tableName);
                     if (orderTableId > 0) ps.setInt(2, orderTableId); else ps.setNull(2, java.sql.Types.INTEGER);
                     ps.setString(3, phone.isEmpty() ? null : phone);
                     ps.setString(4, note);
                     ps.setString(5, nowSqlTimestamp());
                     if (customerId > 0) ps.setInt(6, customerId); else ps.setNull(6, java.sql.Types.INTEGER);
+                    ps.setString(7, orderType);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -1456,8 +1636,9 @@ public class LiteService {
                 Map<Integer, Integer> requestedByMenu = new LinkedHashMap<>();
                 Map<Integer, String> menuNames = new LinkedHashMap<>();
                 List<Map<String, Object>> normalizedLines = new ArrayList<>();
-                Map<String, Integer> stockMap = getIngredientStockMap(con);
-                Map<Integer, Integer> reservedMap = getReservedMenuQuantityMap(con);
+                // Khoá toàn bộ Inventory trước khi tính khả dụng — tránh oversell đồng thời.
+                Map<String, Integer> stockMap = getIngredientStockMapForUpdate(con);
+                Map<String, Integer> reservedIngredients = getReservedIngredientQuantityMap(con);
                 dao.RecipeDAO recipeDao = new dao.RecipeDAO();
 
                 for (Object raw : items) {
@@ -1500,11 +1681,35 @@ public class LiteService {
                     normalizedLines.add(line);
                 }
 
+                // Cộng nhu cầu nguyên liệu của đơn này rồi so với tồn - đã đặt trước.
+                Map<String, Integer> neededNow = new LinkedHashMap<>();
                 for (Map.Entry<Integer, Integer> entry : requestedByMenu.entrySet()) {
                     int menuId = entry.getKey();
                     int requested = entry.getValue();
                     List<model.RecipeItem> recipes = recipeDao.getByMenuItemId(String.valueOf(menuId));
-                    int available = availableQuantity(recipes, stockMap, reservedMap.getOrDefault(menuId, 0));
+                    if (recipes.isEmpty()) continue;
+                    for (model.RecipeItem recipe : recipes) {
+                        int need = Math.max(0, recipe.getQuantity()) * requested;
+                        if (need <= 0) continue;
+                        neededNow.merge(recipe.getIngredientId(), need, Integer::sum);
+                    }
+                }
+                for (Map.Entry<String, Integer> need : neededNow.entrySet()) {
+                    int stock = stockMap.getOrDefault(need.getKey(), 0);
+                    int reserved = reservedIngredients.getOrDefault(need.getKey(), 0);
+                    int available = Math.max(0, stock - reserved);
+                    if (need.getValue() > available) {
+                        throw new IllegalArgumentException("Không đủ nguyên liệu trong kho để nhận đơn này (còn "
+                                + available + ", cần " + need.getValue() + ").");
+                    }
+                }
+                // Vẫn báo theo tên món nếu từng món hết suất (UX rõ hơn).
+                Map<Integer, Integer> reservedMenuMap = getReservedMenuQuantityMap(con);
+                for (Map.Entry<Integer, Integer> entry : requestedByMenu.entrySet()) {
+                    int menuId = entry.getKey();
+                    int requested = entry.getValue();
+                    List<model.RecipeItem> recipes = recipeDao.getByMenuItemId(String.valueOf(menuId));
+                    int available = availableQuantity(recipes, stockMap, reservedMenuMap.getOrDefault(menuId, 0));
                     if (!recipes.isEmpty() && requested > available) {
                         String itemName = menuNames.getOrDefault(menuId, "");
                         if (available <= 0) {
@@ -1540,16 +1745,15 @@ public class LiteService {
                 int orderNumber = 1000 + orderId;
 
                 // ── Đổi điểm lấy giảm giá ───────────────────────────────────
-                // subtotal = tiền hàng, total = số tiền khách thực trả.
-                // Giữ total là số phải trả nên thu ngân, doanh thu và sổ quỹ
-                // hiện có không phải sửa một dòng nào.
                 int subtotal = total;
                 int redeemPoints = 0;
-                int discount = 0;
+                int pointsDiscount = 0;
                 if (customerId > 0 && requestedRedeem > 0) {
                     dao.CustomerDAO customerDao = new dao.CustomerDAO();
                     int balance = customerDao.currentPoints(con, customerId);
-                    int maxAllowed = model.Customer.maxRedeemablePoints(balance, subtotal);
+                    int held = pendingRedeemHold(con, customerId, 0);
+                    int usable = Math.max(0, balance - held);
+                    int maxAllowed = model.Customer.maxRedeemablePoints(usable, subtotal);
                     if (requestedRedeem > maxAllowed) {
                         if (maxAllowed <= 0) {
                             throw new IllegalArgumentException("Đơn này chưa đủ điều kiện dùng điểm (tối thiểu "
@@ -1559,21 +1763,60 @@ public class LiteService {
                         throw new IllegalArgumentException("Đơn này chỉ dùng được tối đa " + maxAllowed + " điểm.");
                     }
                     redeemPoints = requestedRedeem;
-                    discount = redeemPoints * model.Customer.VALUE_PER_POINT;
-                    total = Math.max(0, subtotal - discount);
-                    customerDao.applyPointChange(con, customerId, -redeemPoints, "REDEEM", orderId,
-                            "Đổi điểm giảm giá đơn #" + orderNumber, 0);
+                    pointsDiscount = redeemPoints * model.Customer.VALUE_PER_POINT;
                 }
 
+                int promotionId = 0;
+                int promoDiscount = 0;
+                if (!promoCode.isEmpty()) {
+                    Map<String, Object> promo = lockPromotionByCode(con, promoCode);
+                    promoDiscount = computePromoDiscount(promo, subtotal);
+                    promotionId = readInt(promo.get("id"), 0);
+                }
+
+                int manualDiscount = Math.min(manualDiscountReq, Math.max(0, subtotal - pointsDiscount - promoDiscount));
+                // Menu prices are VAT-inclusive: customer pays listed price (after discounts).
+                // taxAmount is extracted for reporting only — never added on top.
+                int payableBase = Math.max(0, subtotal - pointsDiscount - promoDiscount - manualDiscount);
+                int vatPercent = stateValue(con, "vatPercent", 8);
+                int servicePercent = stateValue(con, "serviceChargePercent", 0);
+                int taxAmount = vatPercent > 0
+                        ? (int) Math.round(payableBase * vatPercent / (100.0 + vatPercent))
+                        : 0;
+                int serviceCharge = (int) Math.round(payableBase * Math.max(0, servicePercent) / 100.0);
+                total = payableBase + serviceCharge;
+
                 try (PreparedStatement ps = con.prepareStatement(
-                        "UPDATE dbo.Orders SET orderNumber=?, subtotal=?, discountAmount=?, pointsRedeemed=?, total=? WHERE id=?")) {
+                        "UPDATE dbo.Orders SET orderNumber=?, subtotal=?, discountAmount=?, pointsRedeemed=?, "
+                                + "promotionId=?, promoDiscount=?, manualDiscount=?, discountReason=?, "
+                                + "taxAmount=?, serviceCharge=?, total=? WHERE id=?")) {
                     ps.setInt(1, orderNumber);
                     ps.setInt(2, subtotal);
-                    ps.setInt(3, discount);
+                    ps.setInt(3, pointsDiscount);
                     ps.setInt(4, redeemPoints);
-                    ps.setInt(5, total);
-                    ps.setInt(6, orderId);
+                    if (promotionId > 0) ps.setInt(5, promotionId); else ps.setNull(5, Types.INTEGER);
+                    ps.setInt(6, promoDiscount);
+                    ps.setInt(7, manualDiscount);
+                    ps.setString(8, manualDiscount > 0 ? discountReason : null);
+                    ps.setInt(9, taxAmount);
+                    ps.setInt(10, serviceCharge);
+                    ps.setInt(11, total);
+                    ps.setInt(12, orderId);
                     ps.executeUpdate();
+                }
+                if (promotionId > 0) {
+                    try (PreparedStatement ps = con.prepareStatement(
+                            "INSERT INTO dbo.PromotionRedemptions (promotionId, orderId, discountAmount) VALUES (?,?,?)")) {
+                        ps.setInt(1, promotionId);
+                        ps.setInt(2, orderId);
+                        ps.setInt(3, promoDiscount);
+                        ps.executeUpdate();
+                    }
+                    try (PreparedStatement ps = con.prepareStatement(
+                            "UPDATE dbo.Promotions SET usedCount = usedCount + 1 WHERE id=?")) {
+                        ps.setInt(1, promotionId);
+                        ps.executeUpdate();
+                    }
                 }
                 String actor = normalizeActor(actorRole);
                 if (actor.isEmpty() || "system".equals(actor)) actor = "guest";
@@ -1585,12 +1828,61 @@ public class LiteService {
                         orderId);
                 deactivateUnavailableMenuItems(con, requestedByMenu.keySet());
                 con.commit();
+                publishEvent("orders");
                 return getOrderById(orderId);
             } catch (Exception e) {
                 con.rollback();
                 throw e;
             }
         }
+    }
+
+    private Map<String, Object> lockPromotionByCode(Connection con, String code) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT id, code, discountType, discountValue, minSubtotal, maxDiscount, startAt, endAt, "
+                        + "maxUses, usedCount, active FROM dbo.Promotions WITH (UPDLOCK, ROWLOCK) WHERE code=?")) {
+            ps.setString(1, code);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) throw new IllegalArgumentException("Mã khuyến mãi không tồn tại.");
+                Map<String, Object> promo = row(rs);
+                if (!readBoolean(promo.get("active"), false)) {
+                    throw new IllegalArgumentException("Mã khuyến mãi đã tắt.");
+                }
+                Timestamp startAt = rs.getTimestamp("startAt");
+                Timestamp endAt = rs.getTimestamp("endAt");
+                Timestamp now = Timestamp.valueOf(nowSqlTimestamp());
+                if (startAt != null && now.before(startAt)) {
+                    throw new IllegalArgumentException("Mã khuyến mãi chưa tới thời gian áp dụng.");
+                }
+                if (endAt != null && now.after(endAt)) {
+                    throw new IllegalArgumentException("Mã khuyến mãi đã hết hạn.");
+                }
+                int maxUses = readInt(promo.get("maxUses"), 0);
+                int usedCount = readInt(promo.get("usedCount"), 0);
+                if (maxUses > 0 && usedCount >= maxUses) {
+                    throw new IllegalArgumentException("Mã khuyến mãi đã hết lượt sử dụng.");
+                }
+                return promo;
+            }
+        }
+    }
+
+    private int computePromoDiscount(Map<String, Object> promo, int subtotal) {
+        int minSubtotal = readInt(promo.get("minSubtotal"), 0);
+        if (subtotal < minSubtotal) {
+            throw new IllegalArgumentException("Đơn chưa đủ điều kiện tối thiểu để dùng mã khuyến mãi.");
+        }
+        String type = readString(promo.get("discountType"), "PERCENT").toUpperCase(Locale.ROOT);
+        int value = Math.max(0, readInt(promo.get("discountValue"), 0));
+        int discount;
+        if ("AMOUNT".equals(type)) {
+            discount = value;
+        } else {
+            discount = (int) Math.round(subtotal * value / 100.0);
+        }
+        int maxDiscount = readInt(promo.get("maxDiscount"), 0);
+        if (maxDiscount > 0) discount = Math.min(discount, maxDiscount);
+        return Math.min(Math.max(0, discount), subtotal);
     }
 
     public List<Map<String, Object>> getOrders() throws Exception {
@@ -1602,7 +1894,7 @@ public class LiteService {
     }
 
     public List<Map<String, Object>> getOrders(String role, List<Integer> cashierSessionPaidIds) throws Exception {
-        String sql = "SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders ";
+        String sql = "SELECT id, orderNumber, tableName, tableId, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted, splitLocked, ISNULL(orderType,'DINE_IN') orderType, ISNULL(promoDiscount,0) promoDiscount, ISNULL(manualDiscount,0) manualDiscount, discountReason, ISNULL(taxAmount,0) taxAmount, ISNULL(serviceCharge,0) serviceCharge, ISNULL(tipAmount,0) tipAmount, cancelReason, cancelledAt, promotionId FROM dbo.Orders ";
         if ("barista".equals(role)) {
             sql += "WHERE status IN ('Pending','Preparing','Ready') ";
         } else if ("cashier".equals(role)) {
@@ -1686,9 +1978,14 @@ public class LiteService {
             int total = 0;
             int orderNumber = 0;
             String tableName = "";
+            String orderType = ORDER_TYPE_DINE_IN;
             int customerId = 0;
             int alreadyEarned = 0;
-            try (PreparedStatement ps = con.prepareStatement("SELECT status,total,orderNumber,tableName,customerId,pointsEarned FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
+            int pointsRedeemed = 0;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT status,total,orderNumber,tableName,ISNULL(orderType,'DINE_IN') orderType,"
+                            + "customerId,pointsEarned,pointsRedeemed "
+                            + "FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
                 ps.setInt(1, id);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
@@ -1696,9 +1993,14 @@ public class LiteService {
                     total = rs.getInt("total");
                     orderNumber = rs.getInt("orderNumber");
                     tableName = rs.getString("tableName");
+                    orderType = rs.getString("orderType");
                     customerId = rs.getInt("customerId");
                     alreadyEarned = rs.getInt("pointsEarned");
+                    pointsRedeemed = rs.getInt("pointsRedeemed");
                 }
+            }
+            if (!isAllowedStatusTransition(currentStatus, status)) {
+                throw new IllegalArgumentException("Không thể chuyển từ \"" + currentStatus + "\" sang \"" + status + "\".");
             }
             if ("Preparing".equals(currentStatus) && "Ready".equals(status)) {
                 int requiredCups = cupCountForOrder(con, id);
@@ -1713,28 +2015,42 @@ public class LiteService {
                 deactivateUnavailableMenuItems(con, null);
                 markOrderItemsFullyPrepared(con, id);
             }
-            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status=? WHERE id=?")) {
+            // Optimistic: chỉ cập nhật nếu status vẫn đúng — chặn race hai thiết bị.
+            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status=? WHERE id=? AND status=?")) {
                 ps.setString(1, status);
                 ps.setInt(2, id);
-                ps.executeUpdate();
+                ps.setString(3, currentStatus);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Đơn vừa được cập nhật bởi thiết bị khác. Vui lòng tải lại.");
+                }
             }
 
             // ── Ghi nhận thanh toán ─────────────────────────────────────────
-            // Trước đây "Paid" chỉ là một chuỗi trong cột status: không biết trả
-            // bằng gì, khách đưa bao nhiêu, ai thu. Giờ mỗi lần trả tiền sinh ra
-            // một dòng Payments thật, và nếu là tiền mặt thì đẩy luôn vào sổ quỹ.
             if ("Paid".equals(status) && !"Paid".equals(currentStatus)) {
-                recordPayment(con, id, orderNumber, total, payment, actorRole, actorName);
+                int tipAmount = Math.max(0, payment == null ? 0 : readInt(payment.get("tipAmount"), 0));
+                if (tipAmount > 0 && stateValue(con, "tipEnabled", 1) <= 0) {
+                    tipAmount = 0;
+                }
+                if (tipAmount > 0) {
+                    try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET tipAmount=? WHERE id=?")) {
+                        ps.setInt(1, tipAmount);
+                        ps.setInt(2, id);
+                        ps.executeUpdate();
+                    }
+                }
+                recordPayment(con, id, orderNumber, total, tipAmount, payment, actorRole, actorName);
+
+                // Trừ điểm đổi thưởng tại Paid (hoặc bỏ qua nếu đơn cũ đã trừ lúc tạo).
+                if (customerId > 0 && pointsRedeemed > 0 && !hasPointTx(con, customerId, id, "REDEEM")) {
+                    new dao.CustomerDAO().applyPointChange(con, customerId, -pointsRedeemed, "REDEEM", id,
+                            "Đổi điểm giảm giá đơn #" + orderNumber, 0);
+                }
             }
 
             // ── Tích điểm khi khách thực sự trả tiền ────────────────────────
-            // Chỉ cộng đúng một lần: điều kiện alreadyEarned == 0 chặn trường hợp
-            // đơn bị chuyển Paid lần hai (thao tác lặp, bấm nhầm, retry mạng).
             if ("Paid".equals(status) && !"Paid".equals(currentStatus) && customerId > 0 && alreadyEarned == 0) {
                 int earned = model.Customer.pointsForSpend(total);
                 dao.CustomerDAO customerDao = new dao.CustomerDAO();
-                // totalSpent luôn cộng theo số tiền thật đã trả, kể cả khi earned = 0
-                // (đơn nhỏ hơn 10.000đ) — nếu không, hạng thành viên sẽ sai.
                 customerDao.applyPointChange(con, customerId, earned, "EARN", id,
                         "Tích điểm từ đơn #" + orderNumber, total);
                 try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET pointsEarned=? WHERE id=?")) {
@@ -1744,12 +2060,443 @@ public class LiteService {
                 }
             }
 
+            // Mang đi: sau Paid chuyển thẳng Cleared (không cần bồi bàn dọn bàn).
+            if ("Paid".equals(status) && ORDER_TYPE_TAKEAWAY.equals(orderType)) {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE dbo.Orders SET status='Cleared' WHERE id=? AND status='Paid'")) {
+                    ps.setInt(1, id);
+                    ps.executeUpdate();
+                }
+                status = "Cleared";
+            }
+
             insertSystemLog(con, actorRole, actorName, "ORDER_STATUS",
                     statusLogVi(actorRole, currentStatus, status, orderNumber, tableName),
                     statusLogEn(actorRole, currentStatus, status, orderNumber, tableName),
                     id);
             con.commit();
+            publishEvent("orders");
             return getOrderById(id);
+        }
+    }
+
+    private boolean isAllowedStatusTransition(String from, String to) {
+        if (from == null || to == null) return false;
+        if (from.equals(to)) return false;
+        switch (from) {
+            case "Pending": return "Preparing".equals(to);
+            case "Preparing": return "Ready".equals(to);
+            case "Ready": return "Served".equals(to);
+            case "Served": return "Paid".equals(to);
+            case "Paid": return "Cleared".equals(to);
+            default: return false;
+        }
+    }
+
+    /** Phát sự kiện SSE tới mọi listener đang mở. */
+    public void publishEvent(String eventType) {
+        String payload = readString(eventType, "orders");
+        List<java.util.function.Consumer<String>> snapshot;
+        synchronized (eventListeners) {
+            snapshot = new ArrayList<>(eventListeners);
+        }
+        for (java.util.function.Consumer<String> listener : snapshot) {
+            try { listener.accept(payload); } catch (Exception ignored) {}
+        }
+    }
+
+    public void addEventListener(java.util.function.Consumer<String> listener) {
+        if (listener != null) eventListeners.add(listener);
+    }
+
+    public void removeEventListener(java.util.function.Consumer<String> listener) {
+        eventListeners.remove(listener);
+    }
+
+    /**
+     * Hoàn tác side-effect của đơn (kho / cốc / điểm / mã KM). Idempotent:
+     * gọi lần hai không hoàn kho/cốc/điểm lần nữa nếu đã có bút toán đối ứng.
+     */
+    void reverseOrderSideEffects(Connection con, int orderId, boolean restock,
+                                 String actorRole, String actorName) throws Exception {
+        if (orderId <= 0) return;
+        // ── Hoàn kho: chỉ khi đã có OUT và chưa có IN đối ứng ──
+        if (restock) {
+            boolean hasOut = false;
+            boolean hasIn = false;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT type, COUNT(*) c FROM dbo.StockTransactions WHERE orderId=? AND type IN ('OUT','IN') GROUP BY type")) {
+                ps.setInt(1, orderId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        if ("OUT".equals(rs.getString("type"))) hasOut = rs.getInt("c") > 0;
+                        if ("IN".equals(rs.getString("type"))) hasIn = rs.getInt("c") > 0;
+                    }
+                }
+            }
+            if (hasOut && !hasIn) {
+                Map<String, Integer> outs = new LinkedHashMap<>();
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT ingredientId, SUM(-quantity) qty FROM dbo.StockTransactions "
+                                + "WHERE orderId=? AND type='OUT' GROUP BY ingredientId")) {
+                    ps.setInt(1, orderId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            int qty = rs.getInt("qty");
+                            if (qty > 0) outs.put(rs.getString("ingredientId"), qty);
+                        }
+                    }
+                }
+                for (Map.Entry<String, Integer> entry : outs.entrySet()) {
+                    try (PreparedStatement ps = con.prepareStatement(
+                            "UPDATE dbo.Inventory SET stock = stock + ? WHERE id=?")) {
+                        ps.setInt(1, entry.getValue());
+                        ps.setString(2, entry.getKey());
+                        ps.executeUpdate();
+                    }
+                    logStockChange(con, entry.getKey(), "IN", entry.getValue(), orderId, actorRole, actorName,
+                            "Hoàn kho khi hủy/hoàn đơn #" + orderId);
+                }
+                reactivateAvailableMenuItems(con);
+            }
+        }
+
+        // ── Hoàn cốc: chỉ nếu đã trừ lúc Ready và chưa hoàn ──
+        boolean cupsAlreadyReversed = false;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT COUNT(*) FROM dbo.SystemLogs WHERE refId=? AND actionType='ORDER_CUPS_REVERSE'")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                cupsAlreadyReversed = rs.next() && rs.getInt(1) > 0;
+            }
+        }
+        boolean wasReadyOrBeyond = false;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT COUNT(*) FROM dbo.StockTransactions WHERE orderId=? AND type='OUT'")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                wasReadyOrBeyond = rs.next() && rs.getInt(1) > 0;
+            }
+        }
+        if (wasReadyOrBeyond && !cupsAlreadyReversed) {
+            int cups = cupCountForOrder(con, orderId);
+            if (cups > 0) {
+                int current = stateValueForUpdate(con, "cupsAvailable", 0);
+                setStateValue(con, "cupsAvailable", current + cups);
+                insertSystemLog(con, actorRole, actorName, "ORDER_CUPS_REVERSE",
+                        "Hoàn " + cups + " cốc cho đơn #" + orderId,
+                        "Restored " + cups + " cups for order #" + orderId, orderId);
+            }
+        }
+
+        // ── Hoàn điểm: đảo EARN/REDEEM nếu chưa đảo ──
+        int customerId = 0;
+        int orderNumber = 0;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT customerId, orderNumber FROM dbo.Orders WHERE id=?")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    customerId = rs.getInt("customerId");
+                    orderNumber = rs.getInt("orderNumber");
+                }
+            }
+        }
+        if (customerId > 0) {
+            dao.CustomerDAO customerDao = new dao.CustomerDAO();
+            if (hasPointTx(con, customerId, orderId, "EARN") && !hasPointTx(con, customerId, orderId, "ADJUST")) {
+                int earned = 0;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT TOP 1 points FROM dbo.PointTransactions WHERE customerId=? AND orderId=? AND type='EARN' ORDER BY id DESC")) {
+                    ps.setInt(1, customerId);
+                    ps.setInt(2, orderId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) earned = rs.getInt(1);
+                    }
+                }
+                if (earned > 0) {
+                    customerDao.applyPointChange(con, customerId, -earned, "ADJUST", orderId,
+                            "Thu hồi điểm đơn #" + orderNumber + " (hủy/hoàn)", 0);
+                }
+            }
+            if (hasPointTx(con, customerId, orderId, "REDEEM") && !hasPointTxNote(con, customerId, orderId, "Hoàn điểm")) {
+                int redeemed = 0;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT TOP 1 ABS(points) FROM dbo.PointTransactions WHERE customerId=? AND orderId=? AND type='REDEEM' ORDER BY id DESC")) {
+                    ps.setInt(1, customerId);
+                    ps.setInt(2, orderId);
+                    try (ResultSet rs = ps.executeQuery()) {
+                        if (rs.next()) redeemed = rs.getInt(1);
+                    }
+                }
+                if (redeemed > 0) {
+                    customerDao.applyPointChange(con, customerId, redeemed, "ADJUST", orderId,
+                            "Hoàn điểm đơn #" + orderNumber + " (hủy/hoàn)", 0);
+                }
+            }
+        }
+
+        // ── Hoàn lượt khuyến mãi ──
+        releasePromotionForOrder(con, orderId);
+    }
+
+    private boolean hasPointTxNote(Connection con, int customerId, int orderId, String notePrefix) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT COUNT(*) FROM dbo.PointTransactions WHERE customerId=? AND orderId=? AND type='ADJUST' AND note LIKE ?")) {
+            ps.setInt(1, customerId);
+            ps.setInt(2, orderId);
+            ps.setString(3, notePrefix + "%");
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    private void reactivateAvailableMenuItems(Connection con) throws Exception {
+        Map<String, Integer> stockMap = getIngredientStockMap(con);
+        Map<Integer, Integer> reservedMap = getReservedMenuQuantityMap(con);
+        dao.RecipeDAO recipeDao = new dao.RecipeDAO();
+        java.util.Map<String, java.util.List<model.RecipeItem>> allRecipes = recipeDao.getAllRecipesMappedByMenuItemId();
+        try (PreparedStatement ps = con.prepareStatement("SELECT id FROM dbo.MenuItems WHERE active=0");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                int menuId = rs.getInt("id");
+                List<model.RecipeItem> recipes = allRecipes.getOrDefault(String.valueOf(menuId), new ArrayList<>());
+                if (recipes.isEmpty()) continue;
+                int available = availableQuantity(recipes, stockMap, reservedMap.getOrDefault(menuId, 0));
+                if (available <= 0) continue;
+                try (PreparedStatement up = con.prepareStatement("UPDATE dbo.MenuItems SET active=1 WHERE id=? AND active=0")) {
+                    up.setInt(1, menuId);
+                    up.executeUpdate();
+                }
+            }
+        }
+    }
+
+    private void releasePromotionForOrder(Connection con, int orderId) throws Exception {
+        int promotionId = 0;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT promotionId FROM dbo.PromotionRedemptions WHERE orderId=?")) {
+            ps.setInt(1, orderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) promotionId = rs.getInt(1);
+            }
+        }
+        if (promotionId <= 0) return;
+        try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.PromotionRedemptions WHERE orderId=?")) {
+            ps.setInt(1, orderId);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Promotions SET usedCount = CASE WHEN usedCount > 0 THEN usedCount - 1 ELSE 0 END WHERE id=?")) {
+            ps.setInt(1, promotionId);
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Orders SET promotionId=NULL WHERE id=? AND promotionId=?")) {
+            ps.setInt(1, orderId);
+            ps.setInt(2, promotionId);
+            ps.executeUpdate();
+        }
+    }
+
+    /**
+     * Hủy đơn. Khách chỉ Pending; barista/cashier/runner: Pending+Preparing;
+     * admin tới Served. Không hủy Paid/Cleared (dùng refund).
+     */
+    public Map<String, Object> cancelOrder(int id, String reason, String actorRole, String actorName) throws Exception {
+        String cleanReason = limitNote(readString(reason, "").trim());
+        if (cleanReason.isEmpty()) throw new IllegalArgumentException("Vui lòng nhập lý do hủy đơn.");
+        String role = normalizeActor(actorRole);
+        if (role.isEmpty()) role = "guest";
+        try (Connection con = db.getConnection()) {
+            con.setAutoCommit(false);
+            String status;
+            int orderNumber;
+            String tableName;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT status, orderNumber, tableName FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
+                ps.setInt(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
+                    status = rs.getString("status");
+                    orderNumber = rs.getInt("orderNumber");
+                    tableName = rs.getString("tableName");
+                }
+            }
+            if (!canCancelStatus(role, status)) {
+                throw new IllegalArgumentException("Không được hủy đơn ở trạng thái \"" + status + "\".");
+            }
+            reverseOrderSideEffects(con, id, true, role, actorName);
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Orders SET status='Cancelled', cancelReason=?, cancelledAt=?, "
+                            + "cancelledByRole=?, cancelledByName=? WHERE id=? AND status=?")) {
+                ps.setString(1, cleanReason);
+                ps.setString(2, nowSqlTimestamp());
+                ps.setString(3, role);
+                ps.setString(4, readString(actorName, role));
+                ps.setInt(5, id);
+                ps.setString(6, status);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Đơn vừa được cập nhật bởi thiết bị khác. Vui lòng tải lại.");
+                }
+            }
+            insertSystemLog(con, role, actorName, "ORDER_CANCEL",
+                    "Hủy đơn #" + orderNumber + " (" + tableName + "): " + cleanReason,
+                    "Cancelled order #" + orderNumber + " (" + tableName + "): " + cleanReason, id);
+            con.commit();
+            publishEvent("orders");
+            return getOrderById(id);
+        }
+    }
+
+    private boolean canCancelStatus(String role, String status) {
+        if ("Cancelled".equals(status) || "Refunded".equals(status) || "Paid".equals(status) || "Cleared".equals(status)) {
+            return false;
+        }
+        if ("guest".equals(role) || role.isEmpty()) return "Pending".equals(status);
+        if ("admin".equals(role)) {
+            return "Pending".equals(status) || "Preparing".equals(status)
+                    || "Ready".equals(status) || "Served".equals(status);
+        }
+        if ("barista".equals(role) || "runner".equals(role)) {
+            return "Pending".equals(status) || "Preparing".equals(status);
+        }
+        if ("cashier".equals(role)) {
+            return "Pending".equals(status) || "Preparing".equals(status)
+                    || "Ready".equals(status) || "Served".equals(status);
+        }
+        return false;
+    }
+
+    /**
+     * Hoàn tiền / void. Chỉ admin (hoặc cashier đã xác thực PIN admin ở tầng servlet).
+     * Chỉ từ Paid hoặc Cleared. restock=true → hoàn kho.
+     */
+    public Map<String, Object> refundOrder(int orderId, String reason, boolean restock,
+                                           String actorRole, String actorName) throws Exception {
+        String cleanReason = limitNote(readString(reason, "").trim());
+        if (cleanReason.isEmpty()) throw new IllegalArgumentException("Vui lòng nhập lý do hoàn tiền.");
+        String role = normalizeActor(actorRole);
+        if (!"admin".equals(role) && !"cashier".equals(role)) {
+            throw new IllegalArgumentException("Chỉ quản trị hoặc thu ngân được hoàn tiền.");
+        }
+        try (Connection con = db.getConnection()) {
+            con.setAutoCommit(false);
+            String status;
+            int orderNumber;
+            int total;
+            int tipAmount;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT status, orderNumber, total, ISNULL(tipAmount,0) tipAmount "
+                            + "FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
+                ps.setInt(1, orderId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
+                    status = rs.getString("status");
+                    orderNumber = rs.getInt("orderNumber");
+                    total = rs.getInt("total");
+                    tipAmount = rs.getInt("tipAmount");
+                }
+            }
+            if (!"Paid".equals(status) && !"Cleared".equals(status)) {
+                throw new IllegalArgumentException("Chỉ hoàn tiền đơn đã thanh toán (Paid/Cleared).");
+            }
+            try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.Refunds WHERE orderId=?")) {
+                ps.setInt(1, orderId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        throw new IllegalArgumentException("Đơn này đã được hoàn tiền.");
+                    }
+                }
+            }
+            int paymentId = 0;
+            String method = "CASH";
+            int payAmount = total;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT TOP 1 id, method, amount FROM dbo.Payments WHERE orderId=? ORDER BY id DESC")) {
+                ps.setInt(1, orderId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        paymentId = rs.getInt("id");
+                        method = rs.getString("method");
+                        payAmount = rs.getInt("amount");
+                    }
+                }
+            }
+            int refundAmount = payAmount + tipAmount;
+            int staffId = actorStaffId();
+            try (PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO dbo.Refunds (orderId,paymentId,amount,method,reason,restocked,actorRole,actorName,staffId) "
+                            + "VALUES (?,?,?,?,?,?,?,?,?)")) {
+                ps.setInt(1, orderId);
+                if (paymentId > 0) ps.setInt(2, paymentId); else ps.setNull(2, Types.INTEGER);
+                ps.setInt(3, refundAmount);
+                ps.setString(4, method);
+                ps.setString(5, cleanReason);
+                ps.setBoolean(6, restock);
+                ps.setString(7, role);
+                ps.setString(8, readString(actorName, role));
+                if (staffId > 0) ps.setInt(9, staffId); else ps.setNull(9, Types.INTEGER);
+                ps.executeUpdate();
+            }
+            if ("CASH".equals(method) && refundAmount > 0) {
+                int balance = currentCashBalance(con) - refundAmount;
+                insertCashEvent(con, "REFUND", -refundAmount, balance,
+                        "Hoàn tiền đơn #" + orderNumber + ": " + cleanReason,
+                        role, actorName, true, orderId, paymentId, staffId);
+            }
+            reverseOrderSideEffects(con, orderId, restock, role, actorName);
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Orders SET status='Refunded', cancelReason=?, cancelledAt=?, "
+                            + "cancelledByRole=?, cancelledByName=? WHERE id=? AND status=?")) {
+                ps.setString(1, cleanReason);
+                ps.setString(2, nowSqlTimestamp());
+                ps.setString(3, role);
+                ps.setString(4, readString(actorName, role));
+                ps.setInt(5, orderId);
+                ps.setString(6, status);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Đơn vừa được cập nhật bởi thiết bị khác. Vui lòng tải lại.");
+                }
+            }
+            insertSystemLog(con, role, actorName, "ORDER_REFUND",
+                    "Hoàn tiền đơn #" + orderNumber + " (" + refundAmount + "đ): " + cleanReason,
+                    "Refunded order #" + orderNumber + " (" + refundAmount + " VND): " + cleanReason, orderId);
+            con.commit();
+            publishEvent("orders");
+            return getOrderById(orderId);
+        }
+    }
+
+    private boolean hasPointTx(Connection con, int customerId, int orderId, String type) throws Exception {
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT COUNT(*) FROM dbo.PointTransactions WHERE customerId=? AND orderId=? AND type=?")) {
+            ps.setInt(1, customerId);
+            ps.setInt(2, orderId);
+            ps.setString(3, type);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    /** Điểm đang treo trên đơn chưa Paid (chưa có giao dịch REDEEM thật). */
+    private int pendingRedeemHold(Connection con, int customerId, int excludeOrderId) throws Exception {
+        if (customerId <= 0) return 0;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT ISNULL(SUM(o.pointsRedeemed),0) FROM dbo.Orders o "
+                        + "WHERE o.customerId=? AND o.pointsRedeemed > 0 "
+                        + "AND o.status IN " + ST_PRE_PAID + " "
+                        + "AND o.id <> ? "
+                        + "AND NOT EXISTS (SELECT 1 FROM dbo.PointTransactions pt "
+                        + "  WHERE pt.orderId = o.id AND pt.type = 'REDEEM')")) {
+            ps.setInt(1, customerId);
+            ps.setInt(2, excludeOrderId);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
         }
     }
 
@@ -1762,7 +2509,7 @@ public class LiteService {
      * UNIQUE(orderId) ở tầng CSDL là thứ thật sự chặn thu tiền hai lần;
      * kiểm tra dưới đây chỉ để trả về thông báo dễ hiểu.
      */
-    private void recordPayment(Connection con, int orderId, int orderNumber, int amount,
+    private void recordPayment(Connection con, int orderId, int orderNumber, int amount, int tipAmount,
                                Map<String, Object> payment, String actorRole, String actorName) throws Exception {
         try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM dbo.Payments WHERE orderId=?")) {
             ps.setInt(1, orderId);
@@ -1772,16 +2519,31 @@ public class LiteService {
         }
 
         Map<String, Object> info = payment == null ? new LinkedHashMap<String, Object>() : payment;
-        String method = readString(info.get("method"), "CASH").toUpperCase();
-        if (!"CASH".equals(method) && !"TRANSFER".equals(method)) method = "CASH";
+        String method = readString(info.get("method"), "CASH").toUpperCase(Locale.ROOT).trim();
+        if (!"CASH".equals(method) && !"TRANSFER".equals(method)) {
+            throw new IllegalArgumentException("Hình thức thanh toán không hợp lệ. Chỉ chấp nhận CASH hoặc TRANSFER.");
+        }
 
+        int due = amount + Math.max(0, tipAmount);
         int received = readInt(info.get("receivedAmount"), 0);
-        if (received < amount) received = amount;          // chuyển khoản hoặc đưa vừa đủ
-        int change = Math.max(0, received - amount);
+        if ("CASH".equals(method)) {
+            if (received < due) {
+                throw new IllegalArgumentException("Số tiền khách đưa (" + received + ") nhỏ hơn số phải thu (" + due + ").");
+            }
+        } else {
+            // Chuyển khoản: mặc định nhận đúng số, không nhận âm.
+            if (received <= 0) received = due;
+            if (received < due) {
+                throw new IllegalArgumentException("Số tiền chuyển khoản chưa đủ số phải thu.");
+            }
+        }
+        int change = Math.max(0, received - due);
         int staffId = readInt(info.get("staffId"), 0);
         if (staffId <= 0) staffId = actorStaffId();
         String cashierUser = readString(info.get("cashierUsername"), "");
+        if (cashierUser.isEmpty()) cashierUser = readString(actorRole, "");
         String cashierName = readString(info.get("cashierName"), readString(actorName, ""));
+        if (cashierName.isEmpty()) cashierName = cashierUser;
 
         int paymentId;
         try (PreparedStatement ps = con.prepareStatement(
@@ -1795,18 +2557,23 @@ public class LiteService {
             if (cashierUser.isEmpty()) ps.setNull(6, java.sql.Types.VARCHAR); else ps.setString(6, cashierUser);
             ps.setString(7, cashierName);
             if (staffId > 0) ps.setInt(8, staffId); else ps.setNull(8, java.sql.Types.INTEGER);
-            ps.setString(9, limitNote(readString(info.get("note"), "")));
+            String payNote = limitNote(readString(info.get("note"), ""));
+            if (tipAmount > 0) {
+                payNote = (payNote.isEmpty() ? "" : payNote + " | ") + "Tip " + tipAmount;
+            }
+            ps.setString(9, payNote);
             ps.executeUpdate();
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 paymentId = keys.next() ? keys.getInt(1) : 0;
             }
         }
 
-        // Chuyển khoản không làm tăng tiền mặt trong ngăn kéo.
-        if ("CASH".equals(method) && amount > 0) {
-            int balance = currentCashBalance(con) + amount;
-            insertCashEvent(con, "PAYMENT", amount, balance,
-                    "Thu tiền đơn #" + orderNumber, actorRole, cashierName, true,
+        // Chuyển khoản không làm tăng tiền mặt trong ngăn kéo. Tip tiền mặt vào quỹ.
+        if ("CASH".equals(method) && due > 0) {
+            int balance = currentCashBalance(con) + due;
+            insertCashEvent(con, "PAYMENT", due, balance,
+                    "Thu tiền đơn #" + orderNumber + (tipAmount > 0 ? (" (gồm tip " + tipAmount + ")") : ""),
+                    actorRole, cashierName, true,
                     orderId, paymentId, staffId);
         }
 
@@ -1879,7 +2646,8 @@ public class LiteService {
         String to = readString(toDate, appToday().toString());
         String sql = "SELECT t.floorNo, COUNT(DISTINCT o.id) AS soDon, ISNULL(SUM(o.total),0) AS doanhThu "
                 + "FROM dbo.Orders o JOIN dbo.Tables t ON t.id = o.tableId "
-                + "WHERE o.status = 'Paid' AND CAST(o.createdAt AS DATE) BETWEEN ? AND ? "
+                + "WHERE o.status IN " + ST_REVENUE + " "
+                + "AND CAST(ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=o.id), o.createdAt) AS DATE) BETWEEN ? AND ? "
                 + "GROUP BY t.floorNo ORDER BY t.floorNo";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, from);
@@ -1896,9 +2664,10 @@ public class LiteService {
 
     private void deductInventoryForOrder(Connection con, int orderId, String actorRole, String actorName) throws Exception {
         Map<String, Integer> deductions = new LinkedHashMap<>();
+        // menuItemId đã là INT — JOIN trực tiếp, không CONVERT VARCHAR.
         String sql = "SELECT ri.ingredientId, SUM(ri.quantity * oi.quantity) usedQuantity "
                 + "FROM dbo.OrderItems oi "
-                + "JOIN dbo.RecipeItems ri ON ri.menuItemId = CONVERT(VARCHAR(50), oi.menuItemId) "
+                + "JOIN dbo.RecipeItems ri ON ri.menuItemId = oi.menuItemId "
                 + "WHERE oi.orderId=? "
                 + "GROUP BY ri.ingredientId";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
@@ -1912,14 +2681,30 @@ public class LiteService {
         for (Map.Entry<String, Integer> entry : deductions.entrySet()) {
             int amount = entry.getValue();
             if (amount <= 0) continue;
-            try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Inventory SET stock = CASE WHEN stock >= ? THEN stock - ? ELSE 0 END WHERE id=?")) {
-                ps.setInt(1, amount);
-                ps.setInt(2, amount);
-                ps.setString(3, entry.getKey());
-                ps.executeUpdate();
+            int stockBefore = 0;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT stock FROM dbo.Inventory WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
+                ps.setString(1, entry.getKey());
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) {
+                        throw new IllegalArgumentException("Thiếu nguyên liệu trong kho: " + entry.getKey());
+                    }
+                    stockBefore = rs.getInt("stock");
+                }
             }
-            // Ghi sổ NGAY trong cùng transaction. Trừ kho mà không ghi sổ thì
-            // sau này kho lệch sẽ không có cách nào truy ra nguyên nhân.
+            if (stockBefore < amount) {
+                throw new IllegalArgumentException("Không đủ tồn kho để xuất cho đơn (cần " + amount
+                        + ", còn " + stockBefore + ").");
+            }
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Inventory SET stock = stock - ? WHERE id=? AND stock >= ?")) {
+                ps.setInt(1, amount);
+                ps.setString(2, entry.getKey());
+                ps.setInt(3, amount);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Kho vừa bị cập nhật bởi thiết bị khác. Thử lại.");
+                }
+            }
             logStockChange(con, entry.getKey(), "OUT", -amount, orderId, actorRole, actorName,
                     "Xuất kho cho đơn #" + orderId);
         }
@@ -2070,12 +2855,42 @@ public class LiteService {
         return stock;
     }
 
+    /** Khoá hàng Inventory trong transaction đặt đơn — chống oversell đồng thời. */
+    private Map<String, Integer> getIngredientStockMapForUpdate(Connection con) throws Exception {
+        Map<String, Integer> stock = new LinkedHashMap<>();
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT id, stock FROM dbo.Inventory WITH (UPDLOCK, HOLDLOCK) ORDER BY id");
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                stock.put(rs.getString("id"), Math.max(0, rs.getInt("stock")));
+            }
+        }
+        return stock;
+    }
+
+    /** Nguyên liệu đã được “giữ” bởi đơn Pending/Preparing (công thức × số lượng). */
+    private Map<String, Integer> getReservedIngredientQuantityMap(Connection con) throws Exception {
+        Map<String, Integer> reserved = new LinkedHashMap<>();
+        String sql = "SELECT ri.ingredientId, SUM(ri.quantity * oi.quantity) qty "
+                + "FROM dbo.OrderItems oi "
+                + "JOIN dbo.Orders o ON o.id = oi.orderId "
+                + "JOIN dbo.RecipeItems ri ON ri.menuItemId = oi.menuItemId "
+                + "WHERE o.status IN " + ST_RESERVING + " "
+                + "GROUP BY ri.ingredientId";
+        try (PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                reserved.put(rs.getString("ingredientId"), Math.max(0, rs.getInt("qty")));
+            }
+        }
+        return reserved;
+    }
+
     private Map<Integer, Integer> getReservedMenuQuantityMap(Connection con) throws Exception {
         Map<Integer, Integer> reserved = new LinkedHashMap<>();
         String sql = "SELECT oi.menuItemId, SUM(oi.quantity) quantity "
                 + "FROM dbo.OrderItems oi "
                 + "JOIN dbo.Orders o ON o.id = oi.orderId "
-                + "WHERE o.status IN ('Pending','Preparing') AND oi.menuItemId IS NOT NULL AND oi.menuItemId > 0 "
+                + "WHERE o.status IN " + ST_RESERVING + " AND oi.menuItemId IS NOT NULL AND oi.menuItemId > 0 "
                 + "GROUP BY oi.menuItemId";
         try (PreparedStatement ps = con.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
@@ -2161,10 +2976,15 @@ public class LiteService {
             String tableName;
             int sourceCustomerId;
             int sourceTableId;
-            try (PreparedStatement ps = con.prepareStatement("SELECT orderNumber, tableName, pointsRedeemed, customerId, tableId FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=? AND status='Served'")) {
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT orderNumber, tableName, pointsRedeemed, customerId, tableId, splitLocked "
+                            + "FROM dbo.Orders WITH (UPDLOCK, ROWLOCK) WHERE id=? AND status='Served'")) {
                 ps.setInt(1, sourceOrderId);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) throw new IllegalArgumentException("Chỉ tách được hóa đơn đang chờ thanh toán.");
+                    if (rs.getBoolean("splitLocked")) {
+                        throw new IllegalArgumentException("Hóa đơn này đã bị khóa tách (đã tách trước đó).");
+                    }
                     // Đơn đã dùng điểm giảm giá thì không tách. Tách ra sẽ phải
                     // chia phần giảm giá giữa hai đơn — chưa có quy tắc nghiệp vụ
                     // cho việc đó, nên chặn thẳng còn hơn chia sai rồi lệch tiền.
@@ -2685,8 +3505,10 @@ public class LiteService {
      */
     public String resolveShiftRole(int staffId) throws Exception {
         if (staffId <= 0) return "";
+        // Chỉ nhận ca đang xếp lịch / đang làm; bỏ qua Vắng mặt / Nghỉ.
         String sql = "SELECT TOP 1 sh.assignedRole FROM dbo.Shifts sh "
                 + "WHERE sh.staffId = ? AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL "
+                + "AND (sh.status IS NULL OR sh.status NOT IN (N'Vắng', N'Vắng mặt', N'Nghỉ', N'Cancelled', N'Absent')) "
                 + "ORDER BY sh.hours";
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, staffId);
@@ -2955,7 +3777,7 @@ public class LiteService {
     }
 
     public Map<String, Object> getOrderById(int id) throws Exception {
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted FROM dbo.Orders WHERE id=?")) {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement("SELECT id, orderNumber, tableName, tableId, customerPhone, status, total, subtotal, discountAmount, pointsEarned, pointsRedeemed, customerId, note, createdAt, invoicePrinted, splitLocked, ISNULL(orderType,'DINE_IN') orderType, ISNULL(promoDiscount,0) promoDiscount, ISNULL(manualDiscount,0) manualDiscount, discountReason, ISNULL(taxAmount,0) taxAmount, ISNULL(serviceCharge,0) serviceCharge, ISNULL(tipAmount,0) tipAmount, cancelReason, cancelledAt, promotionId FROM dbo.Orders WHERE id=?")) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) return null;
@@ -2963,6 +3785,113 @@ public class LiteService {
                 order.put("items", getOrderItems(id));
                 return order;
             }
+        }
+    }
+
+    public Map<String, Object> getStoreTaxConfig() throws Exception {
+        try (Connection con = db.getConnection()) {
+            Map<String, Object> cfg = new LinkedHashMap<>();
+            cfg.put("vatPercent", stateValue(con, "vatPercent", 8));
+            cfg.put("serviceChargePercent", stateValue(con, "serviceChargePercent", 0));
+            cfg.put("tipEnabled", stateValue(con, "tipEnabled", 1) > 0);
+            return cfg;
+        }
+    }
+
+    public Map<String, Object> saveStoreTaxConfig(Map<String, Object> data) throws Exception {
+        try (Connection con = db.getConnection()) {
+            ensureState(con, "vatPercent", 8);
+            ensureState(con, "serviceChargePercent", 0);
+            ensureState(con, "tipEnabled", 1);
+            setStateValue(con, "vatPercent", Math.max(0, Math.min(100, readInt(data.get("vatPercent"), 8))));
+            setStateValue(con, "serviceChargePercent", Math.max(0, Math.min(100, readInt(data.get("serviceChargePercent"), 0))));
+            setStateValue(con, "tipEnabled", readBoolean(data.get("tipEnabled"), true) ? 1 : 0);
+            return getStoreTaxConfig();
+        }
+    }
+
+    public List<Map<String, Object>> getPromotions() throws Exception {
+        String sql = "SELECT id, code, nameVi, nameEn, discountType, discountValue, minSubtotal, maxDiscount, "
+                + "startAt, endAt, maxUses, usedCount, active, createdAt FROM dbo.Promotions ORDER BY id DESC";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rows(rs);
+        }
+    }
+
+    public Map<String, Object> savePromotion(Map<String, Object> data) throws Exception {
+        int id = readInt(data.get("id"), 0);
+        String code = readString(data.get("code"), "").trim().toUpperCase(Locale.ROOT);
+        if (code.isEmpty()) throw new IllegalArgumentException("Mã khuyến mãi không được trống.");
+        String nameVi = readString(data.get("nameVi"), code);
+        String nameEn = readString(data.get("nameEn"), code);
+        String discountType = readString(data.get("discountType"), "PERCENT").toUpperCase(Locale.ROOT);
+        if (!"PERCENT".equals(discountType) && !"AMOUNT".equals(discountType)) {
+            throw new IllegalArgumentException("Loại giảm giá phải là PERCENT hoặc AMOUNT.");
+        }
+        int discountValue = Math.max(0, readInt(data.get("discountValue"), 0));
+        int minSubtotal = Math.max(0, readInt(data.get("minSubtotal"), 0));
+        int maxDiscount = Math.max(0, readInt(data.get("maxDiscount"), 0));
+        int maxUses = Math.max(0, readInt(data.get("maxUses"), 0));
+        boolean active = readBoolean(data.get("active"), true);
+        String startAt = readString(data.get("startAt"), "");
+        String endAt = readString(data.get("endAt"), "");
+        try (Connection con = db.getConnection()) {
+            if (id > 0) {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE dbo.Promotions SET code=?, nameVi=?, nameEn=?, discountType=?, discountValue=?, "
+                                + "minSubtotal=?, maxDiscount=?, startAt=?, endAt=?, maxUses=?, active=? WHERE id=?")) {
+                    ps.setString(1, code);
+                    ps.setString(2, nameVi);
+                    ps.setString(3, nameEn);
+                    ps.setString(4, discountType);
+                    ps.setInt(5, discountValue);
+                    ps.setInt(6, minSubtotal);
+                    ps.setInt(7, maxDiscount);
+                    if (startAt.isEmpty()) ps.setNull(8, Types.TIMESTAMP); else ps.setString(8, startAt);
+                    if (endAt.isEmpty()) ps.setNull(9, Types.TIMESTAMP); else ps.setString(9, endAt);
+                    ps.setInt(10, maxUses);
+                    ps.setBoolean(11, active);
+                    ps.setInt(12, id);
+                    if (ps.executeUpdate() == 0) throw new IllegalArgumentException("Không tìm thấy khuyến mãi.");
+                }
+            } else {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "INSERT INTO dbo.Promotions (code,nameVi,nameEn,discountType,discountValue,minSubtotal,maxDiscount,startAt,endAt,maxUses,active) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                    ps.setString(1, code);
+                    ps.setString(2, nameVi);
+                    ps.setString(3, nameEn);
+                    ps.setString(4, discountType);
+                    ps.setInt(5, discountValue);
+                    ps.setInt(6, minSubtotal);
+                    ps.setInt(7, maxDiscount);
+                    if (startAt.isEmpty()) ps.setNull(8, Types.TIMESTAMP); else ps.setString(8, startAt);
+                    if (endAt.isEmpty()) ps.setNull(9, Types.TIMESTAMP); else ps.setString(9, endAt);
+                    ps.setInt(10, maxUses);
+                    ps.setBoolean(11, active);
+                    ps.executeUpdate();
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        if (keys.next()) id = keys.getInt(1);
+                    }
+                }
+            }
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT id, code, nameVi, nameEn, discountType, discountValue, minSubtotal, maxDiscount, "
+                            + "startAt, endAt, maxUses, usedCount, active, createdAt FROM dbo.Promotions WHERE id=?")) {
+                ps.setInt(1, id);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? row(rs) : null;
+                }
+            }
+        }
+    }
+
+    public void deletePromotion(int id) throws Exception {
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Promotions SET active=0 WHERE id=?")) {
+            ps.setInt(1, id);
+            if (ps.executeUpdate() == 0) throw new IllegalArgumentException("Không tìm thấy khuyến mãi.");
         }
     }
 
@@ -3069,10 +3998,13 @@ public class LiteService {
                 }
 
                 if (!nextStatus.equals(currentStatus)) {
-                    try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status=? WHERE id=?")) {
+                    try (PreparedStatement ps = con.prepareStatement("UPDATE dbo.Orders SET status=? WHERE id=? AND status=?")) {
                         ps.setString(1, nextStatus);
                         ps.setInt(2, orderId);
-                        ps.executeUpdate();
+                        ps.setString(3, currentStatus);
+                        if (ps.executeUpdate() == 0) {
+                            throw new IllegalArgumentException("Đơn vừa được cập nhật bởi thiết bị khác. Vui lòng tải lại.");
+                        }
                     }
                     insertSystemLog(con, actorRole, actorName, "ORDER_STATUS",
                             statusLogVi(actorRole, currentStatus, nextStatus, orderNumber, tableName),
@@ -3146,18 +4078,30 @@ public class LiteService {
             stats.put("unclearedOrderCount", paid);
             stats.put("clearedOrderCount", cleared);
             stats.put("activeOrderCount", pending + preparing + ready + served + paid);
-            stats.put("revenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared')"));
-            stats.put("revenueToday", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?", today, tomorrow));
-            stats.put("revenueMonth", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?", monthStart, tomorrow));
-            stats.put("revenueYear", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?", yearStart, tomorrow));
+            int cancelled = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Cancelled'");
+            int refunded = scalar(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status = 'Refunded'");
+            stats.put("cancelledOrderCount", cancelled);
+            stats.put("refundedOrderCount", refunded);
+            stats.put("cancelledToday", scalarBetween(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status='Cancelled' AND cancelledAt >= ? AND cancelledAt < ?", today, tomorrow));
+            stats.put("refundedToday", scalarBetween(con, "SELECT COUNT(*) FROM dbo.Orders WHERE status='Refunded' AND cancelledAt >= ? AND cancelledAt < ?", today, tomorrow));
+            stats.put("taxToday", scalarBetween(con, "SELECT ISNULL(SUM(ISNULL(taxAmount,0)),0) FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt) >= ? AND ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt) < ?", today, tomorrow));
+            stats.put("revenueBeforeTaxToday", scalarBetween(con, "SELECT ISNULL(SUM(total - ISNULL(taxAmount,0)),0) FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt) >= ? AND ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt) < ?", today, tomorrow));
+            stats.put("revenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN " + ST_REVENUE + ""));
+            // Ngày doanh thu theo lúc thu tiền (Payments.paidAt), fallback createdAt cho dữ liệu seed cũ.
+            String paidAtExpr = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt)";
+            stats.put("revenueToday", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + paidAtExpr + " >= ? AND " + paidAtExpr + " < ?", today, tomorrow));
+            stats.put("revenueMonth", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + paidAtExpr + " >= ? AND " + paidAtExpr + " < ?", monthStart, tomorrow));
+            stats.put("revenueYear", scalarBetween(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + paidAtExpr + " >= ? AND " + paidAtExpr + " < ?", yearStart, tomorrow));
             stats.put("unpaidRevenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status = 'Served'"));
             stats.put("openRevenue", scalar(con, "SELECT ISNULL(SUM(total),0) FROM dbo.Orders WHERE status IN ('Pending','Preparing','Ready')"));
-            stats.put("soldItemCount", scalar(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared')"));
-            stats.put("soldItemToday", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?", today, tomorrow));
-            stats.put("soldItemMonth", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?", monthStart, tomorrow));
-            stats.put("soldItemYear", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?", yearStart, tomorrow));
-            stats.put("bestSeller", firstRow(con, "SELECT TOP 1 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
-            stats.put("topProducts", queryRows(con, "SELECT TOP 8 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
+            // openRevenue stays barista-pipeline only; Cancelled/Refunded excluded by omission.
+            stats.put("soldItemCount", scalar(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + ""));
+            String oiPaidAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=o.id), o.createdAt)";
+            stats.put("soldItemToday", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + " AND " + oiPaidAt + " >= ? AND " + oiPaidAt + " < ?", today, tomorrow));
+            stats.put("soldItemMonth", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + " AND " + oiPaidAt + " >= ? AND " + oiPaidAt + " < ?", monthStart, tomorrow));
+            stats.put("soldItemYear", scalarBetween(con, "SELECT ISNULL(SUM(oi.quantity),0) FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + " AND " + oiPaidAt + " >= ? AND " + oiPaidAt + " < ?", yearStart, tomorrow));
+            stats.put("bestSeller", firstRow(con, "SELECT TOP 1 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + " GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
+            stats.put("topProducts", queryRows(con, "SELECT TOP 8 oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + " GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC"));
             stats.put("topProductsByRange", getTopProductsByRangeMap(con, customStart, customEnd));
             stats.put("rangeDetails", getRangeDetailsMap(con, customStart, customEnd));
             stats.put("revenueSeries", getRevenueSeriesMap(con, customStart, customEnd));
@@ -3277,7 +4221,8 @@ public class LiteService {
 
     private Map<String, Object> rangeDetailBetween(Connection con, LocalDate start, LocalDate endExclusive) throws Exception {
         Map<String, Object> detail = new LinkedHashMap<>();
-        String orderSql = "SELECT COUNT(*) paidOrders, ISNULL(SUM(total),0) revenue FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ?";
+        String saleAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt)";
+        String orderSql = "SELECT COUNT(*) paidOrders, ISNULL(SUM(total),0) revenue FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + saleAt + " >= ? AND " + saleAt + " < ?";
         try (PreparedStatement ps = con.prepareStatement(orderSql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
@@ -3288,7 +4233,8 @@ public class LiteService {
                 }
             }
         }
-        String itemSql = "SELECT ISNULL(SUM(oi.quantity),0) soldProducts FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ?";
+        String oiSaleAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=o.id), o.createdAt)";
+        String itemSql = "SELECT ISNULL(SUM(oi.quantity),0) soldProducts FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId WHERE o.status IN " + ST_REVENUE + " AND " + oiSaleAt + " >= ? AND " + oiSaleAt + " < ?";
         try (PreparedStatement ps = con.prepareStatement(itemSql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
@@ -3310,7 +4256,7 @@ public class LiteService {
     }
 
     private YearMonth firstPaidMonth(Connection con, YearMonth fallback) throws Exception {
-        String sql = "SELECT MIN(CONVERT(date, createdAt)) firstDate FROM dbo.Orders WHERE status IN ('Paid','Cleared')";
+        String sql = "SELECT MIN(CONVERT(date, createdAt)) firstDate FROM dbo.Orders WHERE status IN " + ST_REVENUE + "";
         try (Statement st = con.createStatement(); ResultSet rs = st.executeQuery(sql)) {
             if (rs.next()) {
                 LocalDate date = readDate(rs.getObject("firstDate"));
@@ -3325,9 +4271,10 @@ public class LiteService {
         for (int hour = 0; hour < 24; hour++) {
             values.put(String.format(Locale.ROOT, "%02d:00", hour), 0);
         }
-        String sql = "SELECT DATEPART(hour, createdAt) saleHour, ISNULL(SUM(total),0) revenue "
-                + "FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ? "
-                + "GROUP BY DATEPART(hour, createdAt)";
+        String saleAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt)";
+        String sql = "SELECT DATEPART(hour, " + saleAt + ") saleHour, ISNULL(SUM(total),0) revenue "
+                + "FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + saleAt + " >= ? AND " + saleAt + " < ? "
+                + "GROUP BY DATEPART(hour, " + saleAt + ")";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
@@ -3345,9 +4292,10 @@ public class LiteService {
         for (LocalDate day = start; day.isBefore(endExclusive); day = day.plusDays(1)) {
             values.put(day.toString(), 0);
         }
-        String sql = "SELECT CONVERT(date, createdAt) saleDate, ISNULL(SUM(total),0) revenue "
-                + "FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ? "
-                + "GROUP BY CONVERT(date, createdAt)";
+        String saleAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt)";
+        String sql = "SELECT CONVERT(date, " + saleAt + ") saleDate, ISNULL(SUM(total),0) revenue "
+                + "FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + saleAt + " >= ? AND " + saleAt + " < ? "
+                + "GROUP BY CONVERT(date, " + saleAt + ")";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atStartOfDay()));
@@ -3366,9 +4314,10 @@ public class LiteService {
         for (YearMonth month = start; month.isBefore(endExclusive); month = month.plusMonths(1)) {
             values.put(month.toString(), 0);
         }
-        String sql = "SELECT CONVERT(char(7), createdAt, 120) saleMonth, ISNULL(SUM(total),0) revenue "
-                + "FROM dbo.Orders WHERE status IN ('Paid','Cleared') AND createdAt >= ? AND createdAt < ? "
-                + "GROUP BY CONVERT(char(7), createdAt, 120)";
+        String saleAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=dbo.Orders.id), createdAt)";
+        String sql = "SELECT CONVERT(char(7), " + saleAt + ", 120) saleMonth, ISNULL(SUM(total),0) revenue "
+                + "FROM dbo.Orders WHERE status IN " + ST_REVENUE + " AND " + saleAt + " >= ? AND " + saleAt + " < ? "
+                + "GROUP BY CONVERT(char(7), " + saleAt + ", 120)";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atDay(1).atStartOfDay()));
             ps.setTimestamp(2, Timestamp.valueOf(endExclusive.atDay(1).atStartOfDay()));
@@ -3383,9 +4332,10 @@ public class LiteService {
     }
 
     private List<Map<String, Object>> topProductsBetween(Connection con, LocalDate start, LocalDate endExclusive, int limit) throws Exception {
+        String oiSaleAt = "ISNULL((SELECT TOP 1 p.paidAt FROM dbo.Payments p WHERE p.orderId=o.id), o.createdAt)";
         String sql = "SELECT TOP " + Math.max(1, limit) + " oi.itemName, SUM(oi.quantity) quantity, SUM(oi.price * oi.quantity) revenue "
                 + "FROM dbo.OrderItems oi JOIN dbo.Orders o ON o.id=oi.orderId "
-                + "WHERE o.status IN ('Paid','Cleared') AND o.createdAt >= ? AND o.createdAt < ? "
+                + "WHERE o.status IN " + ST_REVENUE + " AND " + oiSaleAt + " >= ? AND " + oiSaleAt + " < ? "
                 + "GROUP BY oi.itemName ORDER BY SUM(oi.quantity) DESC, SUM(oi.price * oi.quantity) DESC";
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));

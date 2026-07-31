@@ -11,6 +11,7 @@
     <servlet>
         <servlet-name>LiteApiServlet</servlet-name>
         <servlet-class>servlet.LiteApiServlet</servlet-class>
+        <async-supported>true</async-supported>
         <multipart-config>
             <max-file-size>5242880</max-file-size>
             <max-request-size>10485760</max-request-size>

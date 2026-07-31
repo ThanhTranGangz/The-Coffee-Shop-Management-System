@@ -140,6 +140,10 @@
                             <span>${t('revenue')} <b>${money(activeDetails.revenue)}</b></span>
                             <span>${t('soldProducts')} <b>${num(activeDetails.soldProducts)}</b></span>
                             <span>${t('paidOrders')} <b>${num(activeDetails.paidOrders)}</b></span>
+                            <span>${t('cancelledOrders')} <b>${num(dashboardData.cancelledOrderCount)} / ${t('today')} ${num(dashboardData.cancelledToday)}</b></span>
+                            <span>${t('refundedOrders')} <b>${num(dashboardData.refundedOrderCount)} / ${t('today')} ${num(dashboardData.refundedToday)}</b></span>
+                            <span>${t('taxAmount')} <b>${money(dashboardData.taxToday)}</b></span>
+                            <span>${t('revenueBeforeTax')} <b>${money(dashboardData.revenueBeforeTaxToday)}</b></span>
                         </div>
                     </article>
                     <article>
@@ -286,12 +290,13 @@
         function tableTile(table) {
             const status = String(table.status || '');
             const busy = Boolean(table.busy);
+            const openCount = Number(table.openOrderCount || 0);
             const label = status === 'Paid' ? t('needsCleaning') : (status === 'Served' ? t('unpaid') : (busy ? statusText(status) : t('available')));
             return `
                 <div class="table-tile ${busy ? 'busy' : 'free'} ${status === 'Paid' ? 'cleaning' : ''}">
                     <b>${escapeHtml(formatTableShort(table.name))}</b>
                     <span>${escapeHtml(label)}</span>
-                    ${table.orderNumber ? `<em>#${table.orderNumber}</em>` : ''}
+                    ${openCount > 1 ? `<em>${openCount} ${t('openOrdersBadge')}</em>` : (table.orderNumber ? `<em>#${table.orderNumber}</em>` : '')}
                 </div>
             `;
         }

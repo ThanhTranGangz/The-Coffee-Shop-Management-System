@@ -178,16 +178,24 @@ public class RecipeDAO {
     private void ensureRecipeTable() {
         DBContext db = new DBContext();
         // Câu lệnh SQL kiểm tra sự tồn tại của bảng và khởi tạo bảng mới nếu chưa có
+        // menuItemId phải INT khớp MenuItems.id / LiteService — VARCHAR gây lệch kiểu và JOIN sai.
         String sql = "IF OBJECT_ID('dbo.RecipeItems','U') IS NULL " +
                      "CREATE TABLE dbo.RecipeItems (" +
                      "id VARCHAR(50) PRIMARY KEY, " +
-                     "menuItemId VARCHAR(50) NOT NULL, " +
+                     "menuItemId INT NOT NULL, " +
                      "ingredientId VARCHAR(50) NOT NULL, " +
                      "quantity INT NOT NULL" +
                      ");";
         try (Connection con = db.getConnection();
              Statement st = con.createStatement()) {
             st.execute(sql);
+            try {
+                st.execute("IF COL_LENGTH('dbo.RecipeItems','menuItemId') IS NOT NULL "
+                        + "AND (SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
+                        + "WHERE TABLE_SCHEMA='dbo' AND TABLE_NAME='RecipeItems' AND COLUMN_NAME='menuItemId') = 'varchar' "
+                        + "BEGIN DELETE FROM dbo.RecipeItems WHERE menuItemId LIKE 'm%'; "
+                        + "ALTER TABLE dbo.RecipeItems ALTER COLUMN menuItemId INT NOT NULL; END");
+            } catch (Exception ignored) {}
         } catch (Exception e) {
             System.err.println("RecipeDAO.ensureRecipeTable skipped: " + e.getMessage());
         }

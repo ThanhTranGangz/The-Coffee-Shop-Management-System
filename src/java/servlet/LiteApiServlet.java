@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +43,7 @@ public class LiteApiServlet extends HttpServlet {
     private static final String ATTR_CUSTOMER_ID = "customerId";
     private static final String ATTR_STAFF_ID = "staffId";
     private static final String ATTR_STAFF_NAME = "staffName";
+    private static final String ATTR_USERNAME = "username";
     /** PIN quản trị. Trước đây viết thẳng "8888" trong thân hàm ở nhiều chỗ. */
     private static final String ADMIN_PIN = "8888";
     private final dao.CustomerDAO customerDao = new dao.CustomerDAO();
@@ -50,6 +52,10 @@ public class LiteApiServlet extends HttpServlet {
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String path = req.getPathInfo() == null ? "/" : req.getPathInfo();
         try {
+            if ("/events".equals(path)) {
+                handleSse(req, resp);
+                return;
+            }
             if ("/tables/qr".equals(path)) {
                 writeTableQr(req, resp);
                 return;
@@ -84,8 +90,8 @@ public class LiteApiServlet extends HttpServlet {
                     break;
                 case "/payments/order": {
                     String payRole = role(req);
-                    if (payRole.isEmpty()) {
-                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ nhân viên xem được thông tin thanh toán.");
+                    if (payRole.isEmpty() || "runner".equals(payRole) || "barista".equals(payRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ thu ngân hoặc admin xem được thông tin thanh toán.");
                         break;
                     }
                     Map<String, Object> pay = service.getPaymentByOrder(readInt(req.getParameter("orderId"), 0));
@@ -152,7 +158,11 @@ public class LiteApiServlet extends HttpServlet {
                     if (meId <= 0) {
                         error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Bạn chưa đăng nhập.");
                     } else {
-                        resp.getWriter().write(JsonUtils.toJson(customerDao.getOrderHistory(meId, readInt(req.getParameter("limit"), 50))));
+                        resp.getWriter().write(JsonUtils.toJson(customerDao.getOrderHistory(
+                                meId,
+                                readInt(req.getParameter("limit"), 50),
+                                str(req.getParameter("from")),
+                                str(req.getParameter("to")))));
                     }
                     break;
                 }
@@ -169,12 +179,28 @@ public class LiteApiServlet extends HttpServlet {
                     boolean admin = "admin".equals(role(req));
                     resp.getWriter().write(JsonUtils.toJson(service.getMenu(admin)));
                     break;
+                case "/promotions": {
+                    String promoRole = role(req);
+                    if (!"admin".equals(promoRole) && !"cashier".equals(promoRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Không có quyền xem khuyến mãi.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(service.getPromotions()));
+                    break;
+                }
+                case "/store/tax-config":
+                    resp.getWriter().write(JsonUtils.toJson(service.getStoreTaxConfig()));
+                    break;
                 case "/inventory":
                     java.util.List<java.util.Map<String, Object>> invList = new dao.InventoryDAO().getAll().stream().map(i -> i.toMap()).collect(java.util.stream.Collectors.toList());
                     resp.getWriter().write(JsonUtils.toJson(invList));
                     break;
                 case "/tables":
-                    resp.getWriter().write(JsonUtils.toJson(service.getTables()));
+                    if (role(req).isEmpty()) {
+                        resp.getWriter().write(JsonUtils.toJson(service.getPublicTables()));
+                    } else {
+                        resp.getWriter().write(JsonUtils.toJson(service.getTables()));
+                    }
                     break;
                 case "/tables/all":
                     resp.getWriter().write(JsonUtils.toJson(service.getAllTables()));
@@ -243,7 +269,7 @@ public class LiteApiServlet extends HttpServlet {
                 }
                 case "/orders/table":
                     if (role(req).isEmpty()) {
-                        resp.getWriter().write(JsonUtils.toJson(guestTableOrders(req)));
+                        resp.getWriter().write(JsonUtils.toJson(guestTrackOrders(req)));
                     } else {
                         resp.getWriter().write(JsonUtils.toJson(service.getOpenOrdersByTable(req.getParameter("tableCode"), req.getParameter("table"))));
                     }
@@ -426,6 +452,7 @@ public class LiteApiServlet extends HttpServlet {
                     ss.setAttribute(tabAttr(req, ATTR_USER), staffSession.get("staffName"));
                     ss.setAttribute(tabAttr(req, ATTR_STAFF_ID), loginId);
                     ss.setAttribute(tabAttr(req, ATTR_STAFF_NAME), staffSession.get("staffName"));
+                    ss.setAttribute(tabAttr(req, ATTR_USERNAME), staffSession.get("username"));
                     if ("cashier".equals(staffRole)) {
                         ss.setAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS), new ArrayList<Integer>());
                     } else {
@@ -468,7 +495,10 @@ public class LiteApiServlet extends HttpServlet {
                     HttpSession adminSession = req.getSession(true);
                     adminSession.setAttribute(tabAttr(req, ATTR_ROLE), "admin");
                     adminSession.setAttribute(tabAttr(req, ATTR_USER), "Quản trị coffeshop");
+                    adminSession.setAttribute(tabAttr(req, ATTR_USERNAME), "admin");
                     adminSession.removeAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS));
+                    adminSession.removeAttribute(tabAttr(req, ATTR_STAFF_ID));
+                    adminSession.removeAttribute(tabAttr(req, ATTR_STAFF_NAME));
                     service.addSystemLog("admin", "Quản trị coffeshop", "ADMIN_UNLOCK",
                             "Admin mở khoá dashboard lúc " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")),
                             "Admin unlocked dashboard at " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm MM/dd/yyyy")),
@@ -523,7 +553,8 @@ public class LiteApiServlet extends HttpServlet {
                         paymentInfo = new LinkedHashMap<>();
                         paymentInfo.put("method", str(body.get("paymentMethod")));
                         paymentInfo.put("receivedAmount", readInt(body.get("receivedAmount"), 0));
-                        paymentInfo.put("cashierUsername", currentRole);
+                        paymentInfo.put("tipAmount", readInt(body.get("tipAmount"), 0));
+                        paymentInfo.put("cashierUsername", username(req).isEmpty() ? currentRole : username(req));
                         paymentInfo.put("cashierName", staffName(req).isEmpty() ? user(req) : staffName(req));
                         paymentInfo.put("staffId", staffId(req));
                         paymentInfo.put("note", str(body.get("paymentNote")));
@@ -579,6 +610,74 @@ public class LiteApiServlet extends HttpServlet {
                         }
                     }
                     resp.getWriter().write(JsonUtils.toJson(service.markInvoicePrinted(printedOrderId)));
+                    break;
+                }
+                case "/orders/cancel": {
+                    int cancelId = readInt(body.get("id"), 0);
+                    String cancelReason = str(body.get("reason"));
+                    String cancelRole = role(req);
+                    if (cancelRole.isEmpty()) {
+                        // Khách: chỉ hủy được đơn trong phiên guestOrderIds.
+                        List<Integer> owned = guestOrderIds(req, false);
+                        if (!owned.contains(cancelId)) {
+                            error(resp, HttpServletResponse.SC_FORBIDDEN, "Bạn chỉ có thể hủy đơn của chính mình.");
+                            break;
+                        }
+                        cancelRole = "guest";
+                    }
+                    Map<String, Object> cancelled = service.cancelOrder(cancelId, cancelReason, cancelRole,
+                            cancelRole.equals("guest") ? "Khách" : user(req));
+                    resp.getWriter().write(JsonUtils.toJson(cancelled));
+                    break;
+                }
+                case "/orders/refund": {
+                    String refundRole = role(req);
+                    if (!"admin".equals(refundRole) && !"cashier".equals(refundRole)) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ quản trị hoặc thu ngân được hoàn tiền.");
+                        break;
+                    }
+                    // Cashier cần nhập đúng PIN quản trị (không đổi session).
+                    if ("cashier".equals(refundRole)) {
+                        if (!ADMIN_PIN.equals(str(body.get("adminPin")))) {
+                            error(resp, HttpServletResponse.SC_FORBIDDEN, "Hoàn tiền cần đúng PIN quản trị.");
+                            break;
+                        }
+                    }
+                    boolean restock = body.get("restock") == null || Boolean.TRUE.equals(body.get("restock"))
+                            || "1".equals(String.valueOf(body.get("restock")))
+                            || "true".equalsIgnoreCase(String.valueOf(body.get("restock")));
+                    Map<String, Object> refunded = service.refundOrder(
+                            readInt(body.get("id"), 0),
+                            str(body.get("reason")),
+                            restock,
+                            refundRole,
+                            user(req));
+                    resp.getWriter().write(JsonUtils.toJson(refunded));
+                    break;
+                }
+                case "/promotions": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin quản lý khuyến mãi.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(service.savePromotion(body)));
+                    break;
+                }
+                case "/promotions/delete": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin quản lý khuyến mãi.");
+                        break;
+                    }
+                    service.deletePromotion(readInt(body.get("id"), 0));
+                    resp.getWriter().write("{\"message\":\"ok\"}");
+                    break;
+                }
+                case "/store/tax-config": {
+                    if (!"admin".equals(role(req))) {
+                        error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin cấu hình thuế.");
+                        break;
+                    }
+                    resp.getWriter().write(JsonUtils.toJson(service.saveStoreTaxConfig(body)));
                     break;
                 }
                 case "/menu":
@@ -961,7 +1060,11 @@ public class LiteApiServlet extends HttpServlet {
         return order;
     }
 
-    private List<Map<String, Object>> guestTableOrders(HttpServletRequest req) throws Exception {
+    /**
+     * Theo dõi đơn phía khách: chỉ đơn của phiên hiện tại (+ đơn hôm nay nếu đã đăng nhập).
+     * Trả { active, past, tableName } — không lộ đơn người khác trên cùng bàn.
+     */
+    private Map<String, Object> guestTrackOrders(HttpServletRequest req) throws Exception {
         Map<String, Object> requested = requestedTable(req.getParameter("tableCode"), req.getParameter("table"));
         boolean hasQrTableCode = !str(req.getParameter("tableCode")).isEmpty();
         if (hasQrTableCode && requested != null) {
@@ -970,25 +1073,54 @@ public class LiteApiServlet extends HttpServlet {
                 resetGuestProgress(req);
             }
             ensureGuestTableMatches(req, requested, true);
-            List<Map<String, Object>> orders = service.getOpenOrdersByTable(str(requested.get("code")), str(requested.get("name")));
-            rememberGuestTableFromOrders(req, orders);
-            return orders;
+        } else if (requested != null) {
+            Map<String, Object> locked = lockedGuestTable(req);
+            if (locked != null && sameTable(locked, requested) && hasVerifiedGuestTable(req)) {
+                // giữ bàn đã khoá
+            }
         }
 
+        LinkedHashSet<Integer> idSet = new LinkedHashSet<>(guestOrderIds(req, false));
+        int custId = customerId(req);
+        if (custId > 0) {
+            String today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toString();
+            idSet.addAll(customerDao.getOrderIdsForCustomerOnDate(custId, today));
+        }
+
+        List<Map<String, Object>> all = service.getOrdersByIds(new ArrayList<>(idSet));
+        rememberGuestTableFromOrders(req, all);
+
+        List<Map<String, Object>> active = new ArrayList<>();
+        List<Map<String, Object>> past = new ArrayList<>();
+        for (Map<String, Object> order : all) {
+            String status = str(order.get("status"));
+            if ("Cleared".equals(status) || "Cancelled".equals(status) || "Refunded".equals(status)) {
+                past.add(order);
+            } else {
+                active.add(order);
+            }
+        }
+
+        String resolvedTable = "";
         Map<String, Object> locked = lockedGuestTable(req);
-        if (requested != null && locked != null && sameTable(locked, requested) && hasVerifiedGuestTable(req)) {
-            List<Map<String, Object>> orders = service.getOpenOrdersByTable(str(locked.get("code")), str(locked.get("name")));
-            rememberGuestTableFromOrders(req, orders);
-            return orders;
-        }
+        if (locked != null) resolvedTable = str(locked.get("name"));
+        if (resolvedTable.isEmpty() && requested != null) resolvedTable = str(requested.get("name"));
+        if (resolvedTable.isEmpty() && !active.isEmpty()) resolvedTable = str(active.get(0).get("tableName"));
+        if (resolvedTable.isEmpty() && !past.isEmpty()) resolvedTable = str(past.get(0).get("tableName"));
 
-        List<Integer> orderIds = guestOrderIds(req, false);
-        if (!orderIds.isEmpty()) {
-            List<Map<String, Object>> orders = service.getOpenOrdersByIds(orderIds);
-            rememberGuestTableFromOrders(req, orders);
-            return orders;
-        }
-        return new ArrayList<>();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("active", active);
+        payload.put("past", past);
+        payload.put("tableName", resolvedTable);
+        payload.put("scope", custId > 0 ? "session_and_today" : "session");
+        return payload;
+    }
+
+    private List<Map<String, Object>> guestTableOrders(HttpServletRequest req) throws Exception {
+        Map<String, Object> track = guestTrackOrders(req);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> active = (List<Map<String, Object>>) track.get("active");
+        return active != null ? active : new ArrayList<>();
     }
 
     private Map<String, Object> requestedTable(Object tableCode, Object tableName) throws Exception {
@@ -1181,6 +1313,7 @@ public class LiteApiServlet extends HttpServlet {
         rules.put("maxRedeemPercent", model.Customer.MAX_REDEEM_PERCENT);
         rules.put("silverThreshold", model.Customer.SILVER_THRESHOLD);
         rules.put("goldThreshold", model.Customer.GOLD_THRESHOLD);
+        rules.put("tiers", model.Customer.tierGuide());
         payload.put("rules", rules);
         return payload;
     }
@@ -1209,6 +1342,12 @@ public class LiteApiServlet extends HttpServlet {
         HttpSession session = req.getSession(false);
         if (session == null) return "";
         return str(session.getAttribute(tabAttr(req, ATTR_STAFF_NAME)));
+    }
+
+    private String username(HttpServletRequest req) {
+        HttpSession session = req.getSession(false);
+        if (session == null) return "";
+        return str(session.getAttribute(tabAttr(req, ATTR_USERNAME)));
     }
 
     private String orderViewRole(HttpServletRequest req) {
@@ -1253,6 +1392,9 @@ public class LiteApiServlet extends HttpServlet {
         if (order == null) return;
         order.remove("total");
         order.remove("customerPhone");
+        order.remove("subtotal");
+        order.remove("discountAmount");
+        order.remove("customerId");
         Object items = order.get("items");
         if (!(items instanceof Iterable<?>)) return;
         for (Object raw : (Iterable<?>) items) {
@@ -1260,6 +1402,70 @@ public class LiteApiServlet extends HttpServlet {
                 ((Map<String, Object>) raw).remove("price");
             }
         }
+    }
+
+    private void handleSse(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        String sseRole = role(req);
+        if (sseRole.isEmpty()) {
+            json(resp);
+            error(resp, HttpServletResponse.SC_UNAUTHORIZED, "Cần đăng nhập để nhận sự kiện realtime.");
+            return;
+        }
+        resp.setContentType("text/event-stream");
+        resp.setCharacterEncoding("UTF-8");
+        resp.setHeader("Cache-Control", "no-cache");
+        resp.setHeader("Connection", "keep-alive");
+        resp.setHeader("Access-Control-Allow-Origin", "*");
+        resp.flushBuffer();
+        final jakarta.servlet.AsyncContext async = req.startAsync();
+        async.setTimeout(0);
+        final java.io.PrintWriter writer = resp.getWriter();
+        final java.util.concurrent.atomic.AtomicBoolean open = new java.util.concurrent.atomic.AtomicBoolean(true);
+        // Keep strong reference via wrapper that self-removes.
+        java.util.function.Consumer<String> wrapped = new java.util.function.Consumer<String>() {
+            @Override
+            public void accept(String t) {
+                if (!open.get()) {
+                    service.removeEventListener(this);
+                    return;
+                }
+                try {
+                    synchronized (writer) {
+                        writer.write("event: " + t + "\n");
+                        writer.write("data: {\"type\":\"" + t + "\"}\n\n");
+                        writer.flush();
+                    }
+                } catch (Exception e) {
+                    open.set(false);
+                    service.removeEventListener(this);
+                    try { async.complete(); } catch (Exception ignored) {}
+                }
+            }
+        };
+        service.addEventListener(wrapped);
+        try {
+            synchronized (writer) {
+                writer.write("event: connected\n");
+                writer.write("data: {\"type\":\"connected\"}\n\n");
+                writer.flush();
+            }
+        } catch (Exception ignored) {}
+        async.addListener(new jakarta.servlet.AsyncListener() {
+            @Override public void onComplete(jakarta.servlet.AsyncEvent event) {
+                open.set(false);
+                service.removeEventListener(wrapped);
+            }
+            @Override public void onTimeout(jakarta.servlet.AsyncEvent event) {
+                open.set(false);
+                service.removeEventListener(wrapped);
+                try { async.complete(); } catch (Exception ignored) {}
+            }
+            @Override public void onError(jakarta.servlet.AsyncEvent event) {
+                open.set(false);
+                service.removeEventListener(wrapped);
+            }
+            @Override public void onStartAsync(jakarta.servlet.AsyncEvent event) {}
+        });
     }
 
     private void json(HttpServletResponse resp) {
@@ -1288,7 +1494,10 @@ public class LiteApiServlet extends HttpServlet {
         if (session == null) return;
         session.removeAttribute(tabAttr(req, ATTR_ROLE));
         session.removeAttribute(tabAttr(req, ATTR_USER));
+        session.removeAttribute(tabAttr(req, ATTR_USERNAME));
         session.removeAttribute(tabAttr(req, ATTR_PAID_ORDER_IDS));
+        session.removeAttribute(tabAttr(req, ATTR_STAFF_ID));
+        session.removeAttribute(tabAttr(req, ATTR_STAFF_NAME));
     }
 
     private void writeTableQr(HttpServletRequest req, HttpServletResponse resp) throws Exception {

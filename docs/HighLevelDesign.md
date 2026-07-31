@@ -55,7 +55,7 @@ flowchart TD
 | 05 | `model` | Contains Data Transfer Objects (DTOs) or Java Beans. These function as data containers to transport information seamlessly across the Controller, Service, and DAO layers. |
 | 06 | `utils` | Consists of shared helper classes utilized globally across the project, adhering strictly to the DRY principle (e.g. JSON utilities, string manipulation). |
 | 07 | `context` | Manages the JDBC connection configuration to the database (`DBContext`) and global application context (`AppContext`). |
-| 08 | `websocket` | Manages WebSocket connections for real-time features like order status notifications. |
+| 08 | `events` | Server-Sent Events (`GET /api/events`) for realtime order/table updates; client falls back to 5s polling. |
 
 ## 1.3 Database Design
 

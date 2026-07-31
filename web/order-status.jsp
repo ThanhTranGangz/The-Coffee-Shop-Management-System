@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>coffeshop</title>
         <meta name="page-title-key" content="orderStatusTitle">
-    <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
-    <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
+    <link rel="stylesheet" href="assets/css/app.css?v=loyalty-4">
+    <script defer src="assets/js/i18n.js?v=loyalty-4"></script>
 </head>
 <body>
     <nav class="nav">
@@ -29,6 +29,6 @@
         </section>
         <section id="table-orders"></section>
     </main>
-    <script src="assets/js/page-order-status.js?v=table-lock-fix-1"></script>
+    <script src="assets/js/page-order-status.js?v=session-track-1"></script>
 </body>
 </html>

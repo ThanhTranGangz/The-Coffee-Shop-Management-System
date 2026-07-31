@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 
-@WebFilter("/*")
+@WebFilter(urlPatterns = "/*", asyncSupported = true)
 public class SecurityFilter implements Filter {
     private static final String ATTR_ROLE = "role";
     private static final String ATTR_STAFF_ID = "staffId";
@@ -24,6 +24,7 @@ public class SecurityFilter implements Filter {
             "/admin-menu.jsp",
             "/admin-tables.jsp",
             "/admin-staff.jsp",
+            "/admin-promotions.jsp",
             "/inventory.jsp",
             "/system-logs.jsp"
     );
@@ -114,9 +115,10 @@ public class SecurityFilter implements Filter {
                     || path.equals("/api/staff/roster")) return true;
         }
         if ("GET".equals(method) || "HEAD".equals(method)) {
-            return path.equals("/api/menu") || path.equals("/api/tables") || path.equals("/api/tables/by-code") || path.equals("/api/tables/qr") || path.equals("/api/orders/lookup") || path.equals("/api/orders/table");
+            return path.equals("/api/menu") || path.equals("/api/tables") || path.equals("/api/tables/by-code") || path.equals("/api/tables/qr") || path.equals("/api/orders/lookup") || path.equals("/api/orders/table")
+                    || path.equals("/api/store/tax-config");
         }
-        return "POST".equals(method) && path.equals("/api/orders");
+        return "POST".equals(method) && (path.equals("/api/orders") || path.equals("/api/orders/cancel"));
     }
 
     private boolean isAllowedApi(HttpServletRequest req, String path) {
@@ -124,20 +126,23 @@ public class SecurityFilter implements Filter {
         if (isAdmin(role)) return true;
         if ("barista".equals(role)) {
             return path.equals("/api/orders") || path.equals("/api/orders/status")
-                    || path.equals("/api/orders/item-prepare") || path.equals("/api/cups/status");
+                    || path.equals("/api/orders/item-prepare") || path.equals("/api/cups/status")
+                    || path.equals("/api/orders/cancel") || path.equals("/api/events");
         }
         if ("cashier".equals(role)) {
             return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/split")
                     || path.equals("/api/tables/map") || path.equals("/api/tables/transfer")
                     || path.equals("/api/cash/status") || path.equals("/api/cash/count") || path.equals("/api/cash/ack-withdrawals")
-                    // Thu ngân phải đối soát được ca của chính mình.
-                    || path.equals("/api/payments/order") || path.equals("/api/payments/summary");
+                    || path.equals("/api/payments/order") || path.equals("/api/payments/summary")
+                    || path.equals("/api/orders/cancel") || path.equals("/api/orders/refund")
+                    || path.equals("/api/promotions") || path.equals("/api/store/tax-config")
+                    || path.equals("/api/events");
         }
         if ("runner".equals(role)) {
-            return path.equals("/api/payments/order")
-                    || path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/invoice")
+            return path.equals("/api/orders") || path.equals("/api/orders/status") || path.equals("/api/orders/invoice")
                     || path.equals("/api/orders/invoice/printed")
-                    || path.equals("/api/tables/map") || path.equals("/api/tables/clear") || path.equals("/api/tables/transfer");
+                    || path.equals("/api/tables/map") || path.equals("/api/tables/clear") || path.equals("/api/tables/transfer")
+                    || path.equals("/api/orders/cancel") || path.equals("/api/events");
         }
         return false;
     }

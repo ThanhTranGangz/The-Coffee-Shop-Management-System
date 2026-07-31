@@ -22,7 +22,7 @@
                 });
             }
             loadWork();
-            setInterval(() => loadWork({ silent: false }), 5000);
+            subscribeLive(() => loadWork({ silent: false }), 5000);
         });
 
         async function loadWork(options = {}) {
@@ -228,11 +228,13 @@
         function tableTile(table) {
             const status = String(table.status || '');
             const busy = Boolean(table.busy);
+            const openCount = Number(table.openOrderCount || 0);
             const label = status === 'Paid' ? t('needsCleaning') : (status === 'Served' ? t('unpaid') : (status === 'Ready' ? t('serveColumn') : (busy ? statusText(status) : t('available'))));
             return `
                 <div class="table-tile ${busy ? 'busy' : 'free'} ${status === 'Paid' ? 'cleaning' : ''}">
                     <b>${escapeHtml(tableNameShort(table.name))}</b>
                     <span>${escapeHtml(label)}</span>
+                    ${openCount > 1 ? `<em>${openCount} ${t('openOrdersBadge')}</em>` : (table.orderNumber ? `<em>#${table.orderNumber}</em>` : '')}
                 </div>
             `;
         }
@@ -515,9 +517,18 @@
                             </p>
                         `).join('')}
                     </div>
+                    <div class="mini-list" style="margin:8px 0">
+                        <span>${t('subtotalLabel')} <b>${money(order.subtotal || order.total)}</b></span>
+                        ${Number(order.discountAmount || 0) > 0 ? `<span>${t('discountLabel')} <b>-${money(order.discountAmount)}</b></span>` : ''}
+                        ${Number(order.promoDiscount || 0) > 0 ? `<span>${t('promoCode')} <b>-${money(order.promoDiscount)}</b></span>` : ''}
+                        ${Number(order.manualDiscount || 0) > 0 ? `<span>${t('discountLabel')} <b>-${money(order.manualDiscount)}</b></span>` : ''}
+                        ${Number(order.taxAmount || 0) > 0 ? `<span>${t('taxAmount')} <b>${money(order.taxAmount)}</b></span>` : ''}
+                        ${Number(order.serviceCharge || 0) > 0 ? `<span>${t('serviceCharge')} <b>${money(order.serviceCharge)}</b></span>` : ''}
+                        ${Number(order.tipAmount || 0) > 0 ? `<span>${t('tipAmount')} <b>${money(order.tipAmount)}</b></span>` : ''}
+                    </div>
                     <div class="cart-total invoice-total">
                         <span>${t('total')}</span>
-                        <b class="price">${money(order.total)}</b>
+                        <b class="price">${money(Number(order.total || 0) + Number(order.tipAmount || 0))}</b>
                     </div>
                     <p class="invoice-pay-hint">${t('invoicePayHint')}</p>
                 </div>

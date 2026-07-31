@@ -3798,9 +3798,127 @@ body.invoice-open {
     padding: 20px;
     background: linear-gradient(135deg, #fff6ec 0%, #ffeedd 100%);
     box-shadow: var(--shadow-soft);
+    cursor: pointer;
+    position: relative;
 }
 .loyalty-card.tier-silver { background: linear-gradient(135deg, #f4f6f8 0%, #e6ebf0 100%); }
 .loyalty-card.tier-gold   { background: linear-gradient(135deg, #fff8e1 0%, #ffeeb8 100%); }
+.loyalty-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.loyalty-tier-link { text-decoration: underline; text-underline-offset: 3px; }
+.loyalty-benefit-line {
+    margin: 12px 0 0;
+    font-size: 14px;
+    color: var(--ink);
+    line-height: 1.4;
+}
+.loyalty-tap-hint {
+    margin: 14px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.history-filter { margin-bottom: 12px; }
+.history-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0 4px;
+}
+.history-chip {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.history-chip.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+}
+.history-custom { margin-top: 12px; align-items: end; gap: 10px; }
+
+.past-orders-panel {
+    margin-top: 18px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.past-orders-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 0;
+    background: var(--surface-2, #f7f5f2);
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+}
+.past-orders-toggle b {
+    margin-left: auto;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+}
+.past-orders-toggle em { font-style: normal; color: var(--muted); }
+.past-orders-body { padding: 12px; display: grid; gap: 12px; }
+.order-track-card.past-order { opacity: 0.92; }
+
+.tier-guide-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: rgba(20, 16, 12, 0.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 16px;
+}
+.tier-guide-backdrop.hidden { display: none; }
+body.tier-guide-open { overflow: hidden; }
+.tier-guide-sheet {
+    width: min(720px, 100%);
+    max-height: min(88vh, 900px);
+    overflow: auto;
+    background: var(--surface, #fff);
+    border-radius: 18px 18px 12px 12px;
+    padding: 18px 18px 24px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.2);
+}
+.tier-guide-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.tier-howto ul, .tier-guide-card ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 6px;
+}
+.tier-guide-list { display: grid; gap: 12px; margin-top: 14px; }
+.tier-guide-card.current { outline: 2px solid var(--accent, #c47b3a); }
+.tier-guide-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+.tier-guide-card.tier-bronze { background: linear-gradient(180deg, #fffaf4, #fff); }
+.tier-guide-card.tier-silver { background: linear-gradient(180deg, #f7f9fb, #fff); }
+.tier-guide-card.tier-gold { background: linear-gradient(180deg, #fff9e8, #fff); }
+
+@media (min-width: 720px) {
+    .tier-guide-backdrop { align-items: center; }
+    .tier-guide-sheet { border-radius: 18px; }
+}
 
 .loyalty-head {
     display: flex;

@@ -12,7 +12,7 @@
             loadCashStatus({ initial: true });
             loadOrders();
             setInterval(() => loadCashStatus({ initial: false }), 5000);
-            setInterval(() => loadOrders({ silent: false }), 5000);
+            subscribeLive(() => loadOrders({ silent: false }), 5000);
         });
 
         async function loadCashStatus(options = {}) {
@@ -114,12 +114,30 @@
                         <span data-i18n="total">${t('total')}</span>
                         <b class="price">${money(order.total)}</b>
                     </div>
-                    ${order.status === 'Served' && splittableUnits(order) >= 2 ? `<div class="links" style="margin-top:10px">
-                        <button class="btn split-btn" type="button"
+                    ${order.status === 'Served' ? `<div class="links" style="margin-top:10px">
+                        <button class="btn danger" type="button"
                             onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"
-                            onclick="event.stopPropagation(); openSplit(${order.id})">${t('splitBill')}</button>
+                            onclick="event.stopPropagation(); cancelCashierOrder(${order.id})">${t('cancelOrder')}</button>
+                        ${splittableUnits(order) >= 2 ? `<button class="btn split-btn" type="button"
+                            onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"
+                            onclick="event.stopPropagation(); openSplit(${order.id})">${t('splitBill')}</button>` : ''}
+                    </div>` : ''}
+                    ${(order.status === 'Paid' || order.status === 'Cleared') ? `<div class="links" style="margin-top:10px">
+                        <button class="btn" type="button"
+                            onpointerdown="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()"
+                            onclick="event.stopPropagation(); refundCashierOrder(${order.id})">${t('refundOrder')}</button>
                     </div>` : ''}
                 </article>`;
+        }
+
+        async function cancelCashierOrder(id) {
+            const result = await cancelOrderPrompt(id);
+            if (result) loadOrders({ silent: true });
+        }
+
+        async function refundCashierOrder(id) {
+            const result = await refundOrderPrompt(id);
+            if (result) loadOrders({ silent: true });
         }
 
         function splittableUnits(order) {
@@ -155,7 +173,8 @@
                     id,
                     status: 'Paid',
                     paymentMethod: detail.method,
-                    receivedAmount: detail.received
+                    receivedAmount: detail.received,
+                    tipAmount: detail.tip || 0
                 })
             });
             if (!res.ok) {
@@ -169,12 +188,20 @@
 
         /**
          * Hộp thoại thu tiền. Trả về {method, received, change} hoặc null nếu huỷ.
-         * Số tiền thối tính ở đây chỉ để thu ngân đọc; server vẫn tự tính lại
-         * và tự kẹp received >= amount trước khi ghi vào bảng Payments.
+         * Số tiền thối tính ở đây chỉ để thu ngân đọc; server tự tính lại
+         * và từ chối nếu tiền mặt khách đưa nhỏ hơn số phải thu.
          */
         function paymentModal(amount) {
-            return new Promise(resolve => {
+            return new Promise(async resolve => {
                 let method = 'CASH';
+                let tipEnabled = true;
+                try {
+                    const cfgRes = await api('/store/tax-config');
+                    if (cfgRes.ok) {
+                        const cfg = await cfgRes.json();
+                        tipEnabled = cfg.tipEnabled !== false && cfg.tipEnabled !== 0;
+                    }
+                } catch (e) {}
                 const overlay = document.createElement('div');
                 overlay.className = 'app-modal-backdrop';
                 overlay.innerHTML = `
@@ -190,6 +217,10 @@
                                 <button class="role-option" type="button" data-method="TRANSFER">${t('payTransfer')}</button>
                             </div>
                         </div>
+                        ${tipEnabled ? `<div>
+                            <label for="pay-tip">${t('tipOptional')}</label>
+                            <input id="pay-tip" class="app-modal-input" inputmode="numeric" value="0">
+                        </div>` : ''}
                         <div data-cash-only>
                             <label for="pay-received">${t('receivedAmount')}</label>
                             <input id="pay-received" class="app-modal-input" inputmode="numeric" value="${amount}">
@@ -203,24 +234,33 @@
                 document.body.appendChild(overlay);
 
                 const input = overlay.querySelector('#pay-received');
+                const tipInput = overlay.querySelector('#pay-tip');
                 const changeLine = overlay.querySelector('[data-change]');
                 const cashBlock = overlay.querySelector('[data-cash-only]');
 
+                function tip() {
+                    if (!tipInput) return 0;
+                    return Math.max(0, Math.floor(Number(String(tipInput.value).replace(/[^0-9]/g, '')) || 0));
+                }
+                function due() { return amount + tip(); }
                 function received() {
                     return Math.max(0, Math.floor(Number(String(input.value).replace(/[^0-9]/g, '')) || 0));
                 }
                 function refresh() {
-                    const change = Math.max(0, received() - amount);
+                    const change = Math.max(0, received() - due());
                     changeLine.textContent = t('changeAmount') + ': ' + money(change);
-                    changeLine.classList.toggle('pay-short', received() < amount);
+                    changeLine.classList.toggle('pay-short', received() < due());
                 }
                 input.addEventListener('input', refresh);
+                if (tipInput) tipInput.addEventListener('input', () => {
+                    if (method === 'CASH' && received() < due()) input.value = String(due());
+                    refresh();
+                });
 
                 overlay.querySelectorAll('[data-method]').forEach(button => {
                     button.addEventListener('click', () => {
                         method = button.dataset.method;
                         overlay.querySelectorAll('[data-method]').forEach(b => b.classList.toggle('active', b === button));
-                        // Chuyển khoản thì không có chuyện đưa tiền và thối lại.
                         cashBlock.classList.toggle('hidden', method !== 'CASH');
                     });
                 });
@@ -228,9 +268,10 @@
                 function close(value) { overlay.remove(); resolve(value); }
                 overlay.querySelector('[data-cancel]').addEventListener('click', () => close(null));
                 overlay.querySelector('[data-ok]').addEventListener('click', () => {
-                    if (method === 'TRANSFER') return close({ method, received: amount, change: 0 });
-                    if (received() < amount) { refresh(); input.focus(); return; }
-                    close({ method, received: received(), change: received() - amount });
+                    const tipAmt = tip();
+                    if (method === 'TRANSFER') return close({ method, received: due(), change: 0, tip: tipAmt });
+                    if (received() < due()) { refresh(); input.focus(); return; }
+                    close({ method, received: received(), change: received() - due(), tip: tipAmt });
                 });
                 overlay.addEventListener('keydown', e => { if (e.key === 'Escape') close(null); });
                 setTimeout(() => { input.focus(); input.select(); refresh(); }, 30);

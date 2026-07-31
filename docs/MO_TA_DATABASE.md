@@ -71,25 +71,33 @@
 | `splitLocked` | BIT | NOT NULL, DEFAULT 0 | Đơn đã bị tách thì khóa, không cho tách tiếp |
 | `invoicePrinted` | BIT | NOT NULL, DEFAULT 0 | Waiter đã in hóa đơn chưa. Chưa in mà bấm phục vụ thì hệ thống hỏi lại |
 
-**Sáu giá trị của `status`** — đây là trục xương sống của cả hệ thống:
+**Giá trị của `status`** — trục xương sống của hệ thống:
+
+| Status | Ý nghĩa |
+| --- | --- |
+| Pending → Preparing → Ready → Served → Paid → Cleared | Luồng phục vụ chính |
+| Cancelled | Hủy trước thanh toán (khách chỉ Pending; NV/admin theo ma trận quyền) |
+| Refunded | Hoàn tiền từ Paid/Cleared (bảng `Refunds`, không ghi thêm `Payments`) |
+
+Cột bổ sung: `orderType` (`DINE_IN`/`TAKEAWAY`), `cancelReason`/`cancelledAt`, `promoDiscount`/`manualDiscount`/`promotionId`, `taxAmount`/`serviceCharge`/`tipAmount`.
+
+`taxAmount` là phần VAT tách từ giá đã gồm thuế (giá menu = giá bán), không cộng thêm vào `total`. `serviceCharge` (nếu % > 0) vẫn cộng thêm. `tipAmount` cộng lúc thanh toán.
+
+Bảng liên quan mới: `Refunds`, `Promotions`, `PromotionRedemptions`.
+
+⚠️ **Bước cuối đi đường khác.** `canSetStatus()` chỉ mã hóa **4 bước đầu** — hoàn toàn không nhắc tới `Cleared`. Bước `Paid → Cleared` không qua `/orders/status` mà qua endpoint **`/tables/clear`** → `clearServedTable()`, và đơn takeaway tự `Cleared` ngay sau `Paid`.
+Ngoài ra `clearOrphanActiveOrders()` cũng ghi `Cleared` hàng loạt lúc khởi động ứng dụng (chỉ `DINE_IN`).
+
+⚠️ Cột `status` **không có `CHECK` constraint** — về mặt DB vẫn ghi được giá trị lạ.
 
 ```
 Pending ──barista──► Preparing ──barista──► Ready ──waiter──► Served ──thu ngân──► Paid ┄┄waiter┄┄► Cleared
- khách                đang pha              chờ bưng          đã bưng             đã trả tiền       đã dọn bàn
- vừa đặt              └──────────── canSetStatus() ép 4 bước này ────────────┘      └─ /tables/clear ─┘
+                                          ↘ Cancelled (trước Paid)          ↘ Refunded (sau Paid)
 ```
 
-Luồng **một chiều**, mỗi chặng một vai trò, không có đường đi lùi.
+Luồng phục vụ chính vẫn một chiều theo vai trò; hủy/hoàn là nhánh riêng (`/orders/cancel`, `/orders/refund`).
 
-⚠️ **Bước cuối đi đường khác.** `canSetStatus()` (`LiteApiServlet.java:915`) chỉ mã hóa **4 bước đầu** — hoàn toàn không nhắc tới `Cleared`. Bước `Paid → Cleared` không qua `/orders/status` mà qua endpoint **`/tables/clear`** → `clearServedTable()`, và nó cập nhật **theo tên bàn** cho mọi đơn `Paid` của bàn đó cùng lúc:
-
-```sql
-UPDATE dbo.Orders SET status='Cleared' WHERE tableName=? AND status='Paid'
-```
-
-Ngoài ra `clearOrphanActiveOrders()` cũng ghi `Cleared` hàng loạt lúc khởi động ứng dụng.
-
-⚠️ Cột `status` **không có `CHECK` constraint** — về mặt DB vẫn ghi được giá trị lạ.
+### `OrderItems` — Chi tiết món
 
 **Vì sao `orderNumber` cho phép `NULL`:** `id` là `IDENTITY` nên chỉ biết sau khi `INSERT`. Code phải `INSERT` trước, lấy `id`, rồi mới `UPDATE orderNumber = 1000 + id`. Khoảng giữa hai bước đó nó là `NULL`.
 

@@ -157,14 +157,33 @@ public class CustomerDAO {
 
     /** Lịch sử đơn của một khách, mới nhất trước, kèm các món trong đơn. */
     public List<Map<String, Object>> getOrderHistory(int customerId, int limit) throws Exception {
+        return getOrderHistory(customerId, limit, null, null);
+    }
+
+    /**
+     * Lịch sử đơn theo khoảng ngày (inclusive), timezone theo ngày lịch Việt Nam
+     * khi caller truyền yyyy-MM-dd. from/to null = không giới hạn phía đó.
+     */
+    public List<Map<String, Object>> getOrderHistory(int customerId, int limit, String fromDate, String toDate) throws Exception {
         List<Map<String, Object>> orders = new ArrayList<>();
         if (customerId <= 0) return orders;
         int take = limit <= 0 || limit > 200 ? 50 : limit;
-        String sql = "SELECT TOP (" + take + ") id, orderNumber, tableName, status, subtotal, discountAmount, "
-                + "total, pointsEarned, pointsRedeemed, note, createdAt "
-                + "FROM dbo.Orders WHERE customerId=? ORDER BY id DESC";
-        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, customerId);
+        StringBuilder sql = new StringBuilder(
+                "SELECT TOP (" + take + ") id, orderNumber, tableName, status, subtotal, discountAmount, "
+                        + "total, pointsEarned, pointsRedeemed, note, createdAt "
+                        + "FROM dbo.Orders WHERE customerId=? ");
+        if (fromDate != null && !fromDate.isEmpty()) {
+            sql.append("AND createdAt >= ? ");
+        }
+        if (toDate != null && !toDate.isEmpty()) {
+            sql.append("AND createdAt < DATEADD(day, 1, CAST(? AS date)) ");
+        }
+        sql.append("ORDER BY id DESC");
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            int idx = 1;
+            ps.setInt(idx++, customerId);
+            if (fromDate != null && !fromDate.isEmpty()) ps.setString(idx++, fromDate);
+            if (toDate != null && !toDate.isEmpty()) ps.setString(idx++, toDate);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> order = new LinkedHashMap<>();
@@ -187,6 +206,23 @@ public class CustomerDAO {
             }
         }
         return orders;
+    }
+
+    /** Id đơn của khách trong ngày (theo Asia/Ho_Chi_Minh calendar day). */
+    public List<Integer> getOrderIdsForCustomerOnDate(int customerId, String yyyyMmDd) throws Exception {
+        List<Integer> ids = new ArrayList<>();
+        if (customerId <= 0 || yyyyMmDd == null || yyyyMmDd.isEmpty()) return ids;
+        String sql = "SELECT id FROM dbo.Orders WHERE customerId=? "
+                + "AND createdAt >= ? AND createdAt < DATEADD(day, 1, CAST(? AS date)) ORDER BY id DESC";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, customerId);
+            ps.setString(2, yyyyMmDd);
+            ps.setString(3, yyyyMmDd);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) ids.add(rs.getInt(1));
+            }
+        }
+        return ids;
     }
 
     private List<Map<String, Object>> loadItems(Connection con, int orderId) throws Exception {
@@ -300,10 +336,11 @@ public class CustomerDAO {
         return newPoints;
     }
 
-    /** Đọc số dư điểm trong một transaction đang mở. */
+    /** Đọc số dư điểm trong một transaction đang mở (khoá dòng khách). */
     public int currentPoints(Connection con, int customerId) throws Exception {
         if (customerId <= 0) return 0;
-        try (PreparedStatement ps = con.prepareStatement("SELECT points FROM dbo.Customers WHERE id=?")) {
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT points FROM dbo.Customers WITH (UPDLOCK, ROWLOCK) WHERE id=?")) {
             ps.setInt(1, customerId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() ? rs.getInt("points") : 0;

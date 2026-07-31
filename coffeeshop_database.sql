@@ -220,15 +220,27 @@ CREATE TABLE dbo.Orders (
     customerId     INT NULL,                  -- FK → Customers.id
     customerPhone  VARCHAR(20) NULL,
     status         VARCHAR(30) NOT NULL DEFAULT 'Pending',
+    orderType      VARCHAR(20) NOT NULL DEFAULT 'DINE_IN', -- DINE_IN | TAKEAWAY
     subtotal       INT NOT NULL DEFAULT 0,    -- tiền hàng TRƯỚC giảm giá
-    discountAmount INT NOT NULL DEFAULT 0,
-    total          INT NOT NULL DEFAULT 0,    -- số tiền PHẢI TRẢ
+    discountAmount INT NOT NULL DEFAULT 0,    -- giảm từ điểm
+    promoDiscount  INT NOT NULL DEFAULT 0,
+    manualDiscount INT NOT NULL DEFAULT 0,
+    discountReason NVARCHAR(255) NULL,
+    promotionId    INT NULL,
+    taxAmount      INT NOT NULL DEFAULT 0,
+    serviceCharge  INT NOT NULL DEFAULT 0,
+    tipAmount      INT NOT NULL DEFAULT 0,
+    total          INT NOT NULL DEFAULT 0,    -- số tiền PHẢI TRẢ (chưa gồm tip)
     pointsEarned   INT NOT NULL DEFAULT 0,
     pointsRedeemed INT NOT NULL DEFAULT 0,
     note           NVARCHAR(255) NULL,
     createdAt      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     splitLocked    BIT NOT NULL DEFAULT 0,
-    invoicePrinted BIT NOT NULL DEFAULT 0
+    invoicePrinted BIT NOT NULL DEFAULT 0,
+    cancelReason   NVARCHAR(255) NULL,
+    cancelledAt    DATETIME2 NULL,
+    cancelledByRole VARCHAR(20) NULL,
+    cancelledByName NVARCHAR(120) NULL
 );
 
 IF OBJECT_ID('dbo.OrderItems','U') IS NULL
@@ -258,6 +270,48 @@ CREATE TABLE dbo.Payments (
     staffId         INT NULL,                 -- ai thực sự đứng quầy
     note            NVARCHAR(255) NULL,
     paidAt          DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+IF OBJECT_ID('dbo.Refunds','U') IS NULL
+CREATE TABLE dbo.Refunds (
+    id         INT IDENTITY PRIMARY KEY,
+    orderId    INT NOT NULL,
+    paymentId  INT NULL,
+    amount     INT NOT NULL,
+    method     VARCHAR(20) NULL,
+    reason     NVARCHAR(255) NOT NULL,
+    restocked  BIT NOT NULL DEFAULT 1,
+    actorRole  VARCHAR(20) NULL,
+    actorName  NVARCHAR(120) NULL,
+    staffId    INT NULL,
+    refundedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+IF OBJECT_ID('dbo.Promotions','U') IS NULL
+CREATE TABLE dbo.Promotions (
+    id            INT IDENTITY PRIMARY KEY,
+    code          VARCHAR(40) NOT NULL,
+    nameVi        NVARCHAR(120) NOT NULL,
+    nameEn        NVARCHAR(120) NOT NULL,
+    discountType  VARCHAR(10) NOT NULL,       -- PERCENT | AMOUNT
+    discountValue INT NOT NULL,
+    minSubtotal   INT NOT NULL DEFAULT 0,
+    maxDiscount   INT NOT NULL DEFAULT 0,
+    startAt       DATETIME2 NULL,
+    endAt         DATETIME2 NULL,
+    maxUses       INT NOT NULL DEFAULT 0,
+    usedCount     INT NOT NULL DEFAULT 0,
+    active        BIT NOT NULL DEFAULT 1,
+    createdAt     DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+IF OBJECT_ID('dbo.PromotionRedemptions','U') IS NULL
+CREATE TABLE dbo.PromotionRedemptions (
+    id             INT IDENTITY PRIMARY KEY,
+    promotionId    INT NOT NULL,
+    orderId        INT NOT NULL,
+    discountAmount INT NOT NULL,
+    createdAt      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 
 /* ---------- 1.5 Sổ quỹ, nhật ký, trạng thái ---------- */
@@ -331,6 +385,39 @@ IF COL_LENGTH('dbo.Orders','pointsEarned')      IS NULL ALTER TABLE dbo.Orders A
 IF COL_LENGTH('dbo.Orders','pointsRedeemed')    IS NULL ALTER TABLE dbo.Orders ADD pointsRedeemed INT NOT NULL DEFAULT 0;
 IF COL_LENGTH('dbo.Orders','splitLocked')       IS NULL ALTER TABLE dbo.Orders ADD splitLocked BIT NOT NULL DEFAULT 0;
 IF COL_LENGTH('dbo.Orders','invoicePrinted')    IS NULL ALTER TABLE dbo.Orders ADD invoicePrinted BIT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.Orders','orderType')         IS NULL ALTER TABLE dbo.Orders ADD orderType VARCHAR(20) NOT NULL CONSTRAINT DF_Orders_orderType_mig DEFAULT 'DINE_IN';
+IF COL_LENGTH('dbo.Orders','cancelReason')      IS NULL ALTER TABLE dbo.Orders ADD cancelReason NVARCHAR(255) NULL;
+IF COL_LENGTH('dbo.Orders','cancelledAt')       IS NULL ALTER TABLE dbo.Orders ADD cancelledAt DATETIME2 NULL;
+IF COL_LENGTH('dbo.Orders','cancelledByRole')   IS NULL ALTER TABLE dbo.Orders ADD cancelledByRole VARCHAR(20) NULL;
+IF COL_LENGTH('dbo.Orders','cancelledByName')   IS NULL ALTER TABLE dbo.Orders ADD cancelledByName NVARCHAR(120) NULL;
+IF COL_LENGTH('dbo.Orders','promotionId')       IS NULL ALTER TABLE dbo.Orders ADD promotionId INT NULL;
+IF COL_LENGTH('dbo.Orders','promoDiscount')     IS NULL ALTER TABLE dbo.Orders ADD promoDiscount INT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.Orders','manualDiscount')    IS NULL ALTER TABLE dbo.Orders ADD manualDiscount INT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.Orders','discountReason')    IS NULL ALTER TABLE dbo.Orders ADD discountReason NVARCHAR(255) NULL;
+IF COL_LENGTH('dbo.Orders','taxAmount')         IS NULL ALTER TABLE dbo.Orders ADD taxAmount INT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.Orders','serviceCharge')     IS NULL ALTER TABLE dbo.Orders ADD serviceCharge INT NOT NULL DEFAULT 0;
+IF COL_LENGTH('dbo.Orders','tipAmount')         IS NULL ALTER TABLE dbo.Orders ADD tipAmount INT NOT NULL DEFAULT 0;
+
+IF OBJECT_ID('dbo.Refunds','U') IS NULL
+CREATE TABLE dbo.Refunds (
+    id INT IDENTITY PRIMARY KEY, orderId INT NOT NULL, paymentId INT NULL, amount INT NOT NULL,
+    method VARCHAR(20) NULL, reason NVARCHAR(255) NOT NULL, restocked BIT NOT NULL DEFAULT 1,
+    actorRole VARCHAR(20) NULL, actorName NVARCHAR(120) NULL, staffId INT NULL,
+    refundedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+IF OBJECT_ID('dbo.Promotions','U') IS NULL
+CREATE TABLE dbo.Promotions (
+    id INT IDENTITY PRIMARY KEY, code VARCHAR(40) NOT NULL, nameVi NVARCHAR(120) NOT NULL, nameEn NVARCHAR(120) NOT NULL,
+    discountType VARCHAR(10) NOT NULL, discountValue INT NOT NULL, minSubtotal INT NOT NULL DEFAULT 0,
+    maxDiscount INT NOT NULL DEFAULT 0, startAt DATETIME2 NULL, endAt DATETIME2 NULL,
+    maxUses INT NOT NULL DEFAULT 0, usedCount INT NOT NULL DEFAULT 0, active BIT NOT NULL DEFAULT 1,
+    createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+IF OBJECT_ID('dbo.PromotionRedemptions','U') IS NULL
+CREATE TABLE dbo.PromotionRedemptions (
+    id INT IDENTITY PRIMARY KEY, promotionId INT NOT NULL, orderId INT NOT NULL,
+    discountAmount INT NOT NULL, createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
 
 IF COL_LENGTH('dbo.OrderItems','itemSize')      IS NULL ALTER TABLE dbo.OrderItems ADD itemSize VARCHAR(20) NULL;
 IF COL_LENGTH('dbo.OrderItems','preparedQty')   IS NULL ALTER TABLE dbo.OrderItems ADD preparedQty INT NOT NULL DEFAULT 0;
@@ -648,6 +735,12 @@ PRINT N'╚═══════════════════════
 
 IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='cupsAvailable')
     INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('cupsAvailable', 120);
+IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='vatPercent')
+    INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('vatPercent', 8);
+IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='serviceChargePercent')
+    INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('serviceChargePercent', 0);
+IF NOT EXISTS (SELECT 1 FROM dbo.StoreState WHERE stateKey='tipEnabled')
+    INSERT INTO dbo.StoreState (stateKey, intValue) VALUES ('tipEnabled', 1);
 GO
 
 /* Số dư đầu kỳ cho sổ cái kho.

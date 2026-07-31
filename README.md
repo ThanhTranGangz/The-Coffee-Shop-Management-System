@@ -4,12 +4,14 @@ This is a simplified Java Servlet/JSP version of the coffee shop system.
 
 ## Scope
 
-- Guest table ordering
+- Guest table ordering (Pending self-cancel)
+- Takeaway / dine-in counter orders
+- Promotions, VAT-inclusive menu prices (tax extracted for reports), optional service charge, tip
+- Order cancel + admin/cashier refund (void)
 - Order status lookup
-- Staff order processing
-- Admin dashboard
-- Admin menu CRUD
-- Admin table and QR management
+- Staff order processing with SSE realtime (+ polling fallback)
+- Admin dashboard (cancel/refund/tax stats)
+- Admin menu / promotions / tables / inventory CRUD
 - Vietnamese/English UI toggle
 
 ## Demo Accounts

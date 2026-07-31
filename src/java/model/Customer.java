@@ -1,6 +1,9 @@
 package model;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -48,6 +51,85 @@ public class Customer {
         if (totalSpent >= GOLD_THRESHOLD) return "Gold";
         if (totalSpent >= SILVER_THRESHOLD) return "Silver";
         return "Bronze";
+    }
+
+    /** Tên hạng kế tiếp; rỗng nếu đã Gold. */
+    public static String nextTierName(int totalSpent) {
+        if (totalSpent < SILVER_THRESHOLD) return "Silver";
+        if (totalSpent < GOLD_THRESHOLD) return "Gold";
+        return "";
+    }
+
+    /**
+     * Mô tả chương trình hạng / tích điểm để UI giới thiệu.
+     * Hạng hiện tại chỉ dựa trên tổng chi tiêu; quyền đổi điểm áp dụng mọi hạng.
+     */
+    public static List<Map<String, Object>> tierGuide() {
+        List<Map<String, Object>> tiers = new ArrayList<>();
+        tiers.add(tierInfo("Bronze", 0, SILVER_THRESHOLD - 1,
+                "Thành viên cơ bản",
+                "Basic member",
+                Arrays.asList(
+                        "Tích điểm mỗi lần thanh toán (1 điểm / " + (SPEND_PER_POINT / 1000) + ".000đ)",
+                        "Đổi điểm giảm giá đơn (1 điểm = " + (VALUE_PER_POINT / 1000) + ".000đ)",
+                        "Đổi tối thiểu " + MIN_REDEEM_POINTS + " điểm, tối đa " + MAX_REDEEM_PERCENT + "% giá trị đơn",
+                        "Xem lịch sử đơn và sổ điểm trên tài khoản"
+                ),
+                Arrays.asList(
+                        "Earn points on every paid order (1 point / " + (SPEND_PER_POINT / 1000) + ",000 VND)",
+                        "Redeem points for discounts (1 point = " + (VALUE_PER_POINT / 1000) + ",000 VND)",
+                        "Min " + MIN_REDEEM_POINTS + " points, up to " + MAX_REDEEM_PERCENT + "% of the order",
+                        "View order history and points ledger in your account"
+                )));
+        tiers.add(tierInfo("Silver", SILVER_THRESHOLD, GOLD_THRESHOLD - 1,
+                "Thành viên Bạc",
+                "Silver member",
+                Arrays.asList(
+                        "Toàn bộ quyền lợi hạng Đồng",
+                        "Huy hiệu Hạng Bạc trên thẻ thành viên",
+                        "Đạt khi tổng chi tiêu từ " + formatVnd(SILVER_THRESHOLD) + " trở lên"
+                ),
+                Arrays.asList(
+                        "All Bronze benefits",
+                        "Silver badge on your membership card",
+                        "Unlocked from " + formatVndEn(SILVER_THRESHOLD) + " total spend"
+                )));
+        tiers.add(tierInfo("Gold", GOLD_THRESHOLD, Integer.MAX_VALUE,
+                "Thành viên Vàng",
+                "Gold member",
+                Arrays.asList(
+                        "Toàn bộ quyền lợi hạng Bạc",
+                        "Huy hiệu Hạng Vàng — hạng cao nhất",
+                        "Đạt khi tổng chi tiêu từ " + formatVnd(GOLD_THRESHOLD) + " trở lên"
+                ),
+                Arrays.asList(
+                        "All Silver benefits",
+                        "Gold badge — the top tier",
+                        "Unlocked from " + formatVndEn(GOLD_THRESHOLD) + " total spend"
+                )));
+        return tiers;
+    }
+
+    private static Map<String, Object> tierInfo(String code, int minSpent, int maxSpent,
+                                                String titleVi, String titleEn,
+                                                List<String> benefitsVi, List<String> benefitsEn) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("code", code);
+        m.put("minSpent", minSpent);
+        m.put("maxSpent", maxSpent == Integer.MAX_VALUE ? null : maxSpent);
+        m.put("titleVi", titleVi);
+        m.put("titleEn", titleEn);
+        m.put("benefitsVi", benefitsVi);
+        m.put("benefitsEn", benefitsEn);
+        return m;
+    }
+
+    private static String formatVnd(int amount) {
+        return String.format(java.util.Locale.GERMAN, "%,d", amount).replace(',', '.') + "đ";
+    }
+
+    private static String formatVndEn(int amount) {
+        return String.format(java.util.Locale.US, "%,d", amount) + " VND";
     }
 
     /** Số điểm nhận được khi thanh toán số tiền này. */
@@ -112,6 +194,7 @@ public class Customer {
         map.put("totalSpent", totalSpent);
         map.put("orderCount", orderCount);
         map.put("tier", tier);
+        map.put("nextTier", nextTierName(totalSpent));
         map.put("spentToNextTier", spentToNextTier(totalSpent));
         map.put("active", active);
         map.put("createdAt", createdAt);

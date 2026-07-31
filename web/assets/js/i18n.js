@@ -3,8 +3,13 @@ const TAB_SESSION_KEY = 'coffeshop_tab_session';
 const dict = {
     vi: {
         home: 'Trang chủ', order: 'Gọi món', status: 'Tra đơn', login: 'Đăng nhập',
-        dashboard: 'Dashboard', staffOrders: 'Pha chế', cashier: 'Thu ngân', runner: 'Bồi bàn', menuAdmin: 'Thực đơn', inventoryAdmin: 'Kho nguyên liệu', tablesAdmin: 'Bàn & QR', staffAdmin: 'Nhân viên', systemLogs: 'Log hệ thống',
+        dashboard: 'Dashboard', staffOrders: 'Pha chế', cashier: 'Thu ngân', runner: 'Bồi bàn', menuAdmin: 'Thực đơn', inventoryAdmin: 'Kho nguyên liệu', tablesAdmin: 'Bàn & QR', staffAdmin: 'Nhân viên', promoAdmin: 'Khuyến mãi', systemLogs: 'Log hệ thống',
         logout: 'Đăng xuất', language: 'Ngôn ngữ', refresh: 'Làm mới', save: 'Lưu', cancel: 'Huỷ', delete: 'Xoá', backToPrevious: 'Quay lại',
+        cancelOrder: 'Hủy đơn', cancelReason: 'Lý do hủy', cancelConfirm: 'Xác nhận hủy đơn này?', cancelled: 'Đã hủy', cancelSuccess: 'Đã hủy đơn', cancelNotAllowed: 'Không thể hủy đơn này', cancelFailed: 'Hủy đơn thất bại',
+        refundOrder: 'Hoàn tiền', refundReason: 'Lý do hoàn tiền', refundConfirm: 'Xác nhận hoàn tiền đơn này?', refundSuccess: 'Đã hoàn tiền', refundFailed: 'Hoàn tiền thất bại', restockOnRefund: 'Hoàn kho nguyên liệu',
+        cancelledOrders: 'Đơn hủy', refundedOrders: 'Đơn hoàn', tipAmount: 'Tip', tipOptional: 'Tip (tuỳ chọn)',
+        takeaway: 'Mang đi', dineIn: 'Tại chỗ', orderType: 'Loại đơn', promoCode: 'Mã khuyến mãi', openOrdersBadge: 'đơn',
+        taxAmount: 'Trong đó VAT', serviceCharge: 'Phí phục vụ', subtotalLabel: 'Tạm tính', discountLabel: 'Giảm giá', revenueBeforeTax: 'Doanh thu trước thuế',
         heroEyebrow: 'Đặt món tại bàn', heroTitle: 'coffeshop', heroText: 'Chọn món, gửi đơn và theo dõi trạng thái ngay tại bàn.',
         homeCardTitle: 'Dành cho khách tại quán', homeFeatureMenu: 'Quét QR trên bàn để gọi món', homeFeatureStatus: 'Theo dõi đơn bằng mã đơn',
         openMenu: 'Quét QR tại bàn', staffLogin: 'Nhân viên', checkOrder: 'Kiểm tra đơn',
@@ -143,8 +148,25 @@ const dict = {
         points: 'điểm', totalSpent: 'Tổng chi tiêu', orderCountLabel: 'Số đơn', memberSince: 'Thành viên từ',
         tierBronze: 'Hạng Đồng', tierSilver: 'Hạng Bạc', tierGold: 'Hạng Vàng',
         tierProgress: 'Chi thêm {amount} để lên hạng tiếp theo.', tierMaxReached: 'Bạn đang ở hạng cao nhất.',
+        tierProgressNamed: 'Chi thêm {amount} để lên {tier}.',
+        yourTierBenefit: 'Quyền lợi hạng', yourTier: 'Hạng của bạn',
+        tapTierGuide: 'Chạm để xem chương trình hạng & tích điểm',
+        loyaltyProgram: 'Chương trình thành viên', tierGuideTitle: 'Tích điểm & thăng hạng',
+        howPointsWork: 'Cách tích và đổi điểm',
+        howEarn: 'Thanh toán đủ {spend} được 1 điểm.',
+        howRedeem: '1 điểm đổi được {value} giảm giá.',
+        howRedeemCap: 'Đổi tối thiểu {min} điểm, tối đa {max}% giá trị đơn.',
+        howTierBySpend: 'Hạng Đồng / Bạc / Vàng dựa trên tổng chi tiêu tích lũy.',
+        tierFrom: 'Từ {amount}', tierUpTo: 'Dưới {amount}', tierBetween: '{from} – {to}',
         orderHistory: 'Lịch sử đơn', pointHistory: 'Sổ điểm', accountSettings: 'Tài khoản',
+        orderHistoryRange: 'Khoảng thời gian', rangeToday: 'Hôm nay', rangeLast7: '7 ngày', rangeLast30: '30 ngày',
+        rangeAllTime: 'Tất cả', applyFilter: 'Áp dụng', fromDate: 'Từ ngày', toDate: 'Đến ngày',
+        pickDateRange: 'Vui lòng chọn khoảng ngày.', invalidDateRange: 'Ngày bắt đầu phải trước ngày kết thúc.',
+        trackCurrentSession: 'Đơn phiên hiện tại', noSessionOrders: 'Chưa có đơn trong phiên này',
+        noSessionOrdersHint: 'Đơn bạn vừa gọi sẽ hiện ở đây. Đơn đã xong xem ở mục bên dưới.',
+        pastOrdersToday: 'Đơn đã hoàn thành (phiên / hôm nay)',
         noOrderHistory: 'Bạn chưa có đơn hàng nào.', noPointHistory: 'Chưa có giao dịch điểm nào.',
+        close: 'Đóng',
         pointEarned: 'Tích điểm', pointRedeemed: 'Đổi điểm', pointAdjusted: 'Điều chỉnh',
         balanceAfter: 'Số dư', discountByPoints: 'Giảm giá bằng {points} điểm',
         profileInfo: 'Thông tin cá nhân', changePassword: 'Đổi mật khẩu',
@@ -193,8 +215,13 @@ const dict = {
     },
     en: {
         home: 'Home', order: 'Order', status: 'Track', login: 'Sign in',
-        dashboard: 'Dashboard', staffOrders: 'Barista', cashier: 'Cashier', runner: 'Waiter', menuAdmin: 'Menu', inventoryAdmin: 'Inventory', tablesAdmin: 'Tables & QR', staffAdmin: 'Staff', systemLogs: 'System logs',
+        dashboard: 'Dashboard', staffOrders: 'Barista', cashier: 'Cashier', runner: 'Waiter', menuAdmin: 'Menu', inventoryAdmin: 'Inventory', tablesAdmin: 'Tables & QR', staffAdmin: 'Staff', promoAdmin: 'Promotions', systemLogs: 'System logs',
         logout: 'Log out', language: 'Language', refresh: 'Refresh', save: 'Save', cancel: 'Cancel', delete: 'Delete', backToPrevious: 'Back',
+        cancelOrder: 'Cancel order', cancelReason: 'Cancel reason', cancelConfirm: 'Cancel this order?', cancelled: 'Cancelled', cancelSuccess: 'Order cancelled', cancelNotAllowed: 'Cannot cancel this order', cancelFailed: 'Cancel failed',
+        refundOrder: 'Refund', refundReason: 'Refund reason', refundConfirm: 'Refund this order?', refundSuccess: 'Refund completed', refundFailed: 'Refund failed', restockOnRefund: 'Restock inventory',
+        cancelledOrders: 'Cancelled', refundedOrders: 'Refunded', tipAmount: 'Tip', tipOptional: 'Tip (optional)',
+        takeaway: 'Takeaway', dineIn: 'Dine in', orderType: 'Order type', promoCode: 'Promo code', openOrdersBadge: 'orders',
+        taxAmount: 'VAT included', serviceCharge: 'Service charge', subtotalLabel: 'Subtotal', discountLabel: 'Discount', revenueBeforeTax: 'Revenue before tax',
         heroEyebrow: 'Order at your table', heroTitle: 'coffeshop', heroText: 'Choose, order, and follow your drinks from the table.',
         homeCardTitle: 'For in-store guests', homeFeatureMenu: 'Scan the table QR to order', homeFeatureStatus: 'Track your order by code',
         openMenu: 'Scan table QR', staffLogin: 'Staff', checkOrder: 'Check order',
@@ -333,8 +360,25 @@ const dict = {
         points: 'points', totalSpent: 'Total spent', orderCountLabel: 'Orders', memberSince: 'Member since',
         tierBronze: 'Bronze', tierSilver: 'Silver', tierGold: 'Gold',
         tierProgress: 'Spend {amount} more to reach the next tier.', tierMaxReached: 'You are at the top tier.',
+        tierProgressNamed: 'Spend {amount} more to reach {tier}.',
+        yourTierBenefit: 'Your tier perk', yourTier: 'Your tier',
+        tapTierGuide: 'Tap to view the loyalty & tier program',
+        loyaltyProgram: 'Loyalty program', tierGuideTitle: 'Points & tiers',
+        howPointsWork: 'How points work',
+        howEarn: 'Pay {spend} to earn 1 point.',
+        howRedeem: '1 point = {value} discount.',
+        howRedeemCap: 'Redeem at least {min} points, up to {max}% of the order.',
+        howTierBySpend: 'Bronze / Silver / Gold tiers are based on lifetime spend.',
+        tierFrom: 'From {amount}', tierUpTo: 'Below {amount}', tierBetween: '{from} – {to}',
         orderHistory: 'Order history', pointHistory: 'Points ledger', accountSettings: 'Account',
+        orderHistoryRange: 'Date range', rangeToday: 'Today', rangeLast7: '7 days', rangeLast30: '30 days',
+        rangeAllTime: 'All time', applyFilter: 'Apply', fromDate: 'From', toDate: 'To',
+        pickDateRange: 'Please pick a date range.', invalidDateRange: 'Start date must be before end date.',
+        trackCurrentSession: 'Orders in this session', noSessionOrders: 'No orders in this session yet',
+        noSessionOrdersHint: 'Orders you place now appear here. Finished ones are listed below.',
+        pastOrdersToday: 'Completed orders (session / today)',
         noOrderHistory: 'You have no orders yet.', noPointHistory: 'No point activity yet.',
+        close: 'Close',
         pointEarned: 'Points earned', pointRedeemed: 'Points redeemed', pointAdjusted: 'Adjustment',
         balanceAfter: 'Balance', discountByPoints: 'Discount using {points} points',
         profileInfo: 'Profile', changePassword: 'Change password',
@@ -459,6 +503,111 @@ function api(path, options) {
     opts.credentials = 'same-origin';
     return fetch('api' + path, opts);
 }
+
+/** Realtime SSE với fallback polling. onEvent() được gọi khi có thay đổi. */
+function subscribeLive(onEvent, pollMs) {
+    const reload = typeof onEvent === 'function' ? onEvent : () => {};
+    const interval = Math.max(3000, Number(pollMs) || 5000);
+    let source = null;
+    let timer = null;
+    let usingSse = false;
+    function startPoll() {
+        if (timer) return;
+        timer = setInterval(() => reload({ type: 'poll' }), interval);
+    }
+    function stopPoll() {
+        if (timer) { clearInterval(timer); timer = null; }
+    }
+    try {
+        source = new EventSource('api/events?tabSession=' + encodeURIComponent(tabSessionId()));
+        source.addEventListener('connected', () => { usingSse = true; stopPoll(); });
+        source.addEventListener('orders', () => reload({ type: 'orders' }));
+        source.onerror = () => {
+            usingSse = false;
+            try { source.close(); } catch (e) {}
+            source = null;
+            startPoll();
+        };
+    } catch (e) {
+        startPoll();
+    }
+    // Giữ polling dự phòng trong 8s đầu nếu SSE chưa connect.
+    setTimeout(() => { if (!usingSse) startPoll(); }, 8000);
+    return () => {
+        stopPoll();
+        if (source) try { source.close(); } catch (e) {}
+    };
+}
+
+async function cancelOrderPrompt(orderId) {
+    const reason = await inputModal({
+        title: t('cancelOrder'),
+        message: t('cancelConfirm'),
+        actionLabel: t('cancelOrder'),
+        value: ''
+    });
+    if (reason == null) return null;
+    const trimmed = String(reason).trim();
+    if (!trimmed) {
+        notifyWork(t('cancelReason'));
+        return null;
+    }
+    const res = await api('/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: orderId, reason: trimmed })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        notifyWork(err.error || t('cancelFailed'));
+        return null;
+    }
+    notifyWork(t('cancelSuccess'));
+    return res.json();
+}
+
+async function refundOrderPrompt(orderId) {
+    const reason = await inputModal({
+        title: t('refundOrder'),
+        message: t('refundConfirm'),
+        actionLabel: t('refundOrder'),
+        value: ''
+    });
+    if (reason == null) return null;
+    const trimmed = String(reason).trim();
+    if (!trimmed) {
+        notifyWork(t('refundReason'));
+        return null;
+    }
+    let adminPin = '';
+    try {
+        const session = await api('/auth/session').then(r => r.ok ? r.json() : {});
+        if (session && session.role === 'cashier') {
+            const pin = await inputModal({
+                title: t('refundOrder'),
+                message: 'PIN admin',
+                actionLabel: t('save'),
+                value: '',
+                inputMode: 'numeric'
+            });
+            if (pin == null) return null;
+            adminPin = String(pin).trim();
+        }
+    } catch (e) {}
+    const res = await api('/orders/refund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: orderId, reason: trimmed, restock: true, adminPin })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        notifyWork(err.error || t('refundFailed'));
+        return null;
+    }
+    notifyWork(t('refundSuccess'));
+    return res.json();
+}
+
 function money(value) {
     const amount = Number(value || 0);
     const formatted = new Intl.NumberFormat(lang() === 'en' ? 'en-US' : 'vi-VN', {
@@ -467,7 +616,7 @@ function money(value) {
     return lang() === 'en' ? `VND ${formatted}` : `${formatted} đ`;
 }
 function statusText(status) {
-    const map = { Pending: 'pending', Preparing: 'preparing', Ready: 'ready', Served: 'served', Paid: 'paid', Cleared: 'cleared' };
+    const map = { Pending: 'pending', Preparing: 'preparing', Ready: 'ready', Served: 'served', Paid: 'paid', Cleared: 'cleared', Cancelled: 'cancelled', Refunded: 'refundedOrders' };
     return t(map[status] || status);
 }
 function categoryText(category) {
@@ -524,6 +673,7 @@ function nav(role) {
             <a class="link" href="${withTab('dashboard.jsp')}" data-i18n="dashboard">${t('dashboard')}</a>
             <a class="link" href="${withTab('admin-tables.jsp')}" data-i18n="tablesAdmin">${t('tablesAdmin')}</a>
             <a class="link" href="${withTab('admin-menu.jsp')}" data-i18n="menuAdmin">${t('menuAdmin')}</a>
+            <a class="link" href="${withTab('admin-promotions.jsp')}" data-i18n="promoAdmin">${t('promoAdmin')}</a>
             <a class="link" href="${withTab('inventory.jsp')}" data-i18n="inventoryAdmin">${t('inventoryAdmin')}</a>
             <a class="link" href="${withTab('admin-staff.jsp')}" data-i18n="staffAdmin">${t('staffAdmin')}</a>
             <a class="link" href="${withTab('staff-orders.jsp')}" data-i18n="staffOrders">${t('staffOrders')}</a>
