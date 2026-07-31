@@ -14,6 +14,14 @@ public class LiteService {
     private static final int MAX_ITEM_QUANTITY = 20;
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter SQL_TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /**
+     * Vào ca sớm / tan ca muộn bao nhiêu phút thì vẫn tính là trong ca.
+     * Không có khoảng nới này thì người đến sớm 10 phút không mở được máy.
+     */
+    private static final int SHIFT_GRACE_MINUTES = 30;
+    /** "06:00 - 12:00", "6h00 – 12h00"… — chỉ cần bắt được bốn con số. */
+    private static final java.util.regex.Pattern SHIFT_HOURS_PATTERN =
+            java.util.regex.Pattern.compile("(\\d{1,2})\\s*[:hH]\\s*(\\d{2})\\D+(\\d{1,2})\\s*[:hH]\\s*(\\d{2})");
     /** Đơn đang chiếm bàn / chưa xong vòng đời (không gồm Cancelled/Refunded). */
     static final String ST_OPEN = "('Pending','Preparing','Ready','Served','Paid')";
     /** Đơn chưa thanh toán (không gồm Paid/Cleared/Cancelled/Refunded). */
@@ -2953,6 +2961,78 @@ public class LiteService {
         return LocalDate.now(APP_ZONE);
     }
 
+    private java.time.LocalTime appNowTime() {
+        return java.time.LocalTime.now(APP_ZONE);
+    }
+
+    /**
+     * Khung giờ của ca, đọc từ chuỗi "HH:mm - HH:mm" trong Shifts.hours.
+     *
+     * Trả về {phút bắt đầu, phút kết thúc} tính từ nửa đêm. Ca qua đêm
+     * (22:00 - 02:00) có phút kết thúc lớn hơn 1440 để phép so sánh vẫn là
+     * một đoạn liền mạch. null = chuỗi giờ không đọc được.
+     */
+    private int[] parseShiftWindow(String hours) {
+        java.util.regex.Matcher m = SHIFT_HOURS_PATTERN.matcher(readString(hours, ""));
+        if (!m.find()) return null;
+        int start = Integer.parseInt(m.group(1)) * 60 + Integer.parseInt(m.group(2));
+        int end = Integer.parseInt(m.group(3)) * 60 + Integer.parseInt(m.group(4));
+        if (end <= start) end += 24 * 60;
+        return new int[]{start, end};
+    }
+
+    /**
+     * Ca này có đang diễn ra tại thời điểm {@code now} không.
+     *
+     * Đây là thứ trước đây bị thiếu: hệ thống chỉ so ngày, nên người của ca
+     * tối vẫn đăng nhập được lúc 8 giờ sáng và cầm luôn quyền của ca đó.
+     *
+     * Chuỗi giờ hỏng thì coi như ca kéo dài cả ngày — dữ liệu bẩn không nên
+     * khoá chết người đang đứng ở quầy.
+     */
+    private boolean isShiftActiveNow(String hours, java.time.LocalTime now) {
+        return isShiftActiveNow(hours, now, SHIFT_GRACE_MINUTES);
+    }
+
+    private boolean isShiftActiveNow(String hours, java.time.LocalTime now, int graceMinutes) {
+        int[] window = parseShiftWindow(hours);
+        if (window == null) return true;
+        int from = window[0] - graceMinutes;
+        int to = window[1] + graceMinutes;
+        int nowMinutes = now.getHour() * 60 + now.getMinute();
+        // Nửa khoảng [from, to): đúng 12:00 là ca chiều, không phải đuôi ca sáng.
+        // Kiểm tra thêm nowMinutes + 24h để bắt được ca qua đêm: 00:30 nằm
+        // trong ca 22:00 - 02:00 của NGÀY HÔM TRƯỚC lẫn khung đã cộng dồn.
+        return (nowMinutes >= from && nowMinutes < to)
+                || (nowMinutes + 24 * 60 >= from && nowMinutes + 24 * 60 < to);
+    }
+
+    /**
+     * Trong các ca của một ngày, ca đang thực sự diễn ra tại {@code now}.
+     *
+     * Xét khung giờ chính trước, hết mới xét tới khoảng nới: lúc giao ca 12:00
+     * cả ca sáng lẫn ca chiều đều nằm trong khoảng nới của nhau, chọn nhầm là
+     * trao quyền của ca vừa tan.
+     */
+    private Map<String, Object> pickActiveShift(List<Map<String, Object>> shifts, java.time.LocalTime now) {
+        for (Map<String, Object> shift : shifts) {
+            if (isShiftActiveNow(readString(shift.get("hours"), ""), now, 0)) return shift;
+        }
+        for (Map<String, Object> shift : shifts) {
+            if (isShiftActiveNow(readString(shift.get("hours"), ""), now)) return shift;
+        }
+        return null;
+    }
+
+    /** Nhãn "Ca Tối · 18:00 - 23:00" để báo cho người đăng nhập nhầm giờ. */
+    private String shiftLabel(Map<String, Object> shift) {
+        if (shift == null) return "";
+        String name = readString(shift.get("shiftName"), "");
+        String hours = readString(shift.get("hours"), "");
+        if (name.isEmpty()) return hours;
+        return hours.isEmpty() ? name : name + " " + hours;
+    }
+
     public Map<String, Object> splitOrder(int sourceOrderId, List<Map<String, Object>> selections, String actorRole, String actorName) throws Exception {
         if (selections == null || selections.isEmpty()) {
             throw new IllegalArgumentException("Chưa chọn món nào để tách.");
@@ -3436,6 +3516,10 @@ public class LiteService {
     public String ensureAccountForStaff(int staffId, String staffName) {
         if (staffId <= 0) return "";
         try (Connection con = db.getConnection()) {
+            // Nhận lại người cũ: tài khoản của họ đã bị khoá và xoá PIN lúc
+            // nghỉ việc. Không có nhánh này thì hàng Users cũ chặn việc tạo
+            // mới, và người được nhận lại vĩnh viễn không đăng nhập được.
+            if (reactivateAccountFor(con, staffId)) return defaultPinFor(staffId);
             return createAccountFor(con, staffId, staffName) ? defaultPinFor(staffId) : "";
         } catch (Exception e) {
             System.err.println("[LiteService] ensureAccountForStaff bỏ qua: " + e.getMessage());
@@ -3443,9 +3527,46 @@ public class LiteService {
         }
     }
 
+    /** @return true nếu vừa mở lại một tài khoản bị khoá của nhân viên đang làm việc. */
+    private boolean reactivateAccountFor(Connection con, int staffId) {
+        try (PreparedStatement check = con.prepareStatement(
+                "SELECT COUNT(*) FROM dbo.Users u JOIN dbo.Staff s ON s.id = u.staffId "
+                        + "WHERE u.staffId = ? AND u.active = 0 AND s.active = 1")) {
+            check.setInt(1, staffId);
+            try (ResultSet rs = check.executeQuery()) {
+                if (!rs.next() || rs.getInt(1) == 0) return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        String salt = utils.PasswordUtils.newSalt();
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Users SET active = 1, pinHash = ?, pinSalt = ? WHERE staffId = ?")) {
+            ps.setString(1, utils.PasswordUtils.hash(defaultPinFor(staffId), salt));
+            ps.setString(2, salt);
+            ps.setInt(3, staffId);
+            return ps.executeUpdate() > 0;
+        } catch (Exception e) {
+            System.err.println("[LiteService] Không mở lại được tài khoản cho nhân viên "
+                    + staffId + ": " + e.getMessage());
+            return false;
+        }
+    }
+
     /** @return true nếu vừa tạo mới; false nếu đã tồn tại hoặc lỗi. */
     private boolean createAccountFor(Connection con, int staffId, String name) {
         if (staffId <= 0) return false;
+        // Người đang nghỉ việc thì KHÔNG cấp lại tài khoản. Admin mở hồ sơ cũ
+        // ra sửa vài chữ rồi bấm Lưu là đủ để dựng lại tài khoản vừa gỡ nếu
+        // thiếu chỗ kiểm tra này.
+        try (PreparedStatement check = con.prepareStatement("SELECT active FROM dbo.Staff WHERE id = ?")) {
+            check.setInt(1, staffId);
+            try (ResultSet rs = check.executeQuery()) {
+                if (rs.next() && !rs.getBoolean("active")) return false;
+            }
+        } catch (Exception e) {
+            return false;
+        }
         try (PreparedStatement check = con.prepareStatement("SELECT COUNT(*) FROM dbo.Users WHERE staffId = ?")) {
             check.setInt(1, staffId);
             try (ResultSet rs = check.executeQuery()) {
@@ -3478,8 +3599,12 @@ public class LiteService {
 
     private void backfillMissingPins(Connection con) throws Exception {
         List<Map<String, Object>> rows;
+        // active = 1 là BẮT BUỘC. Tài khoản của người đã nghỉ bị xoá PIN có
+        // chủ đích; thiếu điều kiện này thì lần khởi động sau nó lại được cấp
+        // PIN mặc định 1000+id, tức là tự mở khoá lại tài khoản vừa gỡ.
         try (PreparedStatement ps = con.prepareStatement(
-                "SELECT username, staffId FROM dbo.Users WHERE staffId IS NOT NULL AND (pinHash IS NULL OR pinSalt IS NULL)");
+                "SELECT username, staffId FROM dbo.Users WHERE staffId IS NOT NULL AND active = 1 "
+                        + "AND (pinHash IS NULL OR pinSalt IS NULL)");
              ResultSet rs = ps.executeQuery()) {
             rows = rows(rs);
         }
@@ -3496,17 +3621,12 @@ public class LiteService {
     }
 
     /**
-     * Vai trò của nhân viên TRONG NGÀY HÔM NAY, lấy từ bảng phân ca.
-     * Chuỗi rỗng = hôm nay không được xếp ca.
-     *
-     * Đây là chỗ luật "chỉ người trong ca mới thao tác được" thực sự được
-     * thực thi: không có ca thì không có vai trò, không có vai trò thì
-     * SecurityFilter chặn hết mọi trang nghiệp vụ.
+     * Các ca HÔM NAY của một nhân viên, sớm nhất trước.
+     * Chỉ nhận ca đang xếp lịch / đang làm; bỏ qua Vắng mặt / Nghỉ.
      */
-    public String resolveShiftRole(int staffId) throws Exception {
-        if (staffId <= 0) return "";
-        // Chỉ nhận ca đang xếp lịch / đang làm; bỏ qua Vắng mặt / Nghỉ.
-        String sql = "SELECT TOP 1 sh.assignedRole FROM dbo.Shifts sh "
+    private List<Map<String, Object>> todayShifts(int staffId) throws Exception {
+        if (staffId <= 0) return new ArrayList<>();
+        String sql = "SELECT sh.assignedRole, sh.shiftName, sh.hours FROM dbo.Shifts sh "
                 + "WHERE sh.staffId = ? AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL "
                 + "AND (sh.status IS NULL OR sh.status NOT IN (N'Vắng', N'Vắng mặt', N'Nghỉ', N'Cancelled', N'Absent')) "
                 + "ORDER BY sh.hours";
@@ -3514,9 +3634,34 @@ public class LiteService {
             ps.setInt(1, staffId);
             ps.setString(2, appToday().toString());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? readString(rs.getString("assignedRole"), "") : "";
+                return rows(rs);
             }
         }
+    }
+
+    /**
+     * Ca mà nhân viên đang thực sự đứng, tính theo ĐỒNG HỒ chứ không chỉ theo
+     * ngày. null = hôm nay không có ca, hoặc có nhưng chưa tới / đã qua giờ.
+     */
+    private Map<String, Object> currentShift(int staffId) throws Exception {
+        return pickActiveShift(todayShifts(staffId), appNowTime());
+    }
+
+    /**
+     * Vai trò của nhân viên TẠI THỜI ĐIỂM NÀY, lấy từ bảng phân ca.
+     * Chuỗi rỗng = đang ngoài ca.
+     *
+     * Đây là chỗ luật "chỉ người trong ca mới thao tác được" thực sự được
+     * thực thi: ngoài ca thì không có vai trò, không có vai trò thì
+     * SecurityFilter chặn hết mọi trang nghiệp vụ.
+     *
+     * Trước đây hàm này chỉ so shiftDate với hôm nay nên cột hours bị bỏ qua
+     * hoàn toàn: người của ca tối đăng nhập lúc sáng vẫn lọt, và còn nhận
+     * đúng vai trò của ca tối vì ORDER BY hours lấy bừa ca đầu ngày.
+     */
+    public String resolveShiftRole(int staffId) throws Exception {
+        Map<String, Object> shift = currentShift(staffId);
+        return shift == null ? "" : readString(shift.get("assignedRole"), "");
     }
 
     /**
@@ -3525,33 +3670,98 @@ public class LiteService {
      * đăng nhập nên chỉ được chứa thứ đủ để bấm chọn.
      */
     public List<Map<String, Object>> getLoginRoster() throws Exception {
+        String today = appToday().toString();
         String sql = "SELECT s.id, s.name, "
-                + "(SELECT TOP 1 sh.assignedRole FROM dbo.Shifts sh "
-                + " WHERE sh.staffId = s.id AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL ORDER BY sh.hours) AS todayRole, "
-                + "(SELECT TOP 1 sh.shiftName FROM dbo.Shifts sh "
-                + " WHERE sh.staffId = s.id AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL ORDER BY sh.hours) AS todayShift, "
-                + "(SELECT TOP 1 sh.hours FROM dbo.Shifts sh "
-                + " WHERE sh.staffId = s.id AND sh.shiftDate = ? AND sh.assignedRole IS NOT NULL ORDER BY sh.hours) AS todayHours, "
                 + "(SELECT TOP 1 sh.shiftDate FROM dbo.Shifts sh "
                 + " WHERE sh.staffId = s.id AND sh.shiftDate > ? AND sh.assignedRole IS NOT NULL ORDER BY sh.shiftDate) AS nextShiftDate, "
                 + "(SELECT COUNT(*) FROM dbo.Users u WHERE u.staffId = s.id AND u.active = 1) AS accountCount "
                 + "FROM dbo.Staff s WHERE s.active = 1 AND s.status = 'Active' ORDER BY s.name";
-        String today = appToday().toString();
+        List<Map<String, Object>> list;
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, today);
-            ps.setString(2, today);
-            ps.setString(3, today);
-            ps.setString(4, today);
             try (ResultSet rs = ps.executeQuery()) {
-                List<Map<String, Object>> list = rows(rs);
-                for (Map<String, Object> row : list) {
-                    row.put("onDuty", !readString(row.get("todayRole"), "").isEmpty());
-                    row.put("hasAccount", readInt(row.get("accountCount"), 0) > 0);
-                    row.remove("accountCount");
-                }
-                return list;
+                list = rows(rs);
             }
         }
+
+        // Ca của cả quán trong hôm nay, gom theo nhân viên. Lấy một lượt rồi
+        // lọc theo giờ trong Java: cột hours là chuỗi "HH:mm - HH:mm" nên SQL
+        // không so sánh được, và danh sách này chỉ vài chục dòng.
+        Map<Integer, List<Map<String, Object>>> byStaff = new LinkedHashMap<>();
+        String shiftSql = "SELECT sh.staffId, sh.assignedRole, sh.shiftName, sh.hours FROM dbo.Shifts sh "
+                + "WHERE sh.shiftDate = ? AND sh.assignedRole IS NOT NULL "
+                + "AND (sh.status IS NULL OR sh.status NOT IN (N'Vắng', N'Vắng mặt', N'Nghỉ', N'Cancelled', N'Absent')) "
+                + "ORDER BY sh.hours";
+        try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(shiftSql)) {
+            ps.setString(1, today);
+            try (ResultSet rs = ps.executeQuery()) {
+                for (Map<String, Object> shift : rows(rs)) {
+                    byStaff.computeIfAbsent(readInt(shift.get("staffId"), 0), k -> new ArrayList<>()).add(shift);
+                }
+            }
+        }
+
+        java.time.LocalTime now = appNowTime();
+        int nowMinutes = now.getHour() * 60 + now.getMinute();
+        for (Map<String, Object> row : list) {
+            List<Map<String, Object>> shifts = byStaff.getOrDefault(readInt(row.get("id"), 0), new ArrayList<>());
+            Map<String, Object> active = pickActiveShift(shifts, now);
+            Map<String, Object> upcoming = null;
+            for (Map<String, Object> shift : shifts) {
+                if (shift == active) continue;
+                int[] window = parseShiftWindow(readString(shift.get("hours"), ""));
+                if (window != null && window[0] > nowMinutes) {
+                    upcoming = shift;
+                    break;
+                }
+            }
+            // todayRole chỉ được có giá trị khi người này ĐANG trong ca — giao
+            // diện dùng đúng nó để quyết định bấm vào có vào được hay không.
+            row.put("todayRole", active == null ? null : active.get("assignedRole"));
+            row.put("todayShift", active == null ? null : active.get("shiftName"));
+            row.put("todayHours", active == null ? null : active.get("hours"));
+            row.put("onDuty", active != null);
+            // Ca sau trong cùng ngày: người đến sớm cần biết mình phải chờ đến
+            // mấy giờ, chứ không phải đọc "hôm nay không có ca".
+            row.put("upcomingShift", upcoming == null ? null : upcoming.get("shiftName"));
+            row.put("upcomingHours", upcoming == null ? null : upcoming.get("hours"));
+            // Có ca hôm nay nhưng đã tan hết: khác hẳn "hôm nay không có ca",
+            // và người vừa tan ca cần đọc đúng câu đó chứ không phải ngày ca sau.
+            row.put("shiftEnded", active == null && upcoming == null && !shifts.isEmpty());
+            row.put("hasAccount", readInt(row.get("accountCount"), 0) > 0);
+            row.remove("accountCount");
+        }
+        return list;
+    }
+
+    /**
+     * Câu từ chối khi PIN đúng nhưng đang ngoài ca.
+     *
+     * "Hôm nay không có ca" và "chưa tới giờ ca của bạn" là hai tình huống
+     * khác hẳn nhau: cái đầu là xếp lịch sai, cái sau chỉ là đến sớm. Nói
+     * gộp một câu thì người ta đi tìm quản lý một cách vô ích.
+     */
+    private String offShiftMessage(int staffId) throws Exception {
+        List<Map<String, Object>> shifts = todayShifts(staffId);
+        if (shifts.isEmpty()) {
+            return "Hôm nay bạn không được xếp ca. Cần quản lý mở khoá để đăng nhập.";
+        }
+        java.time.LocalTime now = appNowTime();
+        int nowMinutes = now.getHour() * 60 + now.getMinute();
+        Map<String, Object> upcoming = null;
+        for (Map<String, Object> shift : shifts) {
+            int[] window = parseShiftWindow(readString(shift.get("hours"), ""));
+            if (window != null && window[0] > nowMinutes) {
+                upcoming = shift;
+                break;
+            }
+        }
+        if (upcoming != null) {
+            return "Chưa tới giờ ca của bạn (" + shiftLabel(upcoming)
+                    + "). Cần quản lý mở khoá nếu muốn vào sớm.";
+        }
+        return "Ca của bạn hôm nay (" + shiftLabel(shifts.get(shifts.size() - 1))
+                + ") đã kết thúc. Cần quản lý mở khoá để đăng nhập.";
     }
 
     /**
@@ -3595,7 +3805,7 @@ public class LiteService {
         String role = resolveShiftRole(staffId);
         if (role.isEmpty()) {
             if (!adminOverride) {
-                throw new IllegalStateException("Hôm nay bạn không được xếp ca. Cần quản lý mở khoá để đăng nhập.");
+                throw new IllegalStateException(offShiftMessage(staffId));
             }
             // Mở khoá ngoài ca: cho vào với quyền thấp nhất, không đoán bừa
             // vai trò. Bồi bàn là vai trò ít quyền nhất trong ba vai trò.
@@ -3610,6 +3820,260 @@ public class LiteService {
         session.put("fullName", fullName);
         session.put("adminOverride", adminOverride);
         return session;
+    }
+
+    /** Trạng thái hợp lệ của một nhân viên. Chuỗi lạ đưa hết về 'Active'. */
+    private String normalizeStaffStatus(String raw) {
+        String status = readString(raw, "").trim();
+        if ("Temp_Inactive".equalsIgnoreCase(status)) return "Temp_Inactive";
+        if ("Inactive".equalsIgnoreCase(status)) return "Inactive";
+        if ("Perm_Inactive".equalsIgnoreCase(status)) return "Perm_Inactive";
+        return "Active";
+    }
+
+    /**
+     * Thêm mới hoặc sửa nhân viên.
+     *
+     * MÃ NHÂN VIÊN DO HỆ THỐNG CẤP. Trước đây admin tự gõ mã, còn hàm lưu thì
+     * chỉ hỏi "mã này có sẵn chưa": có sẵn thì UPDATE. Nghĩa là thêm người mới
+     * mang mã 8 thực chất là ĐỔI TÊN người mang mã 8 — toàn bộ ca làm, hoá đơn,
+     * bút toán quỹ và nhật ký gắn với staffId = 8 lập tức đổi chủ, không một
+     * lời cảnh báo. Trùng mã với người đã nghỉ hay người đang làm đều dính.
+     *
+     * Nay hai việc tách hẳn nhau:
+     *   • id <= 0 → THÊM MỚI, mã lấy từ MAX(id)+1, không ai chọn hộ được;
+     *   • id > 0  → SỬA người đang có; không tìm thấy thì báo lỗi chứ tuyệt
+     *     đối không âm thầm tạo hàng mới mang mã do client gửi lên.
+     *
+     * @return hồ sơ đã lưu, kèm cờ "created" để giao diện biết mã vừa được cấp.
+     */
+    public Map<String, Object> saveStaff(int id, String rawName, String rawStatus) throws Exception {
+        String name = readString(rawName, "").trim();
+        if (name.isEmpty()) throw new IllegalArgumentException("Tên nhân viên không được để trống.");
+        if (name.length() > 120) throw new IllegalArgumentException("Tên nhân viên dài quá 120 ký tự.");
+        String status = normalizeStaffStatus(rawStatus);
+        boolean active = "Active".equals(status);
+
+        try (Connection con = db.getConnection()) {
+            boolean created = false;
+            int staffId = id;
+            if (staffId > 0) {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE dbo.Staff SET name = ?, active = ?, status = ? WHERE id = ?")) {
+                    ps.setNString(1, name);
+                    ps.setBoolean(2, active);
+                    ps.setString(3, status);
+                    ps.setInt(4, staffId);
+                    if (ps.executeUpdate() == 0) {
+                        throw new IllegalArgumentException("Không tìm thấy nhân viên #" + staffId + " để sửa.");
+                    }
+                }
+            } else {
+                staffId = insertStaffWithNewId(con, name, active, status);
+                created = true;
+            }
+
+            // Tên hiển thị của tài khoản phải đi theo tên nhân viên, nếu không
+            // đổi tên xong là nhật ký và tài khoản nói hai cái tên khác nhau.
+            try (PreparedStatement ps = con.prepareStatement(
+                    "UPDATE dbo.Users SET fullName = ? WHERE staffId = ?")) {
+                ps.setNString(1, name);
+                ps.setInt(2, staffId);
+                ps.executeUpdate();
+            } catch (Exception ignored) {
+                // Chưa có tài khoản thì thôi, không phải lỗi.
+            }
+
+            Map<String, Object> saved = new LinkedHashMap<>();
+            saved.put("id", staffId);
+            saved.put("name", name);
+            saved.put("status", status);
+            saved.put("active", active);
+            saved.put("created", created);
+            return saved;
+        }
+    }
+
+    /**
+     * Chèn nhân viên mới với mã kế tiếp.
+     *
+     * dbo.Staff.id không phải IDENTITY (dữ liệu cũ chèn mã tường minh), nên
+     * phải tự tính MAX(id)+1. UPDLOCK/HOLDLOCK khoá khoảng giá trị để hai admin
+     * bấm Lưu cùng lúc không nhận cùng một mã; vẫn thử lại vài lần phòng khi
+     * đụng khoá chính.
+     */
+    private int insertStaffWithNewId(Connection con, String name, boolean active, String status) throws Exception {
+        Exception last = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            con.setAutoCommit(false);
+            try {
+                int nextId;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "SELECT ISNULL(MAX(id), 0) + 1 FROM dbo.Staff WITH (UPDLOCK, HOLDLOCK)");
+                     ResultSet rs = ps.executeQuery()) {
+                    nextId = rs.next() ? rs.getInt(1) : 1;
+                }
+                if (nextId <= 0) nextId = 1;
+                try (PreparedStatement ps = con.prepareStatement(
+                        "INSERT INTO dbo.Staff (id, name, active, status) VALUES (?, ?, ?, ?)")) {
+                    ps.setInt(1, nextId);
+                    ps.setNString(2, name);
+                    ps.setBoolean(3, active);
+                    ps.setString(4, status);
+                    ps.executeUpdate();
+                }
+                con.commit();
+                return nextId;
+            } catch (Exception e) {
+                con.rollback();
+                last = e;
+            } finally {
+                con.setAutoCommit(true);
+            }
+        }
+        throw new IllegalStateException("Không cấp được mã nhân viên mới: "
+                + (last == null ? "" : last.getMessage()), last);
+    }
+
+    /**
+     * Xoá nhân viên — xoá CỨNG khi làm vậy là an toàn.
+     *
+     * Trước đây "xoá" chỉ là UPDATE active=0: hàng dữ liệu nằm lại vĩnh viễn,
+     * kể cả người tạo nhầm chưa từng làm gì, và tài khoản đăng nhập của họ
+     * vẫn sống nguyên với PIN dùng được. Nghìn người nghỉ là nghìn hàng rác.
+     *
+     * Luật bây giờ:
+     *   • không còn dấu vết nào (ca làm, thanh toán, sổ quỹ, nhật ký)
+     *     → xoá hẳn cả hàng Staff lẫn tài khoản Users;
+     *   • còn lịch sử → giữ hàng Staff, vì Payments.staffId / CashEvents /
+     *     Shifts / SystemLogs đều trỏ vào đó: xoá đi là mất bảng công và mất
+     *     dấu ai đứng quầy thu tiền. Nhưng TÀI KHOẢN ĐĂNG NHẬP thì gỡ hẳn —
+     *     người đã nghỉ không có lý do gì còn một dòng Users bấm vào được.
+     *
+     * @return chi tiết việc đã làm, để admin đọc được thay vì đoán.
+     */
+    public Map<String, Object> deleteStaff(int staffId) throws Exception {
+        if (staffId <= 0) throw new IllegalArgumentException("Thiếu mã nhân viên.");
+        try (Connection con = db.getConnection()) {
+            String name;
+            try (PreparedStatement ps = con.prepareStatement("SELECT name FROM dbo.Staff WHERE id = ?")) {
+                ps.setInt(1, staffId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new IllegalArgumentException("Không tìm thấy nhân viên #" + staffId + ".");
+                    name = readString(rs.getString("name"), "");
+                }
+            }
+
+            Map<String, Object> refs = countStaffReferences(con, staffId);
+            int total = 0;
+            for (Object value : refs.values()) total += readInt(value, 0);
+
+            con.setAutoCommit(false);
+            try {
+                String account = removeStaffAccount(con, staffId);
+                // Tài khoản không gỡ được (còn hoá đơn ghi tên nó) thì hàng
+                // Users vẫn trỏ vào Staff — xoá cứng chắc chắn vỡ khoá ngoại.
+                boolean hard = total == 0 && !"disabled".equals(account);
+                if (hard) {
+                    try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.Staff WHERE id = ?")) {
+                        ps.setInt(1, staffId);
+                        ps.executeUpdate();
+                    }
+                } else {
+                    try (PreparedStatement ps = con.prepareStatement(
+                            "UPDATE dbo.Staff SET active = 0, status = 'Inactive' WHERE id = ?")) {
+                        ps.setInt(1, staffId);
+                        ps.executeUpdate();
+                    }
+                }
+                con.commit();
+
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("id", staffId);
+                result.put("name", name);
+                result.put("hardDeleted", hard);
+                result.put("account", account);
+                result.put("references", refs);
+                return result;
+            } catch (Exception e) {
+                con.rollback();
+                throw e;
+            } finally {
+                con.setAutoCommit(true);
+            }
+        }
+    }
+
+    /** Đếm mọi thứ đang trỏ vào một nhân viên. Rỗng hết = xoá cứng được. */
+    private Map<String, Object> countStaffReferences(Connection con, int staffId) throws Exception {
+        Map<String, Object> refs = new LinkedHashMap<>();
+        refs.put("shifts", countByStaffId(con, "dbo.Shifts", staffId));
+        refs.put("payments", countByStaffId(con, "dbo.Payments", staffId));
+        refs.put("cashEvents", countByStaffId(con, "dbo.CashEvents", staffId));
+        refs.put("logs", countByStaffId(con, "dbo.SystemLogs", staffId));
+        // Refunds.staffId không có khoá ngoại nên xoá Staff vẫn chạy, nhưng
+        // sẽ để lại một mã trỏ vào hư không. Tính luôn cho khỏi mất dấu.
+        refs.put("refunds", countByStaffId(con, "dbo.Refunds", staffId));
+        return refs;
+    }
+
+    /** Bảng hoặc cột không tồn tại ở CSDL cũ thì coi như không có tham chiếu. */
+    private int countByStaffId(Connection con, String table, int staffId) {
+        try (PreparedStatement ps = con.prepareStatement("SELECT COUNT(*) FROM " + table + " WHERE staffId = ?")) {
+            ps.setInt(1, staffId);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Gỡ tài khoản đăng nhập của một nhân viên.
+     *
+     * @return "deleted" xoá hẳn dòng Users · "disabled" chỉ khoá được vì
+     *         Payments.cashierUsername có khoá ngoại trỏ vào Users(username),
+     *         còn hoá đơn ghi tên tài khoản này thì không xoá dòng đó được ·
+     *         "none" người này vốn chưa có tài khoản.
+     */
+    private String removeStaffAccount(Connection con, int staffId) throws Exception {
+        String username;
+        try (PreparedStatement ps = con.prepareStatement("SELECT username FROM dbo.Users WHERE staffId = ?")) {
+            ps.setInt(1, staffId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return "none";
+                username = readString(rs.getString("username"), "");
+            }
+        }
+
+        int paymentsByUsername = 0;
+        try (PreparedStatement ps = con.prepareStatement(
+                "SELECT COUNT(*) FROM dbo.Payments WHERE cashierUsername = ?")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) paymentsByUsername = rs.getInt(1);
+            }
+        } catch (Exception e) {
+            // Không đếm được thì chọn phương án an toàn: khoá, đừng xoá.
+            paymentsByUsername = 1;
+        }
+
+        if (paymentsByUsername == 0) {
+            try (PreparedStatement ps = con.prepareStatement("DELETE FROM dbo.Users WHERE staffId = ?")) {
+                ps.setInt(1, staffId);
+                ps.executeUpdate();
+            }
+            return "deleted";
+        }
+        // Xoá mã PIN chứ không chỉ hạ cờ active: PIN của người đã nghỉ không
+        // được phép còn là chuỗi dùng được trong CSDL.
+        try (PreparedStatement ps = con.prepareStatement(
+                "UPDATE dbo.Users SET active = 0, pinHash = NULL, pinSalt = NULL WHERE staffId = ?")) {
+            ps.setInt(1, staffId);
+            ps.executeUpdate();
+        }
+        return "disabled";
     }
 
     /** Admin đặt lại PIN cho một nhân viên. Trả về PIN mới. */
@@ -3654,26 +4118,35 @@ public class LiteService {
                 + "WHERE sh.shiftDate = ? AND s.active = 1 AND s.status = 'Active' "
                 + (role.isEmpty() ? "" : "AND sh.assignedRole = ? ")
                 + "ORDER BY s.name";
+        java.time.LocalTime now = appNowTime();
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, today);
             if (!role.isEmpty()) ps.setString(2, role);
             try (ResultSet rs = ps.executeQuery()) {
-                return rows(rs);
+                List<Map<String, Object>> list = rows(rs);
+                // "Đang trong ca" phải tính cả giờ, không chỉ ngày.
+                list.removeIf(row -> !isShiftActiveNow(readString(row.get("hours"), ""), now));
+                return list;
             }
         }
     }
 
-    /** Nhân viên này có thật sự được xếp ca vai trò đó hôm nay không. */
+    /** Nhân viên này có thật sự đang trong ca với vai trò đó không. */
     public boolean isStaffOnDuty(int staffId, String roleCode) throws Exception {
         if (staffId <= 0) return false;
-        String sql = "SELECT COUNT(*) FROM dbo.Shifts sh JOIN dbo.Staff s ON s.id = sh.staffId "
+        String role = readString(roleCode, "").toLowerCase(Locale.ROOT);
+        String sql = "SELECT sh.hours FROM dbo.Shifts sh JOIN dbo.Staff s ON s.id = sh.staffId "
                 + "WHERE sh.staffId = ? AND sh.shiftDate = ? AND sh.assignedRole = ? AND s.active = 1";
+        java.time.LocalTime now = appNowTime();
         try (Connection con = db.getConnection(); PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, staffId);
             ps.setString(2, appToday().toString());
-            ps.setString(3, readString(roleCode, "").toLowerCase(Locale.ROOT));
+            ps.setString(3, role);
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() && rs.getInt(1) > 0;
+                while (rs.next()) {
+                    if (isShiftActiveNow(readString(rs.getString("hours"), ""), now)) return true;
+                }
+                return false;
             }
         }
     }

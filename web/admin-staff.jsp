@@ -7,8 +7,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <title>Quản lý nhân viên - Admin</title>
         <meta name="page-title-key" content="staffAdminTitle">
-        <link rel="stylesheet" href="assets/css/app.css?v=loyalty-3">
-        <script defer src="assets/js/i18n.js?v=loyalty-3"></script>
+        <link rel="stylesheet" href="assets/css/app.css?v=staff-delete-1">
+        <script defer src="assets/js/i18n.js?v=staff-delete-1"></script>
         <style>
             /* Custom styles for the staff calendar prototype */
             .staff-calendar {
@@ -330,7 +330,15 @@
             <section id="staff-management-section" class="card" style="margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2 style="margin: 0; font-size: 1.25rem;" data-i18n="staffManagementTitle">Quản lý danh sách nhân viên</h2>
-                    <button class="btn primary" type="button" onclick="openStaffModal()" data-i18n="addStaff">+ Thêm nhân viên</button>
+                    <div style="display: flex; align-items: center; gap: 14px;">
+                        <!-- Người đã nghỉ vẫn nằm trong CSDL vì còn bảng công.
+                             Mặc định ẩn đi để danh sách chỉ còn người đang làm. -->
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer;">
+                            <input type="checkbox" id="show-resigned" onchange="renderStaffList()" style="min-height: 0;">
+                            <span id="show-resigned-label" data-i18n="showResigned">Hiện cả người đã nghỉ</span>
+                        </label>
+                        <button class="btn primary" type="button" onclick="openStaffModal()" data-i18n="addStaff">+ Thêm nhân viên</button>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -367,9 +375,12 @@
                 </div>
                 <div class="modal-body">
                     <form id="staffForm" onsubmit="saveStaff(event)">
-                        <div class="form-group" style="margin-bottom: 15px;">
-                            <label data-i18n="staffIdLabel">ID Nhân viên (chỉ nhập số)</label>
-                            <input type="number" id="staffIdInput" class="input" required>
+                        <!-- Mã nhân viên do hệ thống cấp. Ô này chỉ để XEM khi
+                             sửa hồ sơ; lúc thêm mới thì ẩn hẳn, vì cho gõ mã
+                             là mở đường ghi đè lên hồ sơ người khác. -->
+                        <div class="form-group" id="staff-id-group" style="margin-bottom: 15px;">
+                            <label data-i18n="staffIdLabel">Mã nhân viên (hệ thống cấp)</label>
+                            <input type="number" id="staffIdInput" class="input" readonly>
                         </div>
                         <div class="form-group" style="margin-bottom: 15px;">
                             <label data-i18n="staffNameLabel">Tên nhân viên</label>
@@ -412,7 +423,7 @@
                 }
             };
         </script>
-        <script src="assets/js/page-admin-staff.js?v=5"></script>
+        <script src="assets/js/page-admin-staff.js?v=6"></script>
     </body>
 
     </html>

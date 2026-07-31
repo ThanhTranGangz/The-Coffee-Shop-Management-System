@@ -55,102 +55,26 @@ public class StaffDAO {
         return list;
     }
 
-    /**
-     * Saves a new staff member or updates an existing one in the database.
-     * 
-     * @param staff the staff member to save or update
+    /*
+     * Việc lưu nhân viên nằm ở LiteService.saveStaff().
+     *
+     * Ở đây từng có save(Staff): hỏi "mã này có sẵn chưa", có thì UPDATE, chưa
+     * thì INSERT với mã do client gửi lên. Nghe thì tiện, nhưng nó biến việc
+     * "thêm nhân viên mới mang mã 8" thành "đổi tên người mang mã 8" — cả một
+     * đời ca làm, hoá đơn và nhật ký của người cũ lặng lẽ sang tên người mới.
+     * Thêm mới và sửa là hai việc khác nhau, và mã nhân viên phải do hệ thống
+     * cấp chứ không phải do người dùng gõ.
      */
-    public void save(Staff staff) {
-        DBContext db = new DBContext();
-        
-        // SQL Server compatible merge/save check
-        boolean exists = false;
-        String checkSql = "SELECT COUNT(*) FROM dbo.Staff WHERE id = ?";
-        try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(checkSql)) {
-            st.setInt(1, staff.getId());
-            try (ResultSet rs = st.executeQuery()) {
-                if (rs.next() && rs.getInt(1) > 0) {
-                    exists = true;
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Database save check failed: " + e.getMessage());
-        }
 
-        if (exists) {
-            String updateSql = "UPDATE dbo.Staff SET name=?, active=?, status=? WHERE id=?";
-            try (Connection con = db.getConnection();
-                 PreparedStatement st = con.prepareStatement(updateSql)) {
-                st.setString(1, staff.getName());
-                st.setBoolean(2, staff.isActive());
-                st.setString(3, staff.getStatus());
-                st.setInt(4, staff.getId());
-                int affected = st.executeUpdate();
-                if (affected <= 0) {
-                    throw new IllegalStateException("Không cập nhật được nhân viên #" + staff.getId());
-                }
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new IllegalStateException("Database update in StaffDAO.save() failed: " + e.getMessage(), e);
-            }
-        } else {
-            String insertSql = "INSERT INTO dbo.Staff (id, name, active, status) VALUES (?, ?, ?, ?)";
-            try (Connection con = db.getConnection();
-                 PreparedStatement st = con.prepareStatement(insertSql)) {
-                st.setInt(1, staff.getId());
-                st.setString(2, staff.getName());
-                st.setBoolean(3, staff.isActive());
-                st.setString(4, staff.getStatus());
-                st.executeUpdate();
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new IllegalStateException("Database insert in StaffDAO.save() failed: " + e.getMessage(), e);
-            }
-        }
-
-        // Keep fallback context updated
-        List<Staff> current = getFallbackStaff();
-        int idx = -1;
-        for (int i = 0; i < current.size(); i++) {
-            if (current.get(i).getId() == staff.getId()) {
-                idx = i;
-                break;
-            }
-        }
-        if (idx != -1) {
-            current.set(idx, staff);
-        } else {
-            current.add(staff);
-        }
-    }
-
-    /**
-     * Deletes a staff member from the database by their ID.
-     * 
-     * @param id the unique identifier of the staff member to delete
+    /*
+     * Việc xoá nhân viên nằm ở LiteService.deleteStaff().
+     *
+     * Ở đây từng có một hàm delete() chỉ chạy UPDATE active=0 — nó không đụng
+     * tới bảng Users nên tài khoản của người đã nghỉ vẫn sống với PIN dùng
+     * được, và người tạo nhầm thì vĩnh viễn không xoá nổi. Xoá nhân viên phải
+     * xem lịch sử ở năm bảng rồi mới quyết định, việc đó thuộc về tầng dịch
+     * vụ chứ không phải một câu UPDATE trong DAO.
      */
-    public void delete(int id) {
-        String sql = "UPDATE dbo.Staff SET active = 0, status = 'Inactive' WHERE id=?";
-        DBContext db = new DBContext();
-        try (Connection con = db.getConnection();
-             PreparedStatement st = con.prepareStatement(sql)) {
-            st.setInt(1, id);
-            st.executeUpdate();
-        } catch (Exception e) {
-            System.err.println("Database delete failed in StaffDAO.delete()");
-        }
-        // Instead of removing from fallback, update it
-        for (Staff s : getFallbackStaff()) {
-            if (s.getId() == id) {
-                s.setActive(false);
-                s.setStatus("Inactive");
-                break;
-            }
-        }
-    }
 
     /**
      * Retrieves the fallback memory cache of staff members.

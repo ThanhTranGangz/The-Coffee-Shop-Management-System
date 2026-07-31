@@ -84,6 +84,20 @@ function isStaffActive(staff) {
     return staff.active !== false && (status === 'Active' || status === '');
 }
 
+/**
+ * Đã nghỉ HẲN — khác với "tạm nghỉ".
+ *
+ * Người tạm nghỉ (ốm, nghỉ phép dài) vẫn là người của quán, admin còn phải mở
+ * hồ sơ họ ra sửa; gộp chung vào nhóm bị ẩn là làm họ biến mất oan. Chỉ người
+ * thôi việc mới nằm sau bộ lọc.
+ */
+function isFormerStaff(staff) {
+    if (!staff) return false;
+    const status = String(staff.status || '');
+    if (status === 'Temp_Inactive') return false;
+    return staff.active === false || status === 'Inactive' || status === 'Perm_Inactive';
+}
+
 function populateStaffDropdown(includeStaffId, shiftName, dateStr) {
     const select = document.getElementById('staffId');
     const keepId = includeStaffId ? Number(includeStaffId) : 0;
@@ -555,7 +569,22 @@ function renderStaffList() {
         return;
     }
 
-    staffList
+    // Người đã nghỉ vẫn phải nằm trong staffList — lịch xếp ca và bảng lương
+    // tra tên theo mã ở đó. Nhưng bảng quản lý thì mặc định chỉ hiện người
+    // đang làm: quán chạy vài năm là danh sách nghỉ việc dài hơn hẳn danh
+    // sách đang làm, cuộn qua đống đó mỗi lần sửa một người là vô lý.
+    const showResigned = !!document.getElementById('show-resigned')?.checked;
+    const resignedCount = staffList.filter(isFormerStaff).length;
+    const label = document.getElementById('show-resigned-label');
+    if (label) label.textContent = tf('showResignedCount', { count: resignedCount });
+
+    const visible = showResigned ? staffList : staffList.filter(s => !isFormerStaff(s));
+    if (!visible.length) {
+        tbody.innerHTML = `<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--muted);">${t('noActiveStaff')}</td></tr>`;
+        return;
+    }
+
+    visible
         .slice()
         .sort((a, b) => Number(a.id) - Number(b.id))
         .forEach(staff => {
@@ -580,7 +609,10 @@ function renderStaffList() {
 
 function openStaffModal() {
     document.getElementById('staffForm').reset();
-    document.getElementById('staffIdInput').readOnly = false;
+    // Thêm mới: không có mã để hiện, và cũng không cho gõ. Mã do server cấp
+    // sau khi lưu, admin đọc trong thông báo kết quả.
+    document.getElementById('staffIdInput').value = '';
+    document.getElementById('staff-id-group').classList.add('hidden');
     document.getElementById('staffModalTitle').textContent = t('addStaff');
     applyI18n();
     document.getElementById('staffModal').classList.remove('hidden');
@@ -595,7 +627,7 @@ function editStaff(id) {
     if (!staff) return;
 
     document.getElementById('staffIdInput').value = staff.id;
-    document.getElementById('staffIdInput').readOnly = true;
+    document.getElementById('staff-id-group').classList.remove('hidden');
     document.getElementById('staffNameInput').value = staff.name;
     document.getElementById('staffStatusInput').value = staff.status || 'Active';
 
@@ -606,17 +638,18 @@ function editStaff(id) {
 
 async function saveStaff(e) {
     e.preventDefault();
+    const name = document.getElementById('staffNameInput').value.trim();
+    if (!name) {
+        alert(t('staffNameRequired'));
+        return;
+    }
+    // Ô mã trống = thêm mới. Gửi 0 để server hiểu là "cấp mã mới" thay vì
+    // nhận đại một con số từ trình duyệt rồi ghi đè lên ai đó.
+    const editingId = parseInt(document.getElementById('staffIdInput').value, 10);
     const staff = {
-        id: parseInt(document.getElementById('staffIdInput').value, 10),
-        name: document.getElementById('staffNameInput').value,
-        role: "staff",
-        status: document.getElementById('staffStatusInput').value,
-        active: document.getElementById('staffStatusInput').value === 'Active',
-        username: "",
-        password: "",
-        pin: "",
-        overtime: false,
-        shift: ''
+        id: Number.isFinite(editingId) && editingId > 0 ? editingId : 0,
+        name: name,
+        status: document.getElementById('staffStatusInput').value
     };
 
     try {
@@ -629,19 +662,21 @@ async function saveStaff(e) {
 
         if (resp.ok) {
             const saved = await resp.json();
-            const idx = staffList.findIndex(s => s.id === saved.id);
+            const idx = staffList.findIndex(s => Number(s.id) === Number(saved.id));
             if (idx >= 0) staffList[idx] = saved;
             else staffList.push(saved);
 
             renderStaffList();
             populateStaffDropdown();
             closeStaffModal();
-            // Server trả issuedPin khi vừa tạo tài khoản đăng nhập cho người mới.
-            // Đây là lần DUY NHẤT PIN hiện ra dạng đọc được — sau đó chỉ còn bản băm.
-            if (saved.issuedPin) alert(tf('pinIssued', { pin: saved.issuedPin }));
-            else alert(t('staffSaved'));
+            // Người mới cần biết mã hệ thống vừa cấp — từ giờ họ không tự chọn nữa.
+            // Server trả issuedPin khi vừa tạo tài khoản đăng nhập; đây là lần DUY
+            // NHẤT PIN hiện ra dạng đọc được, sau đó chỉ còn bản băm.
+            const idNote = saved.created ? tf('staffCreatedWithId', { name: saved.name, id: saved.id }) : t('staffSaved');
+            alert(saved.issuedPin ? idNote + '\n\n' + tf('pinIssued', { pin: saved.issuedPin }) : idNote);
         } else {
-            alert(t('staffSaveFailed') + ' ' + await resp.text());
+            const err = await resp.json().catch(() => ({}));
+            alert(t('staffSaveFailed') + ' ' + (err.error || ''));
         }
     } catch (err) {
         alert(t('networkErrorShort') + ': ' + err.message);
@@ -660,20 +695,53 @@ async function deleteStaff(id) {
         });
 
         if (resp.ok) {
-            const staff = staffList.find(s => s.id === id);
-            if (staff) {
-                staff.active = false;
-                staff.status = 'Inactive';
+            const result = await resp.json();
+            if (result.hardDeleted) {
+                // Không còn dữ liệu nào trỏ vào người này: hồ sơ đã bị xoá thật.
+                staffList = staffList.filter(s => Number(s.id) !== Number(id));
+            } else {
+                const staff = staffList.find(s => Number(s.id) === Number(id));
+                if (staff) {
+                    staff.active = false;
+                    staff.status = 'Inactive';
+                }
             }
             renderStaffList();
             populateStaffDropdown();
-            alert(t('staffDeleted'));
+            alert(deleteResultText(result));
         } else {
-            alert(t('staffDeleteFailed') + ' ' + await resp.text());
+            const err = await resp.json().catch(() => ({}));
+            alert(t('staffDeleteFailed') + ' ' + (err.error || ''));
         }
     } catch (err) {
         alert(t('networkErrorShort') + ': ' + err.message);
     }
+}
+
+/**
+ * Nói thẳng ra đã làm gì với hồ sơ này.
+ *
+ * "Đã xóa nhân viên thành công!" là câu cũ, và nó nói dối trong đúng trường
+ * hợp hay gặp nhất: người có lịch sử làm việc thì hồ sơ vẫn còn nguyên.
+ */
+function deleteResultText(result) {
+    const name = result.name || '';
+    if (result.hardDeleted) return tf('staffPurged', { name: name });
+    const refs = result.references || {};
+    const parts = [];
+    const add = (count, key) => { if (Number(count) > 0) parts.push(Number(count) + ' ' + t(key)); };
+    add(refs.shifts, 'refShifts');
+    add(refs.payments, 'refPayments');
+    add(refs.cashEvents, 'refCashEvents');
+    add(refs.refunds, 'refRefunds');
+    add(refs.logs, 'refLogs');
+    const kept = tf('staffDeactivated', { name: name, refs: parts.join(', ') || t('refUnknown') });
+    // Số phận tài khoản đăng nhập nói riêng một dòng: xoá hẳn và khoá lại là
+    // hai kết quả khác nhau, gộp vào một câu là admin không biết thật sự
+    // trong CSDL còn gì.
+    if (result.account === 'deleted') return kept + '\n\n' + t('accountDeletedNote');
+    if (result.account === 'disabled') return kept + '\n\n' + t('accountLockedNote');
+    return kept;
 }
 
 window.renderPage = () => {

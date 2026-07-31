@@ -3485,6 +3485,8 @@ body.has-cart-bar .scroll-top-btn {
     .staff-pin-card .role-picker { grid-template-columns: 1fr; }
     .staff-pin-card .role-option { min-height: 58px; font-size: 13px; }
     .staff-pin-card input { min-height: 58px; font-size: 18px; }
+    .staff-pin-card .pin-display { font-size: 24px; }
+    .staff-pin-card .pin-key { min-height: 58px; font-size: 23px; }
     .staff-pin-card .auth-submit { min-height: 60px; font-size: 17px; }
     .table-choice { min-height: 76px; font-size: 18px; }
     .qr-card { grid-template-columns: 1fr; }
@@ -4375,6 +4377,37 @@ body.tier-guide-open { overflow: hidden; }
    ĐĂNG NHẬP NHÂN VIÊN BẰNG TÀI KHOẢN CÁ NHÂN
    ══════════════════════════════════════════════════════════════ */
 
+/* Đầu màn: tiêu đề bên trái, đồng hồ bên phải. Ca làm tính theo giờ nên giờ
+   hiện tại là dữ liệu của màn này, không phải đồ trang trí. */
+.staff-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+.staff-head .eyebrow { margin-bottom: 2px; }
+.staff-head .cust-hint { margin: 0; }
+.staff-clock {
+    flex: none;
+    padding: 4px 11px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: var(--surface);
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+}
+
+.staff-search {
+    width: 100%;
+    margin-top: 12px;
+    min-height: 46px;
+    border-radius: 999px;
+    padding: 0 16px;
+}
+
 /* Một cột, không phải hai. Thẻ đăng nhập rộng tối đa 520px, chia đôi thì
    mỗi ô còn ~230px — tên đầy đủ tiếng Việt luôn bị xuống dòng và đọc rất xấu.
    Một cột cũng dễ bấm hơn trên máy tính bảng. */
@@ -4385,11 +4418,43 @@ body.tier-guide-open { overflow: hidden; }
     margin-top: 14px;
 }
 
+/* Tiêu đề nhóm: "Đang trong ca 2" / "Chưa tới ca 3". Chia nhóm thay cho một
+   danh sách dài mờ dần — người đang trong ca là người sắp bấm vào. */
+.staff-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.staff-group::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+}
+.staff-group b {
+    order: 3;
+    min-width: 20px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--ink-soft);
+    text-align: center;
+}
+.staff-group.on { color: var(--good); }
+.staff-group.on b { background: var(--good-soft); color: var(--good); }
+
 .staff-tile {
     display: flex;
     align-items: center;
-    gap: 11px;
-    padding: 12px;
+    gap: 12px;
+    min-height: 66px;
+    padding: 12px 14px;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius);
     background: var(--surface);
@@ -4403,28 +4468,66 @@ body.tier-guide-open { overflow: hidden; }
     transform: translateY(-1px);
     box-shadow: var(--shadow-soft);
 }
+.staff-tile:active { transform: translateY(0) scale(.995); }
 .staff-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* Người không có ca hôm nay vẫn hiện nhưng mờ đi — bấm vào sẽ cần
-   quản lý mở khoá, nên phải nhìn ra ngay trước khi bấm. */
-.staff-tile.off-duty { opacity: .55; background: var(--surface-2); }
+/* Người đang trong ca: viền trái xanh, nhìn một cái là biết hàng nào bấm được.
+   Người ngoài ca KHÔNG làm mờ tới mức khó đọc nữa — họ vẫn cần đọc được dòng
+   "18:00 mới tới ca" của mình, mà chữ mờ 55% thì đọc rất mệt. */
+.staff-tile.on-duty-row { border-left: 3px solid var(--good); }
+.staff-tile.off-duty { background: var(--surface-2); border-color: var(--line); }
 .staff-tile.off-duty .staff-avatar { background: var(--line); color: var(--muted); }
+.staff-tile.off-duty b { color: var(--ink-soft); }
 
-.staff-tile-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.staff-tile-body b { font-size: 14px; }
-.staff-tile-body .cust-hint { margin: 0; font-size: 11.5px; }
+.staff-tile-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.staff-tile-body b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.staff-tile-body .cust-hint {
+    margin: 0;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Nhãn trạng thái: xanh = vào được, hổ phách = phải chờ, xám = không vào được. */
+.staff-chip {
+    flex: none;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.staff-chip.on   { background: var(--good-soft); border-color: #bcd0b8; color: var(--good); }
+.staff-chip.wait { background: var(--warn-soft); border-color: #e7c48d; color: var(--warn); }
+.staff-chip.off  { background: var(--surface-2); border-color: var(--line); color: var(--muted); }
+
+/* Khung chờ lúc đang tải: màn trắng trơn khiến người ta tưởng hỏng. */
+.staff-skeleton {
+    display: block;
+    height: 66px;
+    border-radius: var(--radius);
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--line) 50%, var(--surface-2) 75%);
+    background-size: 300% 100%;
+    animation: staff-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes staff-shimmer {
+    from { background-position: 100% 0; }
+    to   { background-position: -100% 0; }
+}
 
 .staff-avatar {
     flex: none;
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
     display: grid;
     place-items: center;
     border-radius: 999px;
     background: var(--accent-soft);
     color: var(--accent-dark);
     font-family: var(--serif);
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 800;
 }
 
@@ -4438,12 +4541,49 @@ body.tier-guide-open { overflow: hidden; }
     border-radius: var(--radius);
     background: var(--surface-2);
 }
-.staff-chosen b { display: block; font-size: 15px; }
+.staff-chosen-body { min-width: 0; flex: 1; }
+.staff-chosen .staff-chip { margin-left: auto; }
+.staff-chosen b { display: block; font-size: 16px; }
 .staff-chosen .cust-hint { margin: 2px 0 0; }
-.staff-chosen .staff-avatar { width: 42px; height: 42px; font-size: 20px; }
+.staff-chosen .staff-avatar { width: 46px; height: 46px; font-size: 21px; }
 
 .back-link { border: 0; background: transparent; padding: 0; font-size: 13px; }
 .back-link:hover { transform: none; }
+
+/* ── Ô PIN + bàn phím số ──
+   Máy ở quầy là màn cảm ứng: phím to bấm bằng ngón cái nhanh và ít sai hơn
+   bàn phím ảo của hệ điều hành. Ô nhập vẫn là input thật nên bàn phím cứng
+   vẫn gõ được bình thường. */
+.pin-display {
+    text-align: center;
+    font-size: 24px;
+    letter-spacing: .5em;
+    text-indent: .5em;
+    font-family: var(--mono);
+}
+
+.pin-pad {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+.pin-key {
+    min-height: 54px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+    transition: background .12s, transform .12s, border-color .12s;
+}
+.pin-key:hover { border-color: var(--accent); background: var(--accent-soft); }
+.pin-key:active { transform: scale(.96); background: var(--accent-soft); }
+.pin-key:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pin-key.wide { font-size: 18px; color: var(--ink-soft); background: var(--surface-2); }
+.pin-pad.disabled { opacity: .45; pointer-events: none; }
 
 #override-box {
     padding: 12px;
@@ -4453,4 +4593,27 @@ body.tier-guide-open { overflow: hidden; }
 }
 #override-box .cust-hint { color: #7c3f12; }
 
-.staff-tile-body b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Sai PIN: lắc nhẹ để phản hồi thấy được ngay cả khi mắt đang ở bàn phím. */
+.staff-pin-card.shake { animation: staff-shake .3s ease; }
+@keyframes staff-shake {
+    0%, 100% { transform: translateX(0); }
+    25%      { transform: translateX(-6px); }
+    75%      { transform: translateX(6px); }
+}
+
+/* Khối này phải nằm SAU phần khai báo gốc ở trên: cùng độ ưu tiên thì luật
+   viết sau mới thắng, đặt ở khối @media cũ phía đầu tệp là bị ghi đè. */
+@media (max-width: 460px) {
+    .staff-tile { min-height: 70px; padding: 12px; gap: 10px; }
+    /* Màn hẹp: cho dòng phụ xuống hàng thay vì cắt cụt. Khung giờ ca là thứ
+       người ta cần đọc, không phải thứ để "…". */
+    .staff-tile-body .cust-hint { white-space: normal; }
+    .staff-chip { padding: 3px 8px; font-size: 10.5px; }
+    .staff-head { align-items: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .staff-skeleton { animation: none; }
+    .staff-pin-card.shake { animation: none; }
+    .staff-tile:hover { transform: none; }
+}

@@ -770,38 +770,58 @@ public class LiteApiServlet extends HttpServlet {
                     }
                     resp.getWriter().write(JsonUtils.toJson(carryResult));
                     break;
-                case "/staff/save":
+                case "/staff/save": {
                     if (!"admin".equals(role(req))) {
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được lưu nhân viên.");
                         return;
                     }
-                    model.Staff staff = new model.Staff(
-                        readInt(body.get("id"), 0),
-                        str(body.get("name")),
-                        body.get("active") != null ? (Boolean) body.get("active") : true,
-                        str(body.get("status"))
-                    );
-                    new dao.StaffDAO().save(staff);
+                    // id vắng mặt hoặc <= 0 nghĩa là THÊM MỚI; mã do server cấp.
+                    // Không bao giờ nhận mã từ client cho người mới — đó chính
+                    // là đường dẫn tới việc ghi đè hồ sơ người khác.
+                    Map<String, Object> savedStaff = service.saveStaff(
+                            readInt(body.get("id"), 0), str(body.get("name")), str(body.get("status")));
+                    int savedStaffId = readInt(savedStaff.get("id"), 0);
+                    String savedStaffName = str(savedStaff.get("name"));
                     // Tạo tài khoản đăng nhập NGAY, không đợi tới lần khởi động sau.
                     // Nếu vừa tạo thì trả PIN mặc định về cho admin đọc một lần.
-                    String issuedPin = service.ensureAccountForStaff(staff.getId(), staff.getName());
-                    Map<String, Object> savedStaff = new LinkedHashMap<>();
-                    savedStaff.put("id", staff.getId());
-                    savedStaff.put("name", staff.getName());
-                    savedStaff.put("active", staff.isActive());
-                    savedStaff.put("status", staff.getStatus());
                     // Rỗng nghĩa là tài khoản đã có sẵn, không phải vừa tạo.
-                    savedStaff.put("issuedPin", issuedPin);
+                    savedStaff.put("issuedPin", service.ensureAccountForStaff(savedStaffId, savedStaffName));
+                    if (Boolean.TRUE.equals(savedStaff.get("created"))) {
+                        service.addSystemLog("admin", user(req), "STAFF_CREATE",
+                                "Admin thêm nhân viên " + savedStaffName + ", hệ thống cấp mã #" + savedStaffId,
+                                "Admin added staff " + savedStaffName + ", system assigned id #" + savedStaffId,
+                                savedStaffId);
+                    }
                     resp.getWriter().write(JsonUtils.toJson(savedStaff));
                     break;
-                case "/staff/delete":
+                }
+                case "/staff/delete": {
                     if (!"admin".equals(role(req))) {
                         error(resp, HttpServletResponse.SC_FORBIDDEN, "Chỉ admin được xóa nhân viên.");
                         return;
                     }
-                    new dao.StaffDAO().delete(readInt(body.get("id"), 0));
-                    resp.getWriter().write("{\"success\":true}");
+                    int removedId = readInt(body.get("id"), 0);
+                    Map<String, Object> removed = service.deleteStaff(removedId);
+                    boolean hardDeleted = Boolean.TRUE.equals(removed.get("hardDeleted"));
+                    String removedName = str(removed.get("name"));
+                    // Ghi rõ đã xoá hẳn hay chỉ cho nghỉ: hai việc khác nhau,
+                    // nhật ký mà nói chung chung thì sau này không tra được.
+                    service.addSystemLog("admin", user(req), hardDeleted ? "STAFF_PURGE" : "STAFF_DEACTIVATE",
+                            hardDeleted
+                                    ? "Admin xoá vĩnh viễn nhân viên " + removedName + " #" + removedId
+                                      + " (không còn dữ liệu liên quan)"
+                                    : "Admin cho nghỉ việc nhân viên " + removedName + " #" + removedId
+                                      + " và gỡ tài khoản đăng nhập; hồ sơ giữ lại vì còn lịch sử",
+                            hardDeleted
+                                    ? "Admin permanently deleted staff " + removedName + " #" + removedId
+                                      + " (no related records)"
+                                    : "Admin deactivated staff " + removedName + " #" + removedId
+                                      + " and removed the login account; profile kept because of history",
+                            removedId);
+                    removed.put("success", true);
+                    resp.getWriter().write(JsonUtils.toJson(removed));
                     break;
+                }
                 case "/menu/delete":
                     service.deleteMenuItem(readInt(body.get("id"), 0));
                     service.addSystemLog(role(req), user(req), "MENU_DELETE",
